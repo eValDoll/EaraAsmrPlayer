@@ -1,5 +1,8 @@
 package com.asmr.player.subtitle
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.util.LocalFileScopes
 import com.asmr.player.util.LocalFileOperation
 import com.asmr.player.util.withSubtitleFileAccess
@@ -8,7 +11,6 @@ import com.asmr.player.util.LocalFileOperationCoordinator
 import android.content.Context
 import androidx.room.withTransaction
 import androidx.work.WorkManager
-import com.asmr.player.data.local.db.AppDatabase
 import com.asmr.player.data.local.db.AppDatabaseProvider
 import com.asmr.player.data.local.db.dao.SubtitleTaskWithItems
 import com.asmr.player.data.local.db.entities.SubtitleEntity
@@ -22,10 +24,15 @@ import com.asmr.player.data.local.db.entities.SubtitleTranslationSourceEntity
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
@@ -47,8 +54,16 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
     /** 当前正在进行作品级最终润色的作品（rjCode 维度），供 UI 做按钮禁用。 */
     val polishingRjCodes: StateFlow<Set<String>> = _polishingRjCodes.asStateFlow()
 
-    val tasks: Flow<List<SubtitleTaskUi>> = dao.observeTasks().map { rows ->
-        rows.map(SubtitleTaskWithItems::toUi).filter { it.items.isNotEmpty() }
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val tasks: Flow<List<SubtitleTaskUi>> = combine(
+        dao.observeTasks(),
+        dao.observeTaskTrackIds().distinctUntilChanged().flatMapLatest { trackIds ->
+            if (trackIds.isEmpty()) flowOf(emptyMap<Long, String>())
+            else dao.observeTrackDisplayTitles(trackIds).distinctUntilChanged()
+                .map { titles -> titles.associate { it.id to it.displayTitle } }
+        }
+    ) { rows, displayTitles ->
+        rows.map { it.toUi(displayTitles) }.filter { it.items.isNotEmpty() }
     }
 
     /**
@@ -58,7 +73,7 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
      */
     suspend fun requestAlbumPolish(albumId: Long): String? {
         if (database.albumDao().getAlbumById(albumId) == null) {
-            return "找不到对应的作品，无法润色"
+            return appString(R.string.ui_can_t_find_the_corresponding_work_and_can)
         }
         if (albumId in polishingAlbumIds.value) {
             return ALBUM_ALREADY_POLISHING_MESSAGE
@@ -115,7 +130,7 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
                 .filter { it.trackId > 0L }
                 .distinctBy(SubtitleGenerationTarget::trackId)
                 .toList()
-            require(normalized.isNotEmpty()) { "没有可转录的音频" }
+            require(normalized.isNotEmpty()) { appString(R.string.ui_no_audio_to_transcribe) }
             val capability = SubtitleDeviceCapability.evaluate(appContext)
             check(capability.supported) { capability.message }
             check(SubtitleModelRepository.get(appContext).isModelAvailable()) {
@@ -141,13 +156,13 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
 
     private suspend fun enqueueTranslationLocked(target: SubtitleTranslationTarget): SubtitleTaskHandle {
         return enqueueMutex.withLock {
-            require(target.trackId > 0L) { "字幕所属音轨无效" }
+            require(target.trackId > 0L) { appString(R.string.ui_the_audio_track_to_which_the_subtitles_belongs) }
             ensureTrackAlbumNotPolishing(target.trackId)
             withContext(Dispatchers.IO) {
                 TranslationApiStore.get(appContext).readConfiguration().requireConfigured()
             }
             val subtitles = database.trackDao().getSubtitlesForTrack(target.trackId)
-            require(subtitles.any { it.text.isNotBlank() }) { "当前音轨没有可翻译的本地字幕" }
+            require(subtitles.any { it.text.isNotBlank() }) { appString(R.string.ui_the_current_audio_track_has_no_translatable_local) }
             enqueue(
                 targets = listOf(target.trackId to target.title),
                 origin = SubtitleTaskOrigin.MANUAL_TRANSLATION,
@@ -165,7 +180,11 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
         val existingTrackIds = existing.mapTo(mutableSetOf(), SubtitleTaskItemEntity::trackId)
         val targetsToInsert = targets.filterNot { (trackId, _) -> trackId in existingTrackIds }
         if (targetsToInsert.isEmpty()) {
+            database.withTransaction {
+                existing.map { it.taskId }.distinct().forEach { registerMissingDisplayNames(it) }
+            }
             val first = existing.minBy(SubtitleTaskItemEntity::queueSequence)
+            SubtitleTaskService.wake(appContext)
             return@withContext SubtitleTaskHandle(
                 taskId = first.taskId,
                 itemIds = existing.map(SubtitleTaskItemEntity::id),
@@ -174,7 +193,7 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
         }
         val tracks = database.trackDao().getTracksByIdsOnce(targetsToInsert.map { it.first })
             .associateBy { it.id }
-        require(tracks.isNotEmpty()) { "找不到待处理的本地音频" }
+        require(tracks.isNotEmpty()) { appString(R.string.ui_pending_local_audio_not_found) }
         val albums = tracks.values.map { it.albumId }.distinct()
             .mapNotNull { database.albumDao().getAlbumById(it) }
         val taskId = UUID.randomUUID().toString()
@@ -183,10 +202,11 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
             .filter(String::isNotBlank)
             .distinct()
         val taskTitle = albums.singleOrNull()?.title?.trim().orEmpty().ifBlank {
-            if (targetsToInsert.size == 1) targetsToInsert.single().second.ifBlank { "本地音频" } else "${targetsToInsert.size} 项音频"
+            if (targetsToInsert.size == 1) targetsToInsert.single().second.ifBlank { appString(R.string.ui_local_audio) } else appString(R.string.ui_audio_items, targetsToInsert.size)
         }
         val insertedIds = mutableListOf<String>()
         database.withTransaction {
+            existing.map { it.taskId }.distinct().forEach { registerMissingDisplayNames(it) }
             var sequence = dao.maxQueueSequence()
             val items = targetsToInsert.mapNotNull { (trackId, requestedTitle) ->
                 val track = tracks[trackId] ?: return@mapNotNull null
@@ -199,7 +219,7 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
                     id = itemId,
                     taskId = taskId,
                     trackId = trackId,
-                    trackTitle = requestedTitle.trim().ifBlank { track.title.trim() }.ifBlank { "本地音频" },
+                    trackTitle = requestedTitle.trim().ifBlank { track.title.trim() }.ifBlank { appString(R.string.ui_local_audio) },
                     trackPath = track.path,
                     mode = mode,
                     queueSequence = sequence,
@@ -231,13 +251,13 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
                     updatedAt = now
                 )
             }
-            require(items.isNotEmpty()) { "找不到待处理的本地音频" }
+            require(items.isNotEmpty()) { appString(R.string.ui_pending_local_audio_not_found) }
             dao.insertTask(
                 SubtitleTaskEntity(
                     id = taskId,
                     origin = origin,
                     title = taskTitle,
-                    rjCode = rjCodes.singleOrNull() ?: if (rjCodes.isEmpty()) "未知作品编号" else "批量任务",
+                    rjCode = rjCodes.singleOrNull() ?: if (rjCodes.isEmpty()) appString(R.string.ui_unknown_work_number) else appString(R.string.ui_batch_tasks),
                     state = SubtitleTaskState.ACTIVE,
                     warning = "",
                     createdAt = now,
@@ -245,7 +265,7 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
                 )
             )
             dao.insertItems(items)
-            database.subtitleTitleOwnerDao().upsertAll(
+            database.subtitleTitleOwnerDao().insertMissing(
                 albums.map { album ->
                     SubtitleTitleOwnerEntity(
                         taskId = taskId,
@@ -300,6 +320,25 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
         SubtitleTaskHandle(taskId, existing.map(SubtitleTaskItemEntity::id) + insertedIds, reusedExisting = existing.isNotEmpty())
     }
 
+    private suspend fun registerMissingDisplayNames(taskId: String) {
+        val items = dao.getItemsForTask(taskId).filter {
+            it.state != SubtitleItemState.CANCEL_REQUESTED && it.state != SubtitleItemState.CANCELED
+        }
+        if (items.isEmpty()) return
+        val ownerDao = database.subtitleTitleOwnerDao()
+        val registered = ownerDao.getByTask(taskId).mapTo(mutableSetOf()) { it.kind to it.targetId }
+        val tracks = database.trackDao().getTracksByIdsOnce(items.map { it.trackId }.distinct())
+            .filter { it.displayTitle.isBlank() && (SubtitleTitleOwnerKind.TRACK to it.id) !in registered }
+        if (tracks.isEmpty()) return
+        val albums = tracks.map { it.albumId }.distinct().mapNotNull { database.albumDao().getAlbumById(it) }
+            .filter { it.displayTitle.isBlank() && (SubtitleTitleOwnerKind.ALBUM to it.id) !in registered }
+        val now = System.currentTimeMillis()
+        ownerDao.insertMissing(
+            albums.map { SubtitleTitleOwnerEntity(taskId, SubtitleTitleOwnerKind.ALBUM, it.id, "", now) } +
+                tracks.map { SubtitleTitleOwnerEntity(taskId, SubtitleTitleOwnerKind.TRACK, it.id, "", now) }
+        )
+    }
+
     suspend fun pauseItem(itemId: String) = mutateItem(itemId) { item ->
         if (item.state in TERMINAL_OR_SUSPENDED_STATES) return@mutateItem item
         item.copy(
@@ -318,11 +357,15 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
     }
 
     suspend fun resumeItem(itemId: String) = mutateItem(itemId) { item ->
-        check(item.state in setOf(SubtitleItemState.PAUSED, SubtitleItemState.INTERRUPTED, SubtitleItemState.FAILED)) {
-            "当前字幕任务不能继续"
-        }
+        val resumed = resumedItem(item)
+        registerMissingDisplayNames(item.taskId)
+        resumed
+    }
+
+    private suspend fun resumedItem(item: SubtitleTaskItemEntity): SubtitleTaskItemEntity {
+        check(item.state in RESUMABLE_ITEM_STATES) { appString(R.string.ui_the_current_subtitle_task_cannot_be_continued) }
         val hasSources = dao.getSources(item.id).isNotEmpty()
-        item.copy(
+        return item.copy(
             state = SubtitleItemState.resumeState(item.suspendedFromState, hasSources),
             suspendedFromState = "",
             translationBatchIndex = item.translationBatchIndex.coerceAtMost(1),
@@ -334,11 +377,15 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
         )
     }
 
-    suspend fun resumeTask(taskId: String) {
+    suspend fun resumeTask(taskId: String) = withContext(Dispatchers.IO) {
         reconcileOnAppLaunch()
-        dao.getItemsForTask(taskId)
-            .filter { it.state in setOf(SubtitleItemState.PAUSED, SubtitleItemState.INTERRUPTED, SubtitleItemState.FAILED) }
-            .forEach { resumeItem(it.id) }
+        database.withTransaction {
+            val items = dao.getItemsForTask(taskId).filter { it.state in RESUMABLE_ITEM_STATES }
+            if (items.isNotEmpty()) {
+                registerMissingDisplayNames(taskId)
+                items.forEach { dao.updateItem(resumedItem(it)) }
+            }
+        }
         refreshTaskState(taskId)
         SubtitleTaskService.wake(appContext)
     }
@@ -392,7 +439,7 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
                     )
                 })
             } else {
-                warning = "${item.trackTitle} 的字幕已被修改，已保留当前版本，未恢复任务快照"
+                warning = appString(R.string.ui_the_subtitles_of_have_been_modified_the_current, item.trackTitle)
             }
             dao.deleteItem(item.id)
             if (dao.countItems(item.taskId) == 0) {
@@ -443,11 +490,18 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
         }
     }
 
-    internal suspend fun finishTitleTranslation(taskId: String) = withContext(Dispatchers.IO) {
+    internal suspend fun finishTitleTranslation(
+        taskId: String,
+        attemptedOwners: List<SubtitleTitleOwnerEntity>
+    ) = withContext(Dispatchers.IO) {
         database.withTransaction {
             // 标题翻译的有限重试已结束。持久化清除未完成登记，防止服务重启后再次请求；
             // 保留已成功写入的登记，供用户取消任务时还原显示名。
-            database.subtitleTitleOwnerDao().deletePendingForTask(taskId)
+            val ownerDao = database.subtitleTitleOwnerDao()
+            attemptedOwners.groupBy { it.kind }.forEach { (kind, owners) ->
+                ownerDao.deletePendingOwners(taskId, kind, owners.map { it.targetId })
+            }
+            if (ownerDao.getByTask(taskId).any { it.displayTitle.isBlank() }) return@withTransaction
             val items = dao.getItemsForTask(taskId)
             if (items.isEmpty() || items.any { item -> item.state != SubtitleItemState.SUCCEEDED }) {
                 return@withTransaction
@@ -475,7 +529,7 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
                     .filter { it.state == SubtitleItemState.CANCEL_REQUESTED }
                     .forEach { finishCancellation(it.id) }
                 dao.settlePauseRequestsAfterInterruption(now)
-                dao.interruptAllIncompleteItems(now, "应用上次运行异常中断，请手动继续")
+                dao.interruptAllIncompleteItems(now, appString(R.string.ui_the_last_run_of_the_application_was_interrupted))
                 dao.markInterruptedTasks(now)
                 dao.getAllItems().map(SubtitleTaskItemEntity::taskId).distinct().forEach { refreshTaskState(it) }
             }
@@ -503,10 +557,13 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
         transform: suspend (SubtitleTaskItemEntity) -> SubtitleTaskItemEntity
     ) = withContext(Dispatchers.IO) {
         reconcileOnAppLaunch()
-        val item = dao.getItem(itemId) ?: return@withContext
-        val updated = transform(item)
-        if (updated != item) dao.updateItem(updated)
-        refreshTaskState(item.taskId)
+        val taskId = database.withTransaction {
+            val item = dao.getItem(itemId) ?: return@withTransaction null
+            val updated = transform(item)
+            if (updated != item) dao.updateItem(updated)
+            item.taskId
+        } ?: return@withContext
+        refreshTaskState(taskId)
         SubtitleTaskService.wake(appContext)
     }
 
@@ -525,6 +582,11 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
             SubtitleItemState.RETRY_WAIT,
             SubtitleItemState.TRANSLATING
         )
+        private val RESUMABLE_ITEM_STATES = setOf(
+            SubtitleItemState.PAUSED,
+            SubtitleItemState.INTERRUPTED,
+            SubtitleItemState.FAILED
+        )
         private val TERMINAL_OR_SUSPENDED_STATES = setOf(
             SubtitleItemState.SUCCEEDED,
             SubtitleItemState.CANCELED,
@@ -538,11 +600,9 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
         private const val LEGACY_TRANSLATION_WORK = "subtitle_file_translation"
         private const val LEGACY_REQUEST_DIRECTORY = "subtitle-generation-requests"
 
-        const val ALBUM_ALREADY_POLISHING_MESSAGE = "该作品正在整体润色，请稍候"
-        const val ACTIVE_TASKS_BLOCK_POLISH_MESSAGE =
-            "请等待该作品的转录和翻译任务全部完成后再整体润色"
-        const val POLISHING_BLOCKS_RETRY_MESSAGE =
-            "该作品正在整体润色，请等待润色完成后再重试翻译"
+        val ALBUM_ALREADY_POLISHING_MESSAGE: String get() = appString(R.string.ui_this_work_is_being_polished_as_a_whole)
+        val ACTIVE_TASKS_BLOCK_POLISH_MESSAGE: String get() = appString(R.string.ui_please_wait_until_the_transcription_and_translation_tasks)
+        val POLISHING_BLOCKS_RETRY_MESSAGE: String get() = appString(R.string.ui_this_work_is_being_polished_as_a_whole_65005b)
 
         @Volatile
         private var instance: SubtitleTaskRepository? = null
@@ -553,7 +613,7 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
     }
 }
 
-private fun SubtitleTaskWithItems.toUi(): SubtitleTaskUi = SubtitleTaskUi(
+private fun SubtitleTaskWithItems.toUi(displayTitles: Map<Long, String>): SubtitleTaskUi = SubtitleTaskUi(
     id = task.id,
     title = task.title,
     rjCode = task.rjCode,
@@ -565,7 +625,7 @@ private fun SubtitleTaskWithItems.toUi(): SubtitleTaskUi = SubtitleTaskUi(
             id = item.id,
             taskId = item.taskId,
             trackId = item.trackId,
-            title = item.trackTitle,
+            title = displayTitles[item.trackId]?.takeIf(String::isNotBlank) ?: item.trackTitle,
             mode = item.mode,
             state = item.state,
             transcriptionProgress = item.transcriptionProgress,

@@ -1,5 +1,8 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.util.Log
 import android.webkit.CookieManager
 import androidx.compose.foundation.BorderStroke
@@ -13,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -39,12 +43,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -59,6 +63,7 @@ import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncCandidate
 import com.asmr.player.data.remote.scraper.dlsiteOriginalCoverUrlForWorkNo
 import com.asmr.player.ui.common.AsmrShimmerPlaceholder
+import com.asmr.player.ui.common.LocalTabletLayout
 import com.asmr.player.ui.common.CvChipsSingleLine
 import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
@@ -87,7 +92,7 @@ internal data class CloudSyncSelectionDialogState(
 ) {
     val progressLabel: String?
         get() = if ((currentPosition ?: 0) > 0 && (totalCount ?: 0) > 0) {
-            "待确认 ${currentPosition} / ${totalCount}"
+            appString(R.string.ui_pending_confirmation, currentPosition, totalCount)
         } else {
             null
         }
@@ -119,14 +124,17 @@ internal fun CloudSyncSelectionDialog(
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val listState = rememberLazyListState()
+    val tablet = LocalTabletLayout.current.isTablet
+    val maxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.9f
     Dialog(
         onDismissRequest = onCancel,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Card(
             modifier = Modifier
-                .fillMaxWidth(0.92f)
                 .widthIn(max = 540.dp)
+                .fillMaxWidth(0.92f)
+                .then(if (tablet) Modifier.heightIn(max = maxHeight) else Modifier)
                 .testTag(CLOUD_SYNC_SELECTION_DIALOG_TAG),
             shape = RoundedCornerShape(28.dp),
             colors = CardDefaults.cardColors(
@@ -157,7 +165,7 @@ internal fun CloudSyncSelectionDialog(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
-                            text = "云同步候选：${state.candidates.size} 个疑似结果(点击对应作品以确认同步)",
+                            text = appString(R.string.ui_cloud_synchronization_candidates_suspected_results_click_the_correspon, state.candidates.size),
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontWeight = FontWeight.SemiBold,
                                 lineHeight = 16.sp
@@ -167,7 +175,7 @@ internal fun CloudSyncSelectionDialog(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = state.albumTitle.ifBlank { "当前专辑" },
+                            text = state.albumTitle.ifBlank { appString(R.string.ui_current_album) },
                             style = MaterialTheme.typography.titleSmall.copy(
                                 fontWeight = FontWeight.SemiBold,
                                 lineHeight = 20.sp
@@ -186,7 +194,8 @@ internal fun CloudSyncSelectionDialog(
                     state = listState,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(CLOUD_SYNC_SELECTION_LIST_HEIGHT)
+                        .then(if (tablet) Modifier.weight(1f, fill = false).heightIn(max = CLOUD_SYNC_SELECTION_LIST_HEIGHT)
+                            else Modifier.height(CLOUD_SYNC_SELECTION_LIST_HEIGHT))
                         .testTag(CLOUD_SYNC_SELECTION_LIST_TAG),
                     flingBehavior = rememberCalmScrollableFlingBehavior(),
                     verticalArrangement = Arrangement.spacedBy(CLOUD_SYNC_SELECTION_ROW_SPACING)
@@ -227,7 +236,7 @@ internal fun CloudSyncSelectionDialog(
                                     contentColor = colorScheme.textSecondary
                                 )
                             ) {
-                                Text("忽略全部")
+                                Text(androidx.compose.ui.res.stringResource(R.string.ui_ignore_all))
                             }
                         }
                     }
@@ -255,7 +264,7 @@ internal fun CloudSyncSelectionDialog(
                                 contentColor = colorScheme.primary
                             )
                         ) {
-                            Text(if (onIgnoreAll != null) "取消当前" else "取消")
+                            Text(if (onIgnoreAll != null) appString(R.string.ui_cancel_current) else appString(R.string.ui_cancel))
                         }
                     }
                 }

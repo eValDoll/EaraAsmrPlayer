@@ -1,5 +1,8 @@
 package com.asmr.player.subtitle
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.content.Context
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineNemoEncDecCtcModelConfig
@@ -53,8 +56,8 @@ internal class SherpaOnnxTranscriptionEngine(
         isCancelled: () -> Boolean,
         onProgress: (Int) -> Unit
     ): List<SubtitleTranscriptionSegment> {
-        val activeRecognizer = checkNotNull(recognizer) { "日语字幕模型已释放" }
-        val activeVad = checkNotNull(vad) { "语音切分模型已释放" }
+        val activeRecognizer = checkNotNull(recognizer) { appString(R.string.ui_japanese_subtitle_model_released) }
+        val activeVad = checkNotNull(vad) { appString(R.string.ui_the_speech_segmentation_model_has_been_released) }
         val validChannels = channelSamples.filter { it.isNotEmpty() }
         if (isCancelled() || validChannels.isEmpty()) return emptyList()
 
@@ -142,7 +145,7 @@ internal class SherpaOnnxTranscriptionEngine(
         val artifacts = model.artifacts.associate { artifact ->
             artifact.fileName to File(modelDirectory, artifact.fileName).also { file ->
                 check(isInstalledSubtitleModelArtifact(file, artifact.bytes)) {
-                    "日语字幕模型文件缺失：${artifact.fileName}"
+                    appString(R.string.ui_japanese_subtitle_model_file_missing, artifact.fileName)
                 }
             }
         }
@@ -202,8 +205,6 @@ internal class SherpaOnnxTranscriptionEngine(
     }
 
     private companion object {
-        const val MODEL_FILE_NAME = "model.int8.onnx"
-        const val TOKENS_FILE_NAME = "tokens.txt"
         const val VAD_ASSET_PATH = "subtitle/silero_vad.onnx"
         const val VAD_THRESHOLD = 0.15f
         const val VAD_MIN_SILENCE_SECONDS = 0.2f

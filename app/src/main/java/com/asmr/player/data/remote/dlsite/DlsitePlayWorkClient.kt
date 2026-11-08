@@ -1,5 +1,8 @@
 package com.asmr.player.data.remote.dlsite
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.content.Context
 import android.util.Log
 import com.asmr.player.data.remote.NetworkHeaders
@@ -38,7 +41,7 @@ class DlsitePlayWorkClient @Inject constructor(
 
         val cookie = authStore.getPlayCookie().trim()
         if (cookie.isBlank()) {
-            throw IllegalStateException("请先登录 DLsite（需要 play.dlsite.com 的 Cookie）")
+            throw IllegalStateException(appString(R.string.ui_please_log_in_to_dlsite_first_requires_cookies))
         }
 
         val (baseUrl, params, revision) = fetchDownloadSign(clean, cookie)
@@ -246,9 +249,9 @@ class DlsitePlayWorkClient @Inject constructor(
             if (!resp.isSuccessful) {
                 val body = resp.body?.string().orEmpty()
                 Log.w(TAG, "sign/url failed: ${resp.code}, body=${body.take(300)}")
-                throw IllegalStateException("DLsite Play 获取签名失败（${resp.code}）")
+                throw IllegalStateException(appString(R.string.ui_dlsite_play_failed_to_obtain_signature, resp.code))
             }
-            val body = resp.body ?: throw IllegalStateException("DLsite Play 获取签名返回为空")
+            val body = resp.body ?: throw IllegalStateException(appString(R.string.ui_dlsite_play_obtains_signature_and_returns_empty))
             val obj = body.charStream().use { reader ->
                 runCatching { gson.fromJson(reader, Map::class.java) }.getOrNull().orEmpty()
             }
@@ -263,7 +266,7 @@ class DlsitePlayWorkClient @Inject constructor(
                 ?.toMap()
                 .orEmpty()
             if (baseUrl.isBlank() || params.isEmpty()) {
-                throw IllegalStateException("DLsite Play 获取签名返回缺少 url/params")
+                throw IllegalStateException(appString(R.string.ui_dlsite_play_obtains_signature_and_returns_missing_url))
             }
 
             val nowSec = TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis())
@@ -291,9 +294,9 @@ class DlsitePlayWorkClient @Inject constructor(
             if (!resp.isSuccessful) {
                 val body = resp.body?.string().orEmpty()
                 Log.w(TAG, "ziptree.json failed: ${resp.code}, body=${body.take(300)}")
-                throw IllegalStateException("DLsite Play 获取目录树失败（${resp.code}）")
+                throw IllegalStateException(appString(R.string.ui_dlsite_play_failed_to_obtain_the_directory_tree, resp.code))
             }
-            val body = resp.body ?: throw IllegalStateException("DLsite Play 获取目录树为空")
+            val body = resp.body ?: throw IllegalStateException(appString(R.string.ui_dlsite_play_gets_the_directory_tree_to_be))
             @Suppress("UNCHECKED_CAST")
             return body.charStream().use { reader ->
                 runCatching { gson.fromJson(reader, Map::class.java) as? Map<String, Any?> }.getOrNull().orEmpty()

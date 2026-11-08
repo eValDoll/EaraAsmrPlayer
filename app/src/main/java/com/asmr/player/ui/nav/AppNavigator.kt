@@ -10,10 +10,8 @@ object Routes {
     const val SearchAssist = "search_assist"
     const val SearchAssistPattern = "search_assist?keyword={keyword}"
     const val HotListening = "hot_listening"
-    const val NowPlaying = "now_playing"
 
     const val AlbumDetailByIdPattern = "album_detail/{albumId}?rjCode={rjCode}&initialTab={initialTab}"
-    const val AlbumDetailOnlineByRjPattern = "album_detail_online/{rj}"
 
     const val AlbumDetailByRjPattern = "album_detail_rj/{rj}?initialTab={initialTab}&resourceSource={resourceSource}"
     fun searchAssist(keyword: String = ""): String {

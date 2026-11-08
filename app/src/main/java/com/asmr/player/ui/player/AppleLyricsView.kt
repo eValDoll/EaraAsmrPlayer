@@ -1,5 +1,8 @@
 package com.asmr.player.ui.player
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -34,6 +37,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -152,7 +156,8 @@ internal fun AppleLyricsView(
     itemInnerHorizontalPadding: Dp = if (isLandscape) 8.dp else 10.dp,
     contentKey: String? = null,
     contentVisible: Boolean = true,
-    expandedHomeVisualEffects: Boolean = false
+    expandedHomeVisualEffects: Boolean = false,
+    transparentTimelineControls: Boolean = false
 ) {
     var displayedLyrics by remember { mutableStateOf(lyrics) }
     var displayedContentKey by remember { mutableStateOf(contentKey) }
@@ -648,6 +653,7 @@ internal fun AppleLyricsView(
                 targetPositionMs = timelineTargetPositionMs,
                 colors = colors,
                 isLandscape = isLandscape,
+                transparentControls = transparentTimelineControls,
                 onPlayClick = { targetMs ->
                     if (timelineTargetIndex in renderedLyrics.indices) {
                         pendingSmoothFocusIndex = timelineTargetIndex
@@ -774,16 +780,21 @@ private fun LyricsPlaybackTimeline(
     targetPositionMs: Long?,
     colors: LyricReadableColors,
     isLandscape: Boolean,
+    transparentControls: Boolean,
     onPlayClick: (Long) -> Unit
 ) {
     val enabled = targetPositionMs != null
     val buttonSize = if (isLandscape) 34.dp else 40.dp
-    val iconSize = if (isLandscape) 19.dp else 22.dp
+    val iconSize = if (transparentControls) {
+        if (isLandscape) 28.dp else 34.dp
+    } else {
+        if (isLandscape) 19.dp else 22.dp
+    }
     val timelineColor = colors.accentEmphasis.copy(alpha = if (enabled) 0.82f else 0.36f)
     val containerColor = colors.activeContainer.copy(alpha = if (enabled) 0.96f else 0.54f)
     val contentColor = colors.activeText.copy(alpha = if (enabled) 0.94f else 0.46f)
     val targetText = targetPositionMs?.let { Formatting.formatTrackTime(it) } ?: "--:--"
-    val description = targetPositionMs?.let { "跳转到 ${Formatting.formatTrackTime(it)} 播放" } ?: "跳转播放"
+    val description = targetPositionMs?.let { appString(R.string.ui_jump_to_play, Formatting.formatTrackTime(it)) } ?: appString(R.string.ui_jump_to_play_220241)
     val density = LocalDensity.current
 
     Row(
@@ -834,17 +845,25 @@ private fun LyricsPlaybackTimeline(
         Surface(
             modifier = Modifier.size(buttonSize),
             shape = CircleShape,
-            color = containerColor,
+            color = if (transparentControls) Color.Transparent else containerColor,
             contentColor = contentColor,
             tonalElevation = 0.dp,
-            shadowElevation = if (enabled) 3.dp else 0.dp
+            shadowElevation = if (enabled && !transparentControls) 3.dp else 0.dp
         ) {
             IconButton(
                 onClick = {
                     targetPositionMs?.let(onPlayClick)
                 },
                 enabled = enabled,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
+                colors = if (transparentControls) {
+                    IconButtonDefaults.iconButtonColors(
+                        contentColor = contentColor,
+                        disabledContentColor = contentColor
+                    )
+                } else {
+                    IconButtonDefaults.iconButtonColors()
+                }
             ) {
                 Icon(
                     imageVector = Icons.Rounded.PlayArrow,

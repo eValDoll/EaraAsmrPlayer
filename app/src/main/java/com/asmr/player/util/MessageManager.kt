@@ -20,9 +20,7 @@ data class AppMessage(
     val type: MessageType = MessageType.Info,
     val durationMs: Long = 2000,
     val createdAtMs: Long
-) {
-    fun formatForSnackbar(): String = "[${type.name.uppercase()}]$message"
-}
+)
 
 @Singleton
 class MessageManager @Inject constructor() {

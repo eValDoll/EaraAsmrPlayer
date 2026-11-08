@@ -1,5 +1,8 @@
 package com.asmr.player.ui.playlists
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.ui.common.LocalMainHeaderPadding
 
 import androidx.compose.foundation.MutatePriority
@@ -30,6 +33,10 @@ import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.background
+import com.asmr.player.ui.common.CollectionPaneLayout
+import com.asmr.player.ui.common.LocalTabletLayout
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,7 +56,6 @@ import com.asmr.player.ui.common.AsmrAsyncImage
 
 import androidx.compose.ui.text.font.FontWeight
 import com.asmr.player.ui.theme.AsmrTheme
-import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import com.asmr.player.ui.common.FlatActionDialog
@@ -74,6 +80,7 @@ fun PlaylistsScreen(
     isDataActive: Boolean = isActive,
     onPlaylistClick: (PlaylistEntity) -> Unit,
     scrollToTopSignal: Long = 0L,
+    detailContent: (@Composable (PlaylistEntity) -> Unit)? = null,
     viewModel: PlaylistsViewModel = hiltViewModel()
 ) {
     val playlists by viewModel.playlists.collectAsStateWhileActive(isDataActive)
@@ -84,6 +91,9 @@ fun PlaylistsScreen(
 
     // 屏幕尺寸判断
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
+    val tabletLayout = LocalTabletLayout.current
+    var selectedId by rememberSaveable { mutableStateOf<Long?>(null) }
+    val selected = userPlaylists.firstOrNull { it.id == selectedId } ?: userPlaylists.firstOrNull()
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -104,7 +114,7 @@ fun PlaylistsScreen(
                 .padding(padding),
             contentAlignment = Alignment.TopCenter
         ) {
-            val contentModifier = if (isCompact) {
+            val contentModifier = if (isCompact || tabletLayout.isTablet) {
                 Modifier.fillMaxSize()
             } else {
                 Modifier
@@ -112,11 +122,19 @@ fun PlaylistsScreen(
                     .widthIn(max = 760.dp)
                     .fillMaxWidth()
             }
-            Box(modifier = contentModifier) {
+            CollectionPaneLayout(
+                modifier = contentModifier.padding(horizontal = tabletLayout.horizontalPadding),
+                hasDetail = selected != null && detailContent != null,
+                detail = {
+                    selected?.let { selected ->
+                        detailContent?.invoke(PlaylistEntity(id = selected.id, name = selected.name, category = selected.category, createdAt = selected.createdAt))
+                    }
+                },
+            ) {
                 if (userPlaylists.isEmpty()) {
                     EaraBrandedEmptyState(
-                        sectionTitle = "我的列表",
-                        headline = "还没有创建列表",
+                        sectionTitle = appString(R.string.ui_playlists),
+                        headline = appString(R.string.ui_no_list_created_yet),
                         sectionIcon = Icons.AutoMirrored.Rounded.QueueMusic,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(top = LocalMainHeaderPadding.current, bottom = LocalBottomOverlayPadding.current + 88.dp)
@@ -141,7 +159,11 @@ fun PlaylistsScreen(
                             }
                             PlaylistRow(
                                 playlist = playlist,
-                                onClick = { onPlaylistClick(entity) },
+                                selected = tabletLayout.twoPane && selected?.id == entity.id,
+                                onClick = {
+                                    if (tabletLayout.twoPane && detailContent != null) selectedId = entity.id
+                                    else onPlaylistClick(entity)
+                                },
                                 onDelete = { viewModel.deletePlaylist(entity) },
                                 onRename = { newName -> viewModel.renamePlaylist(entity.id, newName) }
                             )
@@ -176,6 +198,7 @@ fun PlaylistsScreen(
 
 @Composable
 private fun PlaylistRow(
+    selected: Boolean = false,
     playlist: PlaylistStatsRow,
     onClick: () -> Unit,
     onDelete: () -> Unit,
@@ -189,7 +212,7 @@ private fun PlaylistRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(colorScheme.surface.copy(alpha = 0.5f))
+            .background(if (selected) colorScheme.primarySoft else Color.Transparent)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
@@ -214,7 +237,7 @@ private fun PlaylistRow(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "共 ${playlist.itemCount} 首",
+                    text = appString(R.string.ui_total_first, playlist.itemCount),
                     style = MaterialTheme.typography.bodySmall,
                     color = colorScheme.textTertiary
                 )
@@ -249,11 +272,11 @@ private fun PlaylistRow(
     if (showDeleteConfirm) {
         FlatActionDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            message = "确定要删除列表“${playlist.name}”吗？此操作不可撤销。",
+            message = appString(R.string.ui_are_you_sure_you_want_to_delete_list, playlist.name),
             actions = listOf(
-                FlatDialogAction("取消", onClick = { showDeleteConfirm = false }),
+                FlatDialogAction(appString(R.string.ui_cancel), onClick = { showDeleteConfirm = false }),
                 FlatDialogAction(
-                    text = "删除",
+                    text = appString(R.string.ui_delete),
                     tone = FlatDialogActionTone.Danger,
                     onClick = {
                         showDeleteConfirm = false
@@ -285,11 +308,11 @@ private fun CreatePlaylistDialog(
 
     FlatTextFieldDialog(
         onDismissRequest = onDismiss,
-        message = "请输入新列表名称。",
+        message = appString(R.string.ui_please_enter_a_new_list_name),
         value = name,
         onValueChange = { name = it },
-        placeholder = "请输入列表名称",
-        confirmText = "创建",
+        placeholder = appString(R.string.ui_please_enter_a_list_name),
+        confirmText = appString(R.string.ui_create),
         confirmEnabled = name.trim().isNotBlank(),
         onConfirm = { onCreate(name.trim()) },
     )
@@ -305,11 +328,11 @@ private fun RenamePlaylistDialog(
 
     FlatTextFieldDialog(
         onDismissRequest = onDismiss,
-        message = "请输入新的列表名称。",
+        message = appString(R.string.ui_please_enter_a_new_list_name_761c9f),
         value = name,
         onValueChange = { name = it },
-        placeholder = "请输入列表名称",
-        confirmText = "确定",
+        placeholder = appString(R.string.ui_please_enter_a_list_name),
+        confirmText = appString(R.string.ui_ok),
         confirmEnabled = name.trim().isNotBlank() && name.trim() != initialName.trim(),
         onConfirm = { onRename(name.trim()) },
     )

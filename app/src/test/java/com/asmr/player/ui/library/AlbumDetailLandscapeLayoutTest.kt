@@ -11,9 +11,8 @@ class AlbumDetailLandscapeLayoutTest {
     fun landscapeTablet_usesArtworkTideLayout() {
         assertTrue(
             shouldUseAlbumDetailLandscapeLayout(
-                compactWidth = false,
-                screenWidthDp = 1280,
-                screenHeightDp = 800
+                availableWidth = 1280.dp,
+                availableHeight = 800.dp
             )
         )
     }
@@ -22,9 +21,8 @@ class AlbumDetailLandscapeLayoutTest {
     fun portraitTablet_keepsExistingAlbumLayout() {
         assertFalse(
             shouldUseAlbumDetailLandscapeLayout(
-                compactWidth = false,
-                screenWidthDp = 800,
-                screenHeightDp = 1280
+                availableWidth = 800.dp,
+                availableHeight = 1280.dp
             )
         )
     }
@@ -33,18 +31,27 @@ class AlbumDetailLandscapeLayoutTest {
     fun compactLandscapeDevice_keepsPhoneLayout() {
         assertFalse(
             shouldUseAlbumDetailLandscapeLayout(
-                compactWidth = true,
-                screenWidthDp = 740,
-                screenHeightDp = 360
+                availableWidth = 740.dp,
+                availableHeight = 360.dp
             )
         )
+    }
+
+    @Test
+    fun splitWindowRequiresRoomForArtworkAndReadableHeaderActions() {
+        assertFalse(shouldUseAlbumDetailLandscapeLayout(670.dp, 600.dp, 1.3f))
+        assertFalse(shouldUseAlbumDetailLandscapeLayout(512.dp, 600.dp, 1.3f))
+        assertFalse(shouldUseAlbumDetailLandscapeLayout(840.dp, 640.dp, 1.3f))
+        // 1024dp 全屏扣除 88dp 左侧导航后仍沿用原双栏。
+        assertTrue(shouldUseAlbumDetailLandscapeLayout(936.dp, 640.dp, 1.3f))
+        assertTrue(shouldUseAlbumDetailLandscapeLayout(840.dp, 640.dp, 1f))
     }
 
     @Test
     fun landscapeArtwork_keepsInteractiveContentOutsideCoverBounds() {
         val artworkSize = 384.dp
 
-        assertTrue(albumLandscapeHeaderStart(artworkSize) > albumLandscapeArtworkRight(artworkSize))
+        assertEquals(464.dp, albumLandscapeHeaderStart(artworkSize))
     }
 
     @Test

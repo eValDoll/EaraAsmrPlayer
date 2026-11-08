@@ -16,7 +16,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
-import androidx.compose.ui.test.junit4.createComposeRule
+import com.asmr.player.ui.createEaraComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -42,7 +42,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class SearchAssistScreenTest {
     @get:Rule
-    val composeRule = createComposeRule()
+    val composeRule = createEaraComposeRule()
 
     @Test
     fun inputIsFocusedAtTextEndWhenAssistPageOpens() {

@@ -1,14 +1,15 @@
 package com.asmr.player.ui.groups
 
-import com.asmr.player.ui.common.formatCvNames
-import com.asmr.player.playback.EXTRA_ALBUM_CV
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
 
-import android.net.Uri
+import com.asmr.player.ui.common.formatCvNames
+import com.asmr.player.playback.MediaItemFactory
+
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -29,9 +30,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Folder
-import androidx.compose.material.icons.rounded.MoreVert
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -41,7 +39,6 @@ import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -60,11 +57,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
-import com.asmr.player.data.local.db.AppDatabaseProvider
 import com.asmr.player.data.local.db.dao.AlbumGroupTrackRow
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.AudioItemMenuAction
@@ -76,7 +70,8 @@ import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.queryCachedTrackFileSize
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
-import com.asmr.player.ui.common.SubtitleStamp
+import com.asmr.player.ui.common.LocalTabletLayout
+import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.ui.common.smoothScrollToTop
 import com.asmr.player.ui.common.reorderable.ItemPosition
 import com.asmr.player.ui.common.reorderable.ReorderableItem
@@ -102,7 +97,6 @@ internal const val GROUP_DETAIL_TRACK_SUBTITLE_STAMP_TAG_PREFIX = "groupDetailTr
 internal const val GROUP_DETAIL_MOVE_TOP_MENU_ITEM_TAG = "groupDetailMoveTopMenuItem"
 internal const val GROUP_DETAIL_MOVE_BOTTOM_MENU_ITEM_TAG = "groupDetailMoveBottomMenuItem"
 internal const val GROUP_DETAIL_REORDER_DIALOG_TAG = "groupDetailReorderDialog"
-internal const val GROUP_DETAIL_REORDER_ROW_TAG_PREFIX = "groupDetailReorderRow"
 
 private const val GROUP_DETAIL_REORDER_SENTINEL_KEY = "__group_detail_reorder_sentinel__"
 
@@ -136,24 +130,27 @@ fun AlbumGroupDetailScreen(
     title: String,
     onPlayMediaItems: (List<MediaItem>, Int) -> Unit,
     scrollToTopSignal: Long = 0L,
+    isDataActive: Boolean = true,
     viewModel: AlbumGroupDetailViewModel = hiltViewModel()
 ) {
     LaunchedEffect(groupId) {
         viewModel.setGroupId(groupId)
     }
-    val tracks by viewModel.tracks.collectAsStateWithLifecycle()
-    AlbumGroupDetailContent(
-        windowSizeClass = windowSizeClass,
-        title = title,
-        tracks = tracks,
-        onPlayMediaItems = onPlayMediaItems,
-        onRemoveTrack = viewModel::removeTrack,
-        onRemoveAlbum = viewModel::removeAlbum,
-        onMoveTrackToTop = viewModel::moveTrackToTop,
-        onMoveTrackToBottom = viewModel::moveTrackToBottom,
-        onSaveAlbumTrackOrder = viewModel::saveAlbumTrackOrder,
-        scrollToTopSignal = scrollToTopSignal,
-    )
+    val content by viewModel.content.collectAsStateWhileActive(isDataActive)
+    androidx.compose.runtime.key(groupId) {
+        AlbumGroupDetailContent(
+            windowSizeClass = windowSizeClass,
+            title = title,
+            tracks = if (content.groupId == groupId) content.tracks else emptyList(),
+            onPlayMediaItems = onPlayMediaItems,
+            onRemoveTrack = viewModel::removeTrack,
+            onRemoveAlbum = viewModel::removeAlbum,
+            onMoveTrackToTop = viewModel::moveTrackToTop,
+            onMoveTrackToBottom = viewModel::moveTrackToBottom,
+            onSaveAlbumTrackOrder = viewModel::saveAlbumTrackOrder,
+            scrollToTopSignal = scrollToTopSignal,
+        )
+    }
 }
 
 @Composable
@@ -219,7 +216,7 @@ internal fun AlbumGroupDetailContent(
         contentAlignment = Alignment.TopCenter
     ) {
         Column(
-            modifier = if (isCompact) {
+            modifier = if (isCompact || LocalTabletLayout.current.isTablet) {
                 Modifier.fillMaxSize()
             } else {
                 Modifier
@@ -230,8 +227,8 @@ internal fun AlbumGroupDetailContent(
         ) {
             if (tracks.isEmpty()) {
                 EaraBrandedEmptyState(
-                    sectionTitle = title.ifBlank { "我的分组" },
-                    headline = "这个分组还没有内容",
+                    sectionTitle = title.ifBlank { appString(R.string.ui_groups) },
+                    headline = appString(R.string.ui_this_group_has_no_content_yet),
                     sectionIcon = Icons.Rounded.Folder,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current + 88.dp)
@@ -246,7 +243,10 @@ internal fun AlbumGroupDetailContent(
                     contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current)
                 ) {
                     item(key = GROUP_DETAIL_REORDER_SENTINEL_KEY) {
-                        Spacer(modifier = Modifier.height(1.dp))
+                        if (LocalTabletLayout.current.embedded) {
+                            Text(title, style = MaterialTheme.typography.titleMedium,
+                                color = colorScheme.textPrimary, modifier = Modifier.padding(16.dp))
+                        } else Spacer(modifier = Modifier.height(1.dp))
                     }
                     itemsIndexed(
                         items = localRows,
@@ -325,11 +325,11 @@ internal fun AlbumGroupDetailContent(
     pendingRemoveTrack?.let { track ->
         FlatActionDialog(
             onDismissRequest = { pendingRemoveTrack = null },
-            message = "确定从「$title」移除“${track.trackTitle.ifBlank { "未命名" }}”吗？",
+            message = appString(R.string.ui_are_you_sure_you_want_to_remove_from, title, track.trackTitle.ifBlank { appString(R.string.ui_unnamed) }),
             actions = listOf(
-                FlatDialogAction("取消", onClick = { pendingRemoveTrack = null }),
+                FlatDialogAction(appString(R.string.ui_cancel), onClick = { pendingRemoveTrack = null }),
                 FlatDialogAction(
-                    text = "移除",
+                    text = appString(R.string.ui_remove),
                     tone = FlatDialogActionTone.Danger,
                     onClick = {
                         pendingRemoveTrack = null
@@ -343,11 +343,11 @@ internal fun AlbumGroupDetailContent(
     pendingRemoveAlbum?.let { album ->
         FlatActionDialog(
             onDismissRequest = { pendingRemoveAlbum = null },
-            message = "确定从「$title」移除专辑“${album.second}”吗？",
+            message = appString(R.string.ui_are_you_sure_you_want_to_remove_the, title, album.second),
             actions = listOf(
-                FlatDialogAction("取消", onClick = { pendingRemoveAlbum = null }),
+                FlatDialogAction(appString(R.string.ui_cancel), onClick = { pendingRemoveAlbum = null }),
                 FlatDialogAction(
-                    text = "移除",
+                    text = appString(R.string.ui_remove),
                     tone = FlatDialogActionTone.Danger,
                     onClick = {
                         pendingRemoveAlbum = null
@@ -383,7 +383,7 @@ private fun AlbumSectionHeader(
     val footerSegments = remember(rjCode, tracks, totalSizeBytes) {
         buildList {
             if (rjCode.isNotBlank()) add(rjCode)
-            add("${tracks.size} 音频")
+            add(appString(R.string.ui_audio, tracks.size))
             Formatting.formatTrackSeconds(tracks.sumOf { it.trackDuration }).takeIf { it.isNotBlank() }?.let(::add)
             totalSizeBytes?.let(Formatting::formatFileSize)?.let(::add)
         }
@@ -393,7 +393,6 @@ private fun AlbumSectionHeader(
             .fillMaxWidth()
             .testTag("$GROUP_DETAIL_SECTION_HEADER_TAG_PREFIX:$albumId")
             .clip(RoundedCornerShape(GroupAlbumHeaderCornerRadius))
-            .background(colorScheme.surface.copy(alpha = 0.5f))
             .clickable { onToggle() }
             .padding(horizontal = GroupDetailHorizontalPadding, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -411,7 +410,7 @@ private fun AlbumSectionHeader(
         Spacer(modifier = Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
-                text = albumTitle.ifBlank { rjCode.ifBlank { "专辑" } },
+                text = albumTitle.ifBlank { rjCode.ifBlank { appString(R.string.ui_album) } },
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                 color = colorScheme.textPrimary,
                 maxLines = 2,
@@ -467,28 +466,28 @@ private fun GroupTrackRow(
         val actions = remember(onPlay, onMoveToTop, onMoveToBottom, onRemove) {
             listOf(
                 AudioItemMenuAction(
-                    label = "播放",
+                    label = appString(R.string.ui_play),
                     onClick = onPlay
                 ),
                 AudioItemMenuAction(
-                    label = "移至顶部",
+                    label = appString(R.string.ui_move_to_top),
                     onClick = onMoveToTop,
                     testTag = GROUP_DETAIL_MOVE_TOP_MENU_ITEM_TAG
                 ),
                 AudioItemMenuAction(
-                    label = "移至末尾",
+                    label = appString(R.string.ui_move_to_end),
                     onClick = onMoveToBottom,
                     testTag = GROUP_DETAIL_MOVE_BOTTOM_MENU_ITEM_TAG
                 ),
                 AudioItemMenuAction(
-                    label = "从分组移除",
+                    label = appString(R.string.ui_remove_from_group),
                     onClick = onRemove,
                     showDividerBefore = true
                 )
             )
         }
         AudioItemRow(
-            title = item.trackTitle.ifBlank { "未命名" },
+            title = item.trackTitle.ifBlank { appString(R.string.ui_unnamed) },
             sourcePath = item.trackPath,
             loadAudioMetadata = loadAudioMetadata,
             subtitle = cvText,
@@ -528,7 +527,7 @@ private fun buildGroupDetailRows(
     sections.forEach { (albumId, list) ->
         val first = list.firstOrNull() ?: return@forEach
         val sectionTitle = first.albumTitle.orEmpty().ifBlank {
-            first.albumRjCode.orEmpty().ifBlank { "专辑" }
+            first.albumRjCode.orEmpty().ifBlank { appString(R.string.ui_album) }
         }
         val coverModel = first.albumCoverThumbPath.orEmpty()
             .ifBlank { first.albumCoverPath.orEmpty() }
@@ -610,50 +609,23 @@ private fun SnapshotStateList<GroupDetailListRow>.moveTrackRows(
 }
 
 private fun AlbumGroupTrackRow.toMediaItem(): MediaItem {
-    val uri = toPlayableUri(trackPath)
     val artwork = albumCoverPath.orEmpty()
         .ifBlank { albumCoverUrl.orEmpty() }
         .ifBlank { albumCoverThumbPath.orEmpty() }
         .trim()
-    val metadata = MediaMetadata.Builder()
-        .setTitle(trackTitle)
-        .setArtist(formatCvNames(albumCv.orEmpty()))
-        .setDurationMs(trackDuration.takeIf { it > 0 }?.let { (it * 1000).toLong() })
-        .setExtras(android.os.Bundle().apply { putString(EXTRA_ALBUM_CV, albumCv.orEmpty()) })
-        .setAlbumTitle(albumTitle.orEmpty())
-        .setArtworkUri(artwork.toArtworkUriOrNull())
-        .build()
-    return MediaItem.Builder()
-        .setMediaId(trackPath)
-        .setUri(uri)
-        .setMediaMetadata(metadata)
-        .build()
-}
-
-private fun toPlayableUri(path: String): Uri {
-    val trimmed = path.trim()
-    return if (
-        trimmed.startsWith("http", ignoreCase = true) ||
-        trimmed.startsWith("content://", ignoreCase = true) ||
-        trimmed.startsWith("file://", ignoreCase = true)
-    ) {
-        trimmed.toUri()
-    } else {
-        Uri.fromFile(java.io.File(trimmed))
-    }
-}
-
-private fun String.toArtworkUriOrNull(): Uri? {
-    val trimmed = trim()
-    if (trimmed.isBlank()) return null
-    return if (
-        trimmed.startsWith("http", ignoreCase = true) ||
-        trimmed.startsWith("content://", ignoreCase = true) ||
-        trimmed.startsWith("file://", ignoreCase = true)
-    ) {
-        trimmed.toUri()
-    } else {
-        val file = java.io.File(trimmed)
-        if (file.exists()) Uri.fromFile(file) else null
-    }
+    return MediaItemFactory.fromDetails(
+        mediaId = trackPath,
+        uri = trackPath,
+        title = trackTitle,
+        artist = formatCvNames(albumCv.orEmpty()),
+        albumTitle = albumTitle.orEmpty(),
+        artworkUri = artwork,
+        albumId = albumId,
+        trackId = trackId,
+        rjCode = albumRjCode.orEmpty(),
+        albumWorkId = albumWorkId.orEmpty(),
+        trackGroup = trackGroup,
+        albumCv = albumCv.orEmpty(),
+        durationSeconds = trackDuration,
+    )
 }

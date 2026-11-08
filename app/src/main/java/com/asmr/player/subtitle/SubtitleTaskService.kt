@@ -1,5 +1,7 @@
 package com.asmr.player.subtitle
 
+import com.asmr.player.i18n.appString
+
 import com.asmr.player.util.LocalFileScopes
 import com.asmr.player.util.LocalFileOperation
 import com.asmr.player.util.withSubtitleFileAccess
@@ -32,6 +34,7 @@ import com.asmr.player.data.local.db.entities.SubtitleEntity
 import com.asmr.player.data.local.db.entities.SubtitleFallbackCaptionEntity
 import com.asmr.player.data.local.db.entities.SubtitleTaskItemEntity
 import com.asmr.player.data.local.db.entities.SubtitleTranscriptionChunkEntity
+import com.asmr.player.data.local.db.entities.SubtitleTitleOwnerEntity
 import com.asmr.player.data.local.db.entities.SubtitleTitleOwnerKind
 import com.asmr.player.data.local.db.entities.SubtitleTranslationSourceEntity
 import com.asmr.player.data.local.db.entities.TrackEntity
@@ -170,7 +173,7 @@ internal class SubtitleTaskService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        interruptAndStop("应用已从后台清除，字幕任务已中断")
+        interruptAndStop(appString(R.string.ui_the_app_has_been_cleared_from_the_background))
         super.onTaskRemoved(rootIntent)
     }
 
@@ -193,7 +196,7 @@ internal class SubtitleTaskService : Service() {
     }
 
     override fun onTimeout(startId: Int, fgsType: Int) {
-        interruptAndStop("系统前台服务时限已到，字幕任务已安全中断")
+        interruptAndStop(appString(R.string.ui_the_system_foreground_service_time_limit_has_expired))
     }
 
     private suspend fun schedulerLoop() {
@@ -317,15 +320,16 @@ internal class SubtitleTaskService : Service() {
             if (items.none { it.state !in TITLE_TRANSLATION_BLOCKED_STATES }) return@forEach
             val job = serviceScope.launch(start = CoroutineStart.LAZY) {
                 try {
+                    val attemptedOwners = ownerDao.getByTask(taskId).filter { it.displayTitle.isBlank() }
                     try {
                         // 客户端已限制请求次数；耗尽后保留原名，结束这次标题翻译。
-                        translateDisplayNamesForTask(taskId)
+                        translateDisplayNamesForTask(taskId, attemptedOwners)
                     } catch (cancelled: CancellationException) {
                         throw cancelled
                     } catch (error: Exception) {
                         Log.w(TAG, "作品显示名翻译失败 taskId=$taskId", error)
                     }
-                    repository.finishTitleTranslation(taskId)
+                    repository.finishTitleTranslation(taskId, attemptedOwners)
                 } finally {
                     titleTranslationJobs.remove(taskId)
                     signalWake()
@@ -340,19 +344,18 @@ internal class SubtitleTaskService : Service() {
      * 把一个字幕任务涉及的作品标题与音轨标题翻译成中文，写入 displayTitle。
      * 只在任务仍处于翻译阶段（未取消/未删除）时提交结果。
      */
-    private suspend fun translateDisplayNamesForTask(taskId: String) {
-        val trackIds = database.subtitleTaskDao().getItemsForTask(taskId).map { it.trackId }
+    private suspend fun translateDisplayNamesForTask(taskId: String, attemptedOwners: List<SubtitleTitleOwnerEntity>) {
+        val trackIds = attemptedOwners.filter { it.kind == SubtitleTitleOwnerKind.TRACK }.map { it.targetId }
         database.withSubtitleFileAccess(fileScopes, fileScopes.tracks(trackIds)) {
-            translateDisplayNamesForTaskLocked(taskId)
+            translateDisplayNamesForTaskLocked(taskId, attemptedOwners)
         }
     }
 
-    private suspend fun translateDisplayNamesForTaskLocked(taskId: String) {
+    private suspend fun translateDisplayNamesForTaskLocked(taskId: String, registeredOwners: List<SubtitleTitleOwnerEntity>) {
         val ownerDao = database.subtitleTitleOwnerDao()
-        val registeredOwners = ownerDao.getByTask(taskId)
         if (registeredOwners.none { owner -> owner.displayTitle.isBlank() }) return
-        val albumOwners = registeredOwners.filter { it.kind == SubtitleTitleOwnerKind.ALBUM }
-        val trackOwners = registeredOwners.filter { it.kind == SubtitleTitleOwnerKind.TRACK }
+        val albumOwners = registeredOwners.filter { it.kind == SubtitleTitleOwnerKind.ALBUM && it.displayTitle.isBlank() }
+        val trackOwners = registeredOwners.filter { it.kind == SubtitleTitleOwnerKind.TRACK && it.displayTitle.isBlank() }
         val allTracks = database.trackDao()
             .getTracksByIdsOnce(trackOwners.map { it.targetId })
             .associateBy { it.id }
@@ -360,8 +363,7 @@ internal class SubtitleTaskService : Service() {
             .distinct()
         val albums = albumIds.mapNotNull { albumId -> database.albumDao().getAlbumById(albumId) }
         if (albums.isEmpty()) {
-            // 任务涉及的作品行已全部失效（例如已被删除），清除未完成的登记，避免无限重试
-            ownerDao.deletePendingForTask(taskId)
+            // 失效登记由本轮收尾清理，保留请求期间新登记的音轨。
             return
         }
         val tracksByAlbum = allTracks.values.groupBy { it.albumId }
@@ -376,6 +378,11 @@ internal class SubtitleTaskService : Service() {
                     cv = album.cv,
                     trackTitles = albumTracks.map { it.id to it.title }
                 )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w(TAG, "作品显示名翻译失败 taskId=$taskId albumId=${album.id}", error)
+                return@forEach
             } finally {
                 requestBalanceRefresh()
             }
@@ -383,7 +390,7 @@ internal class SubtitleTaskService : Service() {
                 database.subtitleTaskDao().getTask(taskId) ?: return@withTransaction
                 val items = database.subtitleTaskDao().getItemsForTask(taskId)
                 if (items.none { it.state !in TITLE_TRANSLATION_BLOCKED_STATES }) return@withTransaction
-                if (translated.albumTitle.isNotBlank()) {
+                if (albumOwners.any { it.targetId == album.id } && translated.albumTitle.isNotBlank()) {
                     database.albumDao().updateAlbumDisplayTitle(album.id, translated.albumTitle)
                     ownerDao.updateDisplayTitle(
                         taskId, SubtitleTitleOwnerKind.ALBUM, album.id, translated.albumTitle
@@ -463,8 +470,8 @@ internal class SubtitleTaskService : Service() {
                     }
                 }
                 database.withTransaction {
-                    val current = dao.getItem(itemId) ?: throw CancellationException("字幕任务已删除")
-                    if (current.state != SubtitleItemState.TRANSCRIBING) throw CancellationException("字幕转录已暂停或取消")
+                    val current = dao.getItem(itemId) ?: throw CancellationException(appString(R.string.ui_subtitle_task_deleted))
+                    if (current.state != SubtitleItemState.TRANSCRIBING) throw CancellationException(appString(R.string.ui_subtitle_transcription_paused_or_canceled))
                     requireTaskSourceUnchanged(current)
                     val chunkIndex = current.transcriptionChunkCursor
                     val processedMs = chunk.startMs + chunk.durationMs
@@ -514,12 +521,12 @@ internal class SubtitleTaskService : Service() {
         val item = dao.getItem(itemId) ?: return
         val durationMs = maxOf(item.totalDurationMs, chunks.lastOrNull()?.endMs ?: 0L)
         val sourceSegments = SubtitleSegmentNormalizer.normalize(generated, durationMs)
-        check(sourceSegments.isNotEmpty()) { "未识别到可生成字幕的日语语音" }
+        check(sourceSegments.isNotEmpty()) { appString(R.string.ui_japanese_voice_that_can_generate_subtitles_is_not) }
         val fallback = SubtitleSegmentNormalizer.normalize(
             SubtitleSemanticSegmenter.reflow(sourceSegments),
             durationMs
         )
-        check(fallback.isNotEmpty()) { "未识别到可生成字幕的日语语音" }
+        check(fallback.isNotEmpty()) { appString(R.string.ui_japanese_voice_that_can_generate_subtitles_is_not) }
         val layout = buildGeneratedTranslationLayout(itemId, fallback)
         val playerFallback = fallback.map { caption ->
             SubtitleEntity(
@@ -532,9 +539,9 @@ internal class SubtitleTaskService : Service() {
         }
         database.withTransaction {
             val current = dao.getItem(itemId) ?: return@withTransaction
-            check(current.state == SubtitleItemState.TRANSCRIBING) { "字幕转录已暂停或取消" }
+            check(current.state == SubtitleItemState.TRANSCRIBING) { appString(R.string.ui_subtitle_transcription_paused_or_canceled) }
             val playerCurrent = database.trackDao().getSubtitlesForTrack(current.trackId).sortedWith(SUBTITLE_ORDER)
-            check(subtitleHash(playerCurrent) == current.lastPublishedHash) { "字幕在转录期间已被修改，未覆盖用户版本" }
+            check(subtitleHash(playerCurrent) == current.lastPublishedHash) { appString(R.string.ui_subtitles_have_been_modified_during_transcription_and_the) }
             dao.deleteSources(itemId)
             dao.deleteFallbackCaptions(itemId)
             dao.insertSources(layout.sources)
@@ -580,7 +587,7 @@ internal class SubtitleTaskService : Service() {
         if (item.state !in TRANSLATION_QUEUE_STATES) return
         val sources = dao.getSources(itemId)
         if (sources.isEmpty()) {
-            failItem(itemId, "字幕翻译源已丢失")
+            failItem(itemId, appString(R.string.ui_subtitle_translation_source_has_been_lost))
             return
         }
         val confirmedSourceCount = dao.getCommittedCaptions(itemId)
@@ -682,13 +689,13 @@ internal class SubtitleTaskService : Service() {
                     is GeneratedSubtitleExportResult.ExistingFilePreserved -> Unit
                     GeneratedSubtitleExportResult.UnsupportedTrackLocation -> {
                         Log.w(TAG, "音频位置不支持同目录字幕导出 trackId=${item.trackId}")
-                        messageManager.showWarning("字幕已生成，但当前音频位置不支持导出 LRC 文件")
+                        messageManager.showWarning(appString(R.string.ui_subtitles_have_been_generated_but_the_current_audio))
                     }
                 }
             }
             .onFailure { error ->
                 Log.w(TAG, "自动生成字幕导出失败 trackId=${item.trackId}", error)
-                messageManager.showWarning("字幕已生成，但写入音频目录失败：${error.message ?: "未知错误"}")
+                messageManager.showWarning(appString(R.string.ui_subtitles_were_generated_but_writing_to_the_audio, error.message ?: appString(R.string.ui_unknown_error)))
             }
     }
 
@@ -715,7 +722,7 @@ internal class SubtitleTaskService : Service() {
         try {
             val settings = settingsRepository.loadDeepSeekTranslationSettings()
             if (!settings.finalPolishEnabled) {
-                messageManager.showWarning("请先在设置中开启“最终润色”后再执行润色")
+                messageManager.showWarning(appString(R.string.ui_please_turn_on_final_touch_in_settings_before))
                 return
             }
             val tracks = database.trackDao().getTracksForAlbumOrderedOnce(albumId)
@@ -724,7 +731,7 @@ internal class SubtitleTaskService : Service() {
             val tracksWithSubtitles = database.trackDao().getTrackIdsWithSubtitles(trackIds).toSet()
             val polishableTracks = tracks.filter { it.id in tracksWithSubtitles }
             if (polishableTracks.isEmpty()) {
-                messageManager.showWarning("该作品暂无可润色的字幕")
+                messageManager.showWarning(appString(R.string.ui_there_are_currently_no_polished_subtitles_for_this))
                 return
             }
             if (
@@ -735,7 +742,7 @@ internal class SubtitleTaskService : Service() {
                 return
             }
             repository.markPolishStarted(albumId)
-            messageManager.showInfo("已开始润色该作品字幕，完成后会自动更新")
+            messageManager.showInfo(appString(R.string.ui_the_subtitles_for_this_work_have_been_polished))
             Log.i(TAG, "开始作品级手动润色 albumId=$albumId tracks=${polishableTracks.size}")
             runCatching { polishAlbum(albumId, polishableTracks) }
                 .onFailure { error ->
@@ -992,7 +999,7 @@ internal class SubtitleTaskService : Service() {
         val dao = database.subtitleTaskDao()
         database.withTransaction {
             val item = dao.getItem(itemId) ?: return@withTransaction
-            check(item.state == SubtitleItemState.TRANSLATING) { "字幕翻译已暂停或取消" }
+            check(item.state == SubtitleItemState.TRANSLATING) { appString(R.string.ui_subtitle_translation_paused_or_canceled) }
             assertTaskControlsCurrentSubtitles(item)
             val existing = dao.getCommittedCaptions(itemId)
             val existingSourceCount = existing.sumOf { it.lastSourceIndex - it.firstSourceIndex + 1 }
@@ -1065,7 +1072,7 @@ internal class SubtitleTaskService : Service() {
 
     private suspend fun captureTaskSource(item: SubtitleTaskItemEntity) = withContext(Dispatchers.IO) {
         val track = database.trackDao().getTrackByIdOnce(item.trackId)
-        check(track != null && track.path == item.trackPath) { "音轨已移除或位置已变化" }
+        check(track != null && track.path == item.trackPath) { appString(R.string.ui_the_track_was_removed_or_moved) }
         if (!isOnlineTrackPath(item.trackPath)) {
             sourceSnapshots[item.id] = LocalFileSnapshot.read(applicationContext, item.trackPath)
             generatedSubtitleFileExporter.captureOutput(item.trackId)?.let { outputSnapshots[item.id] = it }
@@ -1074,7 +1081,7 @@ internal class SubtitleTaskService : Service() {
 
     private suspend fun requireTaskSourceUnchanged(item: SubtitleTaskItemEntity) = withContext(Dispatchers.IO) {
         val track = database.trackDao().getTrackByIdOnce(item.trackId)
-        check(track != null && track.path == item.trackPath) { "音轨已移除或位置已变化" }
+        check(track != null && track.path == item.trackPath) { appString(R.string.ui_the_track_was_removed_or_moved) }
         sourceSnapshots[item.id]?.requireUnchanged(applicationContext, item.trackPath)
         outputSnapshots[item.id]?.let { generatedSubtitleFileExporter.requireOutputUnchanged(it) }
     }
@@ -1083,7 +1090,7 @@ internal class SubtitleTaskService : Service() {
         requireTaskSourceUnchanged(item)
         val current = database.trackDao().getSubtitlesForTrack(item.trackId).sortedWith(SUBTITLE_ORDER)
         check(taskStillControlsSubtitles(subtitleHash(current), item.lastPublishedHash)) {
-            "字幕在任务期间已被修改，已停止写入"
+            appString(R.string.ui_subtitles_have_been_modified_during_the_task_and)
         }
     }
 
@@ -1112,7 +1119,7 @@ internal class SubtitleTaskService : Service() {
             )
             repository.refreshTaskState(item.taskId)
         } else {
-            failItem(itemId, error.message.orEmpty().ifBlank { "字幕翻译重试已耗尽" }, attempt)
+            failItem(itemId, error.message.orEmpty().ifBlank { appString(R.string.ui_subtitle_translation_retries_exhausted) }, attempt)
         }
     }
 
@@ -1120,7 +1127,7 @@ internal class SubtitleTaskService : Service() {
         val dao = database.subtitleTaskDao()
         val item = dao.getItem(itemId) ?: return
         if (item.state in setOf(SubtitleItemState.PAUSE_REQUESTED, SubtitleItemState.CANCEL_REQUESTED)) return
-        val userMessage = message.trim().ifBlank { "字幕任务失败，请重试。" }
+        val userMessage = message.trim().ifBlank { appString(R.string.ui_subtitle_task_failed_please_try_again) }
         dao.updateItem(
             item.copy(
                 suspendedFromState = item.state,
@@ -1154,9 +1161,9 @@ internal class SubtitleTaskService : Service() {
     }
 
     private fun cancelRunningJob(itemId: String) {
-        translationJobs[itemId]?.cancel(CancellationException("字幕任务控制请求"))
+        translationJobs[itemId]?.cancel(CancellationException(appString(R.string.ui_subtitle_mission_control_request)))
         if (transcriptionItemId == itemId) {
-            transcriptionJob?.cancel(CancellationException("字幕任务控制请求"))
+            transcriptionJob?.cancel(CancellationException(appString(R.string.ui_subtitle_mission_control_request)))
         }
     }
 
@@ -1230,23 +1237,23 @@ internal class SubtitleTaskService : Service() {
         val waitingNetwork = items.count { it.state == SubtitleItemState.WAITING_NETWORK }
         val waitingSlot = items.count { it.state == SubtitleItemState.WAITING_SLOT }
         val parts = buildList {
-            transcribing?.let { add("转录：${it.trackTitle} ${it.transcriptionProgress}%") }
-            if (translating > 0) add("翻译中 $translating/$DEEPSEEK_TRANSLATION_CONCURRENCY")
-            if (waitingSlot > 0) add("等待槽位 $waitingSlot")
-            if (waitingNetwork > 0) add("等待网络 $waitingNetwork")
-            if (isEmpty()) add("正在检查字幕队列")
+            transcribing?.let { add(appString(R.string.ui_transcription, it.trackTitle, it.transcriptionProgress)) }
+            if (translating > 0) add(appString(R.string.ui_translating, translating, DEEPSEEK_TRANSLATION_CONCURRENCY))
+            if (waitingSlot > 0) add(appString(R.string.ui_waiting_for_slot, waitingSlot))
+            if (waitingNetwork > 0) add(appString(R.string.ui_waiting_for_network, waitingNetwork))
+            if (isEmpty()) add(appString(R.string.ui_checking_subtitle_queue))
         }
         return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_playback)
-            .setContentTitle("字幕任务")
+            .setContentTitle(appString(R.string.ui_subtitle_task))
             .setContentText(parts.joinToString(" · "))
             .setStyle(NotificationCompat.BigTextStyle().bigText(parts.joinToString(" · ")))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setContentIntent(openAppPendingIntent())
-            .addAction(0, "打开", openAppPendingIntent())
-            .addAction(0, "暂停全部", servicePendingIntent(ACTION_PAUSE_ALL, 1))
-            .addAction(0, "取消全部", servicePendingIntent(ACTION_CANCEL_ALL, 2))
+            .addAction(0, appString(R.string.ui_open), openAppPendingIntent())
+            .addAction(0, appString(R.string.ui_pause_all_ee002e), servicePendingIntent(ACTION_PAUSE_ALL, 1))
+            .addAction(0, appString(R.string.ui_cancel_all), servicePendingIntent(ACTION_CANCEL_ALL, 2))
             .build()
     }
 
@@ -1263,14 +1270,14 @@ internal class SubtitleTaskService : Service() {
         val manager = getSystemService(NotificationManager::class.java)
         if (manager.getNotificationChannel(NOTIFICATION_CHANNEL_ID) != null) return
         manager.createNotificationChannel(
-            NotificationChannel(NOTIFICATION_CHANNEL_ID, "字幕任务", NotificationManager.IMPORTANCE_LOW)
+            NotificationChannel(NOTIFICATION_CHANNEL_ID, appString(R.string.ui_subtitle_task), NotificationManager.IMPORTANCE_LOW)
         )
     }
 
     private fun showWarningNotification(message: String) {
         val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_playback)
-            .setContentTitle("字幕版本冲突")
+            .setContentTitle(appString(R.string.ui_subtitle_version_conflict))
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
             .setAutoCancel(true)

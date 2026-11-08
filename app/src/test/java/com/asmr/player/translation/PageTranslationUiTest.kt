@@ -48,7 +48,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [28])
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [28])
 class PageTranslationUiTest {
     private val compose = createAndroidComposeRule<ComponentActivity>()
     // Release intentionally does not package ui-test-manifest. Register a test-only host

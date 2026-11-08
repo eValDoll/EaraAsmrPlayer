@@ -29,8 +29,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [34])
-class SubtitleTaskServiceLifecycleTest {
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [34])
+class SubtitleTaskServiceLifecycleTest : com.asmr.player.LocalizedRobolectricTest() {
     private lateinit var database: AppDatabase
     private lateinit var service: SubtitleTaskService
     private lateinit var scope: CoroutineScope
@@ -54,7 +54,7 @@ class SubtitleTaskServiceLifecycleTest {
         setField("connectivityManager", context.getSystemService(ConnectivityManager::class.java))
         setField("transcriptionEngine", object : SubtitleTranscriptionEngine {
             override val model = SubtitleTranscriptionModel(
-                "test", "测试模型", "测试模型", SubtitleTranscriptionModelType.NEMO_CTC,
+                "test", "测试模型", com.asmr.player.R.string.app_name, SubtitleTranscriptionModelType.NEMO_CTC,
                 emptyList(), 16_000
             )
 

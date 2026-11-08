@@ -6,7 +6,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class AlbumDetailOneStateTest {
+class AlbumDetailOneStateTest : com.asmr.player.LocalizedRobolectricTest() {
     @Test
     fun asmrOneFailureMessage_isSilentForLocalLibraryDetail() {
         assertNull(albumDetailAsmrOneFailureMessage(isLocalLibraryDetail = true))

@@ -1,5 +1,8 @@
 package com.asmr.player.ui.common
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,7 +24,7 @@ import com.asmr.player.ui.theme.AsmrTheme
 
 @Composable
 fun SubtitleStamp(
-    text: String = "字幕",
+    text: String = appString(R.string.ui_subtitles),
     modifier: Modifier = Modifier
 ) {
     val colorScheme = AsmrTheme.colorScheme

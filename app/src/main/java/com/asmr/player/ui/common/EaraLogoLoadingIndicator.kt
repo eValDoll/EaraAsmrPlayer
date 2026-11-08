@@ -3,9 +3,7 @@ package com.asmr.player.ui.common
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -73,24 +71,17 @@ fun EaraLogoLoadingIndicator(
         colorScheme.primarySoft
     }
 
-    val infinite = rememberInfiniteTransition(label = "eara_logo_loading")
-    val wavePhase = infinite.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
+    val wavePhase = rememberPageAnimationProgress(
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 1050, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
-        ),
-        label = "wave_phase"
+        )
     )
-    val glowPulse = infinite.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
+    val glowPulse = rememberPageAnimationProgress(
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
-        ),
-        label = "glow_pulse"
+        )
     )
 
     Box(

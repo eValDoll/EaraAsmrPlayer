@@ -1,5 +1,8 @@
 package com.asmr.player.domain.model
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.runtime.Immutable
 
 @Immutable
@@ -12,7 +15,7 @@ data class CollectionAvailability(
 ) {
     val label: String?
         get() = when {
-            hasAsmrOne && hasJapaneseAsmr != false -> "收录"
+            hasAsmrOne && hasJapaneseAsmr != false -> appString(R.string.ui_included)
             hasAsmrOne -> "asmr.one"
             hasJapaneseAsmr == true -> "jp-asmr"
             else -> null

@@ -3,6 +3,9 @@
 # still optimize method bodies and rewrite Baseline/Startup Profile rules.
 -keep,allowoptimization class com.asmr.player.** { *; }
 
+# MTK BoostFwk identifies Compose pages by loading this exact class name.
+-keep,allowoptimization class androidx.compose.ui.platform.AndroidComposeView
+
 -keepattributes Signature,*Annotation*,InnerClasses,EnclosingMethod
 
 # Retrofit 2.9's bundled rules predate the R8 full-mode handling required by

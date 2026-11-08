@@ -7,7 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.test.junit4.createComposeRule
+import com.asmr.player.ui.createEaraComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import org.junit.Assert.assertEquals
@@ -18,7 +18,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class HeaderBlurLayoutTest {
     @get:Rule
-    val composeRule = createComposeRule()
+    val composeRule = createEaraComposeRule()
 
     @Test
     fun blurDoesNotReserveExtraHeaderSpace() {

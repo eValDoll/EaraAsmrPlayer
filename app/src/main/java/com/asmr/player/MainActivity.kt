@@ -2,153 +2,45 @@ package com.asmr.player
 
 import android.os.Bundle
 import android.view.KeyEvent
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
+import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material.icons.rounded.AccessTime
-import androidx.compose.material.icons.rounded.Audiotrack
-import androidx.compose.material.icons.rounded.CloudDownload
-import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
-import android.content.pm.ActivityInfo
-import android.content.res.Configuration
 import android.media.AudioManager
-import android.net.Uri
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
-import androidx.compose.material3.windowsizeclass.WindowHeightSizeClass
-import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
-import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.BiasAlignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.media3.common.util.UnstableApi
-import androidx.navigation.NavHostController
-import androidx.navigation.NavType
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
-import com.asmr.player.ui.library.AlbumDetailScreen
-import com.asmr.player.ui.library.AlbumDetailUiState
-import com.asmr.player.ui.library.AlbumDetailViewModel
-import com.asmr.player.ui.library.CloudSyncSelectionDialog
-import com.asmr.player.ui.library.LibraryFilterScreen
-import com.asmr.player.ui.library.LibraryScreen
 import com.asmr.player.ui.library.LibraryViewModel
-import com.asmr.player.ui.library.BulkPhase
-import com.asmr.player.ui.player.MiniPlayer
-import com.asmr.player.ui.player.NowPlayingMotionLayout
-import com.asmr.player.ui.player.NowPlayingMotionSpec
-import com.asmr.player.ui.player.NowPlayingScreen
-import com.asmr.player.ui.player.PlayerSharedBackdrop
 import com.asmr.player.ui.player.PlayerViewModel
-import com.asmr.player.ui.player.rememberCoverDragPreviewState
-import com.asmr.player.ui.player.rememberCoverMotionState
-import com.asmr.player.ui.sidepanel.LocalRightPanelExpandedState
-import com.asmr.player.ui.downloads.DownloadsScreen
-import com.asmr.player.ui.downloads.DownloadsViewModel
-import com.asmr.player.ui.downloads.DownloadItemState
-import com.asmr.player.ui.dlsite.DlsiteLoginScreen
-import com.asmr.player.ui.dlsite.DlsiteLoginViewModel
-import com.asmr.player.ui.groups.AlbumGroupsViewModel
-import com.asmr.player.ui.playlists.PlaylistDetailScreen
-import com.asmr.player.ui.playlists.PlaylistPickerScreen
-import com.asmr.player.ui.playlists.PlaylistsScreen
-import com.asmr.player.ui.playlists.PlaylistsViewModel
-import com.asmr.player.ui.playlists.SystemPlaylistScreen
-import com.asmr.player.ui.search.SearchScreen
-import com.asmr.player.ui.search.SearchViewModel
-import com.asmr.player.domain.model.SearchSource
-import com.asmr.player.ui.settings.SettingsScreen
-import com.asmr.player.ui.settings.SettingsViewModel
-import com.asmr.player.ui.common.glassMenu
-import com.asmr.player.ui.drawer.DrawerStatusViewModel
-import com.asmr.player.ui.drawer.SiteStatus
-import com.asmr.player.ui.drawer.SiteStatusType
-import com.asmr.player.ui.nav.AppNavigator
-import com.asmr.player.ui.nav.BottomChrome
-import com.asmr.player.ui.nav.Routes
-import com.asmr.player.ui.nav.bottomChromeNavItems
-import com.asmr.player.ui.nav.bottomChromeOverlayHeight
-import com.asmr.player.ui.nav.isPrimaryRoute
-import com.asmr.player.ui.nav.resolvePrimaryPagerRoutes
-import com.asmr.player.ui.nav.resolvePrimaryRoute
-import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.DiscPlaceholderBitmapCache
 import com.asmr.player.ui.splash.EaraSplashOverlay
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.net.URLDecoder
-import java.net.URLEncoder
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.theme.PrewarmDynamicHuePalette
 import com.asmr.player.ui.theme.PrewarmDynamicHuePaletteFromVideoFrame
-import androidx.compose.ui.draw.blur
-import android.graphics.RenderEffect
-import android.graphics.Shader
-import androidx.compose.ui.graphics.asComposeRenderEffect
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.animation.*
-import androidx.compose.animation.core.LinearOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.FastOutLinearInEasing
-import androidx.compose.animation.core.keyframes
-import androidx.compose.animation.core.tween
-import androidx.compose.ui.input.pointer.pointerInteropFilter
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.onGloballyPositioned
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import com.asmr.player.ui.player.QueueSheetContent
 import com.asmr.player.ui.player.SleepTimerSheetContent
-import com.asmr.player.ui.player.MiniPlayerDisplayMode
 
 import com.asmr.player.data.local.datastore.SettingsDataStore
 import com.asmr.player.data.local.datastore.ThemeBootstrapPreferences
 import com.asmr.player.data.settings.CoverPreviewMode
+import com.asmr.player.data.settings.PlayerBackgroundMode
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.data.settings.NowPlayingHomeLayoutMode
 import com.asmr.player.data.settings.NowPlayingLyricsSettings
@@ -158,16 +50,12 @@ import com.asmr.player.ui.common.PlayerModalSheet
 import com.asmr.player.ui.common.VisibleAppMessage
 import com.asmr.player.ui.common.LocalVisibleAppMessages
 import com.asmr.player.ui.theme.HuePalette
-import com.asmr.player.ui.theme.PlayerTheme
-import com.asmr.player.ui.theme.ThemeMode
 import com.asmr.player.ui.theme.DefaultBrandPrimaryDark
 import com.asmr.player.ui.theme.DefaultBrandPrimaryLight
 import com.asmr.player.ui.theme.deriveHuePalette
-import kotlin.math.roundToInt
 import com.asmr.player.ui.theme.neutralPaletteForMode
 import com.asmr.player.ui.theme.rememberDynamicHuePalette
 import com.asmr.player.ui.theme.rememberDynamicHuePaletteFromVideoFrame
-import com.asmr.player.ui.theme.dynamicPageContainerColor
 import com.asmr.player.ui.theme.dynamicHueCacheKeyForArtwork
 import com.asmr.player.ui.theme.dynamicHueCacheKeyForVideo
 import com.asmr.player.ui.theme.peekDynamicHueSeedColor
@@ -176,33 +64,17 @@ import com.asmr.player.ui.theme.ThemeTransitionTriggerRequest
 import com.asmr.player.ui.theme.LocalThemeTransitionTrigger
 import com.asmr.player.ui.theme.ThemeCircularRevealOverlay
 import com.asmr.player.ui.theme.captureThemeTransitionBitmap
-import com.asmr.player.ui.common.AppVolumeHearingWarningDialog
-import com.asmr.player.ui.common.AppVolumeWarningSessionState
-import com.asmr.player.ui.common.rememberAppVolumeWarningSessionState
-import com.asmr.player.ui.common.rememberCurrentAudioOutputRouteKind
-import com.asmr.player.ui.common.rememberProtectedAppVolumeChangeState
-import com.asmr.player.ui.common.AudioOutputRouteIcon
 import com.asmr.player.ui.common.calmVerticalFling
 import com.asmr.player.ui.common.OledBurnInProtectionBox
-import com.asmr.player.ui.common.DismissOutsideBoundsOverlay
-import com.asmr.player.service.AudioOutputRouteKind
 import javax.inject.Inject
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 
-import androidx.compose.foundation.border
-import androidx.compose.foundation.BorderStroke
-import androidx.media3.common.MediaItem
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.playback.AppVolume
-import com.asmr.player.ui.common.AppVolumeVerticalSlider
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -214,7 +86,7 @@ private enum class OverlaySheet {
 }
 
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
     @Inject
     lateinit var messageManager: MessageManager
 
@@ -234,13 +106,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.asmr.player.i18n.AppLanguage.refresh()
         lifecycleScope.launch {
             initialThemeBootstrapPreferences = settingsDataStore.loadThemeBootstrapPreferences()
             if (isFinishing || isDestroyed) return@launch
-            val recentAlbumsPanelExpandedInitial = false
             val startRouteFromIntent = intent.getStringExtra("start_route")
             setAppContent(
-                recentAlbumsPanelExpandedInitial = recentAlbumsPanelExpandedInitial,
                 startRouteFromIntent = startRouteFromIntent
             )
         }
@@ -248,7 +119,6 @@ class MainActivity : ComponentActivity() {
 
     @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3WindowSizeClassApi::class)
     private fun setAppContent(
-        recentAlbumsPanelExpandedInitial: Boolean,
         startRouteFromIntent: String?
     ) {
         setContent {
@@ -289,7 +159,11 @@ class MainActivity : ComponentActivity() {
                 staticHueArgbLight = themeBootstrap.staticHueArgbLight,
                 staticHueArgbDark = themeBootstrap.staticHueArgbDark
             )
+            val playerBackgroundMode by settingsDataStore.playerBackgroundMode
+                .collectAsStateWithLifecycle(initialValue = PlayerBackgroundMode.Theme)
             val coverBackgroundEnabled by settingsDataStore.coverBackgroundEnabled.collectAsStateWithLifecycle(initialValue = true)
+            val dynamicFlowingBackgroundEnabled by settingsDataStore.dynamicFlowingBackgroundEnabled
+                .collectAsStateWithLifecycle(initialValue = true)
             val coverBackgroundClarity by settingsDataStore.coverBackgroundClarity.collectAsStateWithLifecycle(initialValue = 0.35f)
             val coverPreviewMode by settingsDataStore.coverPreviewMode.collectAsStateWithLifecycle(initialValue = CoverPreviewMode.Disabled)
             val nowPlayingHomeLayoutMode by settingsDataStore.nowPlayingHomeLayoutMode.collectAsStateWithLifecycle(
@@ -301,7 +175,6 @@ class MainActivity : ComponentActivity() {
                 initialValue = NowPlayingLyricsSettings()
             )
             val lyricsPageSettings by settingsDataStore.lyricsPageSettings.collectAsStateWithLifecycle(initialValue = LyricsPageSettings())
-            val showMiniPlayerBar by settingsRepository.showMiniPlayerBar.collectAsStateWithLifecycle(initialValue = true)
             val neutral = remember(mode) { neutralPaletteForMode(mode) }
             val cacheManager = remember(context.applicationContext) {
                 dagger.hilt.android.EntryPointAccessors.fromApplication(
@@ -587,13 +460,13 @@ class MainActivity : ComponentActivity() {
                         settingsDataStore = settingsDataStore,
                         messageManager = messageManager,
                         listeningTracker = listeningTracker,
-                        recentAlbumsPanelExpandedInitial = recentAlbumsPanelExpandedInitial,
                         startRouteFromIntent = startRouteFromIntent,
                         onShowQueue = { overlaySheet = OverlaySheet.Queue },
                         onShowSleepTimer = { overlaySheet = OverlaySheet.SleepTimer },
                         onContentReady = { contentReady = true },
-                        showMiniPlayerBar = showMiniPlayerBar,
+                        playerBackgroundMode = playerBackgroundMode,
                         coverBackgroundEnabled = coverBackgroundEnabled,
+                        dynamicFlowingBackgroundEnabled = dynamicFlowingBackgroundEnabled,
                         coverBackgroundClarity = coverBackgroundClarity,
                         coverPreviewMode = coverPreviewMode,
                         nowPlayingHomeLayoutMode = nowPlayingHomeLayoutMode,

@@ -4,7 +4,6 @@ import kotlin.math.ceil
 
 object AppVolume {
     const val MinPercent = 0
-    const val NormalMaxPercent = 100
     const val MaxPercent = 100
     const val DefaultPercent = 100
     const val StepPercent = 2
@@ -15,14 +14,6 @@ object AppVolume {
     }
 
     fun adjustPercent(percent: Int, deltaPercent: Int): Int = clampPercent(percent + deltaPercent)
-
-    fun basePlayerVolume(percent: Int): Float {
-        return (clampPercent(percent) / MaxPercent.toFloat()).coerceIn(0f, 1f)
-    }
-
-    fun gainMultiplier(@Suppress("UNUSED_PARAMETER") percent: Int): Float {
-        return 1f
-    }
 
     fun resolveSystemVolume(percent: Int, maxSystemVolume: Int): Pair<Int, Float> {
         if (maxSystemVolume <= 0) return 0 to 0f
@@ -42,7 +33,4 @@ object AppVolume {
         return (percent / StepPercent * StepPercent).coerceIn(MinPercent, MaxPercent)
     }
 
-    fun visualFraction(percent: Int): Float {
-        return (clampPercent(percent) / MaxPercent.toFloat()).coerceIn(0f, 1f)
-    }
 }

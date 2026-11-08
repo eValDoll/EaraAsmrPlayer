@@ -58,7 +58,7 @@ object MediaItemFactory {
                 durationSeconds = track.duration,
                 artist = artist,
                 albumTitle = album.title,
-                artworkUri = album.coverPath.ifBlank { album.coverUrl },
+                artworkUri = album.manualCoverPath.ifBlank { album.coverPath }.ifBlank { album.coverUrl },
                 albumId = album.id,
                 trackId = track.id,
                 rjCode = album.rjCode,
@@ -206,4 +206,11 @@ object MediaItemFactory {
             else -> null
         }
     }
+}
+
+internal fun MediaItem.withExactTrackTitle(title: String?): MediaItem {
+    if (title.isNullOrBlank() || mediaMetadata.title?.toString() == title) return this
+    return buildUpon()
+        .setMediaMetadata(mediaMetadata.buildUpon().setTitle(title).build())
+        .build()
 }

@@ -6,6 +6,9 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -18,10 +21,13 @@ fun <T> StateFlow<T>.collectAsStateWhileActive(isActive: Boolean): State<T> {
     // State 容器在 active 切换时保持同一实例，避免二级页面进出时替换组合分支、
     // 连带让整张底层页面重新组合。协程仍会在离屏时取消，不会继续收集或转换数据。
     val retained = remember(this) { mutableStateOf(value) }
-    LaunchedEffect(this, isActive) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(this, isActive, lifecycleOwner) {
         if (!isActive) return@LaunchedEffect
-        retained.value = value
-        collect { latest -> retained.value = latest }
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            retained.value = value
+            collect { latest -> retained.value = latest }
+        }
     }
     return retained
 }
@@ -33,16 +39,19 @@ fun <T> StateFlow<T>.collectAsStateWhileActive(isActive: Boolean): State<T> {
 @Composable
 fun <T> StateFlow<T>.collectAsStateWhileActive(isActive: State<Boolean>): State<T> {
     val retained = remember(this) { mutableStateOf(value) }
-    LaunchedEffect(this, isActive) {
-        snapshotFlow { isActive.value }
-            .distinctUntilChanged()
-            .collectLatest { active ->
-                if (!active) return@collectLatest
-                retained.value = value
-                this@collectAsStateWhileActive.collect { latest ->
-                    retained.value = latest
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(this, isActive, lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            snapshotFlow { isActive.value }
+                .distinctUntilChanged()
+                .collectLatest { active ->
+                    if (!active) return@collectLatest
+                    retained.value = value
+                    this@collectAsStateWhileActive.collect { latest ->
+                        retained.value = latest
+                    }
                 }
-            }
+        }
     }
     return retained
 }

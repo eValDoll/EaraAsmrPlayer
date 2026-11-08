@@ -7,6 +7,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import com.asmr.player.data.local.db.dao.AlbumDao
 import com.asmr.player.data.local.db.dao.TrackDao
+import com.asmr.player.data.local.db.entities.titleForDisplay
 import com.asmr.player.data.lyrics.EXTRA_REMOTE_SUBTITLE_SOURCES_JSON
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
@@ -21,7 +22,7 @@ import javax.inject.Inject
 
 internal data class RestoredPlaybackQueue(
     val items: List<MediaItem>,
-    val state: PersistedPlaybackStateV2,
+    val state: PersistedPlaybackState,
 )
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
@@ -94,25 +95,26 @@ class PlaybackQueueRestorer @Inject constructor(
             return null
         }
         val persistedAlbumId = persisted.albumId
-        if (track == null && persistedAlbumId != null && persistedAlbumId > 0L) {
-            val albumExists = runCatching {
-                albumDao.getAlbumById(persistedAlbumId) != null
-            }.getOrDefault(true)
-            if (!albumExists) return null
-        }
-        return if (track != null) {
+        val persistedAlbumResult = if (track == null && persistedAlbumId != null && persistedAlbumId > 0L) {
+            runCatching { albumDao.getAlbumById(persistedAlbumId) }
+        } else null
+        val persistedAlbum = persistedAlbumResult?.getOrNull()
+        if (persistedAlbumResult?.isSuccess == true && persistedAlbum == null) return null
+        val mediaItem = if (track != null) {
             val albumEntity = runCatching { albumDao.getAlbumById(track.albumId) }.getOrNull()
             val album = Album(
                 id = albumEntity?.id ?: 0L,
-                title = albumEntity?.title.orEmpty(),
+                title = albumEntity?.titleForDisplay.orEmpty(),
                 path = albumEntity?.path.orEmpty(),
                 localPath = albumEntity?.localPath,
                 downloadPath = albumEntity?.downloadPath,
                 circle = albumEntity?.circle.orEmpty(),
                 cv = albumEntity?.cv.orEmpty(),
                 tags = albumEntity?.tags?.split(",")?.filter { it.isNotBlank() }.orEmpty(),
+                tagDetails = com.asmr.player.domain.model.AlbumTagCodec.decode(albumEntity?.tagDetailsJson),
                 coverUrl = albumEntity?.coverUrl.orEmpty(),
-                coverPath = albumEntity?.coverPath.orEmpty(),
+                coverPath = albumEntity?.manualCoverPath.orEmpty().ifBlank { albumEntity?.coverPath.orEmpty() },
+                manualCoverPath = albumEntity?.manualCoverPath.orEmpty(),
                 coverThumbPath = albumEntity?.coverThumbPath.orEmpty(),
                 workId = albumEntity?.workId.orEmpty(),
                 rjCode = albumEntity?.rjCode.orEmpty().ifBlank { albumEntity?.workId.orEmpty() }
@@ -120,7 +122,7 @@ class PlaybackQueueRestorer @Inject constructor(
             val t = Track(
                 id = track.id,
                 albumId = track.albumId,
-                title = track.title,
+                title = track.titleForDisplay,
                 path = track.path,
                 duration = track.duration,
                 group = track.group,
@@ -148,12 +150,19 @@ class PlaybackQueueRestorer @Inject constructor(
             }
             val uri = MediaItemFactory.toPlayableUri(persisted.uri.ifBlank { id })
             val title = persisted.title.orEmpty().ifBlank { deriveTitleFromId(id) }
+            val artworkUri = if (persistedAlbum != null) {
+                MediaItemFactory.toArtworkUri(
+                    persistedAlbum.manualCoverPath.ifBlank { persistedAlbum.coverPath }.ifBlank { persistedAlbum.coverUrl }
+                )
+            } else {
+                parsePossiblyEncodedUri(persisted.artworkUri)
+            }
             val meta = MediaMetadata.Builder()
                 .setTitle(title)
                 .setArtist(persisted.artist.orEmpty())
                 .setDurationMs(persisted.durationMs)
                 .setAlbumTitle(persisted.albumTitle.orEmpty())
-                .setArtworkUri(parsePossiblyEncodedUri(persisted.artworkUri))
+                .setArtworkUri(artworkUri)
                 .setExtras(
                     android.os.Bundle().apply {
                         persisted.albumCv?.let { putString(EXTRA_ALBUM_CV, it) }
@@ -174,6 +183,9 @@ class PlaybackQueueRestorer @Inject constructor(
                 .setClippingConfiguration(MediaItemFactory.chapterClipping(id, persisted.uri))
                 .build()
         }
+        return persisted.sourcePlaylistId?.takeIf { it > 0L }
+            ?.let { mediaItem.withSourcePlaylist(it) }
+            ?: mediaItem
     }
 
     private fun deriveTitleFromId(mediaId: String): String {

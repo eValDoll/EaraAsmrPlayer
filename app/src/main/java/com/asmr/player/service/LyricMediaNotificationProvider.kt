@@ -1,5 +1,7 @@
 package com.asmr.player.service
 
+import com.asmr.player.i18n.appString
+
 import android.app.ForegroundServiceStartNotAllowedException
 import android.content.Context
 import android.graphics.Bitmap
@@ -67,7 +69,7 @@ class LyricMediaNotificationProvider(
 
         val player = mediaSession.player
         val metadata = player.mediaMetadata
-        val trackTitle = metadata.title?.toString().orEmpty().ifBlank { "正在播放" }
+        val trackTitle = metadata.title?.toString().orEmpty().ifBlank { appString(R.string.ui_now_playing) }
         val artist = metadata.artist?.toString().orEmpty()
         val artworkUri = metadata.artworkUri
         val artworkBitmap = getCachedArtworkBitmap(artworkUri).also {
@@ -83,7 +85,7 @@ class LyricMediaNotificationProvider(
                 if (plainForegroundNotification) appContext.getString(R.string.app_name) else trackTitle
             )
             .setContentText(
-                if (plainForegroundNotification) "后台播放中" else artist
+                if (plainForegroundNotification) appString(R.string.ui_playing_in_the_background) else artist
             )
             .setSubText("")
             .setCategory(
@@ -114,7 +116,7 @@ class LyricMediaNotificationProvider(
             val prevAction = actionFactory.createMediaAction(
                 mediaSession,
                 IconCompat.createWithResource(appContext, R.drawable.ic_notif_prev),
-                "上一首",
+                appString(R.string.ui_previous_track),
                 Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM
             )
             val playPauseAction = actionFactory.createMediaAction(
@@ -123,13 +125,13 @@ class LyricMediaNotificationProvider(
                     appContext,
                     if (player.isPlaying) R.drawable.ic_notif_pause else R.drawable.ic_notif_play
                 ),
-                if (player.isPlaying) "暂停" else "播放",
+                if (player.isPlaying) appString(R.string.ui_pause) else appString(R.string.ui_play),
                 Player.COMMAND_PLAY_PAUSE
             )
             val nextAction = actionFactory.createMediaAction(
                 mediaSession,
                 IconCompat.createWithResource(appContext, R.drawable.ic_notif_next),
-                "下一首",
+                appString(R.string.ui_next_track),
                 Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM
             )
             val mediaStyle = MediaStyleNotificationHelper.MediaStyle(mediaSession)

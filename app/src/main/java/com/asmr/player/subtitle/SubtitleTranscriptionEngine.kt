@@ -1,8 +1,10 @@
 package com.asmr.player.subtitle
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.content.Context
 import java.io.Closeable
-import java.io.File
 
 internal data class SubtitleModelArtifact(
     val fileName: String,
@@ -18,12 +20,13 @@ internal enum class SubtitleTranscriptionModelType {
 internal data class SubtitleTranscriptionModel(
     val id: String,
     val displayName: String,
-    val optionName: String,
+    @androidx.annotation.StringRes private val optionNameResource: Int,
     val type: SubtitleTranscriptionModelType,
     val artifacts: List<SubtitleModelArtifact>,
     val inputSampleRateHz: Int,
     val inferenceBatchSize: Int = 1
 ) {
+    val optionName: String get() = appString(optionNameResource)
     init {
         require(inferenceBatchSize > 0)
     }
@@ -76,7 +79,7 @@ internal object SubtitleTranscriptionModels {
     val PARAKEET_TDT_CTC_06B_JA_INT8 = SubtitleTranscriptionModel(
         id = "parakeet-tdt-ctc-0.6b-ja-35000-int8",
         displayName = "Parakeet TDT-CTC 0.6B Japanese INT8",
-        optionName = "高精度",
+        optionNameResource = R.string.ui_high_precision,
         type = SubtitleTranscriptionModelType.NEMO_CTC,
         artifacts = listOf(
             SubtitleModelArtifact(
@@ -96,7 +99,7 @@ internal object SubtitleTranscriptionModels {
     val SENSE_VOICE_SMALL_INT8 = SubtitleTranscriptionModel(
         id = "sense-voice-small-zh-en-ja-ko-yue-int8-2024-07-17",
         displayName = "SenseVoiceSmall INT8",
-        optionName = "轻量快速",
+        optionNameResource = R.string.ui_lightweight_and_fast,
         type = SubtitleTranscriptionModelType.SENSE_VOICE,
         artifacts = listOf(
             SubtitleModelArtifact(

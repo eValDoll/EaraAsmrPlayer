@@ -1,9 +1,12 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.util.isOnlineTrackPath
 
 internal fun subtitleGenerationSelectionRequirementMessage(files: List<DirectoryFileItem>): String {
-    if (files.isEmpty()) return "请先选择要翻译的本地音频"
+    if (files.isEmpty()) return appString(R.string.ui_select_local_audio_to_translate_first)
     return subtitleGenerationSourceRequirementMessage(
         files.asSequence().filter { it.fileType == TreeFileType.Audio }.map { file ->
             file.path to (!file.isOnline && file.sizeSource is FileSizeSource.Local &&
@@ -40,9 +43,9 @@ private fun subtitleGenerationSourceRequirementMessage(audioSources: Sequence<Pa
         }
     }
     return when {
-        !hasAudio -> "没有可翻译的音频，请选择本地音频文件"
-        !hasLocalAudio -> "批量翻译仅支持本地音频，请先下载音频后重试"
-        !hasSupportedLocalAudio -> "所选音频格式暂不支持批量翻译"
-        else -> "未找到可翻译的本地音轨，请重新扫描本地库后重试"
+        !hasAudio -> appString(R.string.ui_no_audio_to_translate_select_local_audio_files)
+        !hasLocalAudio -> appString(R.string.ui_batch_translation_requires_local_audio_download_it_first)
+        !hasSupportedLocalAudio -> appString(R.string.ui_batch_translation_does_not_support_the_selected_audio)
+        else -> appString(R.string.ui_no_local_tracks_to_translate_rescan_your_library)
     }
 }

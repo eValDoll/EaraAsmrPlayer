@@ -635,6 +635,44 @@ object AppDatabaseMigrations {
         }
     }
 
+    val MIGRATION_35_36: Migration = object : Migration(35, 36) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE albums ADD COLUMN `manualCoverPath` TEXT NOT NULL DEFAULT ''")
+        }
+    }
+
+    val MIGRATION_36_37: Migration = object : Migration(36, 37) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `playlist_playback` (
+                    `playlistId` INTEGER NOT NULL,
+                    `mediaId` TEXT NOT NULL,
+                    `positionMs` INTEGER NOT NULL,
+                    `durationMs` INTEGER NOT NULL,
+                    `isCompleted` INTEGER NOT NULL,
+                    `updatedAt` INTEGER NOT NULL,
+                    PRIMARY KEY(`playlistId`),
+                    FOREIGN KEY(`playlistId`, `mediaId`)
+                        REFERENCES `playlist_items`(`playlistId`, `mediaId`)
+                        ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_playlist_playback_playlistId_mediaId` " +
+                    "ON `playlist_playback` (`playlistId`, `mediaId`)"
+            )
+        }
+    }
+
+    val MIGRATION_37_38: Migration = object : Migration(37, 38) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE albums ADD COLUMN tagDetailsJson TEXT NOT NULL DEFAULT '[]'")
+            db.execSQL("ALTER TABLE download_tasks ADD COLUMN albumTagDetailsJson TEXT NOT NULL DEFAULT '[]'")
+        }
+    }
+
     private fun createItemChildTable(
         db: SupportSQLiteDatabase,
         table: String,

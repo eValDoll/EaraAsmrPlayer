@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.zIndex
+import com.asmr.player.ui.common.LocalPageAnimationsActive
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -24,10 +25,10 @@ fun LazyItemScope.ReorderableItem(
     key = key,
     modifier = modifier,
     draggingDecorationModifier = draggingDecorationModifier,
-    defaultDraggingModifier = Modifier.animateItem(
+    defaultDraggingModifier = if (LocalPageAnimationsActive.current) Modifier.animateItem(
         fadeInSpec = null,
         fadeOutSpec = null,
-    ),
+    ) else Modifier,
     orientationLocked = orientationLocked,
     index = index,
     content = content

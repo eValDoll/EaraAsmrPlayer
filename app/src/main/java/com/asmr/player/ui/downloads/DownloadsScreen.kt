@@ -1,5 +1,8 @@
 package com.asmr.player.ui.downloads
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.exponentialDecay
@@ -74,7 +77,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -122,6 +124,11 @@ import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.FlatActionDialog
 import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
+import com.asmr.player.ui.common.CollectionPaneLayout
+import com.asmr.player.ui.common.LocalTabletLayout
+import com.asmr.player.ui.common.collectAsStateWhileActive
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.smoothScrollToTop
@@ -157,13 +164,15 @@ fun DownloadsScreen(
     scrollToTopSignal: Long = 0L,
     viewModel: DownloadsViewModel = hiltViewModel()
 ) {
-    val tasks by viewModel.tasks.collectAsStateWithLifecycle()
-    val subtitleTasks by viewModel.subtitleTasks.collectAsStateWithLifecycle()
-    val downloadDestination by viewModel.downloadDestination.collectAsStateWithLifecycle()
-    val polishingRjCodes by viewModel.polishingRjCodes.collectAsStateWithLifecycle()
+    val tasks by viewModel.tasks.collectAsStateWhileActive(isActive)
+    val subtitleTasks by viewModel.subtitleTasks.collectAsStateWhileActive(isActive)
+    val downloadDestination by viewModel.downloadDestination.collectAsStateWhileActive(isActive)
+    val polishingRjCodes by viewModel.polishingRjCodes.collectAsStateWhileActive(isActive)
     val activeDownloadFileCount = remember(tasks) { countActiveDownloadFiles(tasks) }
     val activeTranslationTaskCount = remember(subtitleTasks) { countActiveSubtitleTaskItems(subtitleTasks) }
     val expandedTasks = remember { mutableStateListOf<Long>() }
+    val tabletLayout = LocalTabletLayout.current
+    var selectedTaskId by rememberSaveable { mutableStateOf<Long?>(null) }
     var rjQuery by rememberSaveable { mutableStateOf("") }
     var managementMode by rememberSaveable { mutableStateOf(DownloadManagementMode.Downloads) }
     var pendingDelete by remember { mutableStateOf<PendingDeleteAction?>(null) }
@@ -229,10 +238,10 @@ fun DownloadsScreen(
         contentAlignment = Alignment.TopCenter
     ) {
         Column(
-            modifier = if (isCompact) {
+            modifier = if (isCompact || tabletLayout.isTablet) {
                 Modifier
                     .fillMaxSize()
-                    .padding(horizontal = DownloadsPageHorizontalPadding, vertical = 10.dp)
+                    .padding(horizontal = maxOf(DownloadsPageHorizontalPadding, tabletLayout.horizontalPadding), vertical = 10.dp)
             } else {
                 Modifier
                     .fillMaxHeight()
@@ -252,7 +261,7 @@ fun DownloadsScreen(
             OutlinedTextField(
                 value = rjQuery,
                 onValueChange = { rjQuery = it },
-                label = { Text("作品编号精准搜索") },
+                label = { Text(androidx.compose.ui.res.stringResource(R.string.ui_precise_search_by_work_number)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -268,6 +277,32 @@ fun DownloadsScreen(
                         else tasks.filter { it.title.equals(normalizedQuery, ignoreCase = true) }
                     }
 
+                    val selectedTask = shownTasks.firstOrNull { it.taskId == selectedTaskId }
+                        ?: shownTasks.firstOrNull { it.taskId == expandedTasks.lastOrNull() }
+                        ?: shownTasks.firstOrNull()
+                    CollectionPaneLayout(
+                        hasDetail = selectedTask != null,
+                        modifier = Modifier.weight(1f),
+                        detail = {
+                            selectedTask?.let { task ->
+                                androidx.compose.runtime.key(task.taskId) {
+                                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                                    DownloadTaskCard(
+                                        task = task,
+                                        expanded = true,
+                                        showHeader = false,
+                                        onToggleExpanded = {},
+                                        onPauseItem = viewModel::pauseItem,
+                                        onResumeItem = viewModel::resumeItem,
+                                        onRetryItem = viewModel::retryItem,
+                                        onDeleteItem = { pendingDelete = PendingDeleteAction.Item(workId = it) },
+                                    )
+                                    Spacer(Modifier.height(LocalBottomOverlayPadding.current + 16.dp))
+                                }
+                                }
+                            }
+                        },
+                    ) {
                     LazyColumn(
                         state = listState,
                         flingBehavior = rememberCalmScrollableFlingBehavior(),
@@ -284,7 +319,7 @@ fun DownloadsScreen(
                                     horizontalArrangement = Arrangement.Center
                                 ) {
                                     Text(
-                                        text = if (normalizedQuery.isBlank()) "暂无下载任务" else "未找到任务：$normalizedQuery",
+                                        text = if (normalizedQuery.isBlank()) appString(R.string.ui_no_download_tasks_yet) else appString(R.string.ui_task_not_found, normalizedQuery),
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
@@ -292,7 +327,7 @@ fun DownloadsScreen(
                         } else {
                             items(shownTasks, key = { it.taskId }) { task ->
                                 val colors = AsmrTheme.colorScheme
-                                val expanded = expandedTasks.contains(task.taskId)
+                                val expanded = !tabletLayout.twoPane && expandedTasks.contains(task.taskId)
                                 val hasFailedItems = task.items.any { it.state == DownloadItemState.FAILED }
                                 val hasActiveItems = task.items.any {
                                     it.state == DownloadItemState.RUNNING || it.state == DownloadItemState.ENQUEUED
@@ -320,7 +355,7 @@ fun DownloadsScreen(
                                                 backgroundColor = colors.surfaceVariant,
                                                 tint = colors.danger,
                                                 icon = Icons.Rounded.Refresh,
-                                                contentDescription = "重试失败项",
+                                                contentDescription = appString(R.string.ui_retry_failed_items),
                                                 onClick = { viewModel.retryFailedInTask(task.taskId) }
                                             )
                                         }
@@ -329,7 +364,7 @@ fun DownloadsScreen(
                                                 backgroundColor = colors.primary,
                                                 tint = colors.onPrimary,
                                                 icon = Icons.Rounded.Pause,
-                                                contentDescription = "暂停下载任务",
+                                                contentDescription = appString(R.string.ui_pause_download_task),
                                                 onClick = { viewModel.pauseTask(task.taskId) }
                                             )
                                         } else if (hasPausedItems) {
@@ -337,7 +372,7 @@ fun DownloadsScreen(
                                                 backgroundColor = colors.primary,
                                                 tint = colors.onPrimary,
                                                 icon = Icons.Rounded.PlayArrow,
-                                                contentDescription = "继续下载任务",
+                                                contentDescription = appString(R.string.ui_continue_downloading_task),
                                                 onClick = { viewModel.resumeTask(task.taskId) }
                                             )
                                         }
@@ -345,16 +380,19 @@ fun DownloadsScreen(
                                             backgroundColor = colors.danger,
                                             tint = Color.White,
                                             icon = Icons.Rounded.Close,
-                                            contentDescription = "删除下载任务",
+                                            contentDescription = appString(R.string.ui_delete_download_task),
                                             onClick = { pendingDelete = PendingDeleteAction.Task(task.taskId) }
                                         )
                                     }
                                 ) {
                                     DownloadTaskCard(
                                         task = task,
+                                        selected = tabletLayout.twoPane && task.taskId == selectedTask?.taskId,
                                         expanded = expanded,
                                         onToggleExpanded = {
-                                            if (expanded) {
+                                            if (tabletLayout.twoPane) {
+                                                selectedTaskId = task.taskId
+                                            } else if (expanded) {
                                                 expandedTasks.remove(task.taskId)
                                             } else {
                                                 revealedDownloadTaskId = null
@@ -371,7 +409,7 @@ fun DownloadsScreen(
                         }
                         item(key = "download_root") {
                             Text(
-                                text = "下载目录：${downloadDestination.label} · ${downloadDestination.displayPath}",
+                                text = appString(R.string.ui_download_directory, downloadDestination.label, downloadDestination.displayPath),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 2.dp, vertical = 4.dp),
@@ -382,12 +420,13 @@ fun DownloadsScreen(
                             )
                         }
                     }
+                    }
                 }
 
                 DownloadManagementMode.Translations -> {
                     // 「翻译任务」数据只在切到该 Tab 时才订阅：进入页面默认落在
                     // 「下载任务」，避免转场期间再触发一次 Room 查询并整页重组。
-                    val translationSubtitleGroups by viewModel.translationSubtitleGroups.collectAsStateWithLifecycle()
+                    val translationSubtitleGroups by viewModel.translationSubtitleGroups.collectAsStateWhileActive(isActive)
                     TranslationManagementContent(
                         normalizedQuery = normalizedQuery,
                         listState = listState,
@@ -430,7 +469,7 @@ fun DownloadsScreen(
                     is PendingDeleteAction.Task -> {
                         val task = tasks.firstOrNull { it.taskId == action.taskId } ?: return@remember null
                         ResolvedDeleteText(
-                            message = "将物理删除“${task.title}”目录下的文件，且不可恢复。"
+                            message = appString(R.string.ui_the_files_in_the_directory_will_be_physically, task.title)
                         )
                     }
 
@@ -439,16 +478,16 @@ fun DownloadsScreen(
                             .flatMap { it.items.asSequence() }
                             .firstOrNull { it.workId == action.workId } ?: return@remember null
                         ResolvedDeleteText(
-                            message = "将物理删除文件“${item.fileName}”，且不可恢复。"
+                            message = appString(R.string.ui_file_will_be_physically_deleted_and_cannot_be, item.fileName)
                         )
                     }
 
                     is PendingDeleteAction.Subtitle -> ResolvedDeleteText(
-                        message = "将删除字幕“${action.title}”，播放时不会再显示该字幕。"
+                        message = appString(R.string.ui_the_subtitle_will_be_deleted_and_will_no, action.title)
                     )
 
                     is PendingDeleteAction.SubtitleGroup -> ResolvedDeleteText(
-                        message = "将删除“${action.rjCode}”下的 ${action.trackIds.size} 个字幕，播放时不会再显示这些字幕。"
+                        message = appString(R.string.ui_subtitles_under_will_be_deleted_and_will_not, action.rjCode, action.trackIds.size)
                     )
                 }
             }
@@ -458,9 +497,9 @@ fun DownloadsScreen(
                     onDismissRequest = { pendingDelete = null },
                     message = resolved.message,
                     actions = listOf(
-                        FlatDialogAction("取消", onClick = { pendingDelete = null }),
+                        FlatDialogAction(appString(R.string.ui_cancel), onClick = { pendingDelete = null }),
                         FlatDialogAction(
-                            text = "删除",
+                            text = appString(R.string.ui_delete),
                             tone = FlatDialogActionTone.Danger,
                             onClick = {
                                 pendingDelete = null
@@ -493,11 +532,13 @@ private data class ResolvedDeleteText(
 )
 
 private enum class DownloadManagementMode(
-    val label: String,
+    private val labelProvider: () -> String,
     val icon: androidx.compose.ui.graphics.vector.ImageVector
 ) {
-    Downloads("下载任务", Icons.Rounded.Download),
-    Translations("翻译任务", Icons.Rounded.Translate)
+    Downloads( { appString(R.string.ui_download_task) }, Icons.Rounded.Download),
+    Translations( { appString(R.string.ui_translation_tasks) }, Icons.Rounded.Translate);
+
+    val label: String get() = labelProvider()
 }
 
 private data class TranslationTaskGroupUi(
@@ -659,7 +700,7 @@ private fun TranslationManagementContent(
             .filter { rjCode ->
                 normalizedQuery.isBlank() || rjCode.equals(normalizedQuery, ignoreCase = true)
             }
-            .sortedWith(compareBy<String> { it == "未知作品编号" }.thenBy { it.lowercase() })
+            .sortedWith(compareBy<String> { it == appString(R.string.ui_unknown_work_number) }.thenBy { it.lowercase() })
             .map { rjCode ->
                 val subtitleGroup = subtitleGroupsByRj[rjCode]
                 val tasks = tasksByRj[rjCode].orEmpty()
@@ -685,6 +726,8 @@ private fun TranslationManagementContent(
             .toList()
     }
     val expandedGroups = remember { mutableStateListOf<String>() }
+    val tabletLayout = LocalTabletLayout.current
+    var selectedRj by rememberSaveable { mutableStateOf<String?>(null) }
 
     if (groups.isEmpty()) {
         Row(
@@ -692,13 +735,38 @@ private fun TranslationManagementContent(
             horizontalArrangement = Arrangement.Center
         ) {
             Text(
-                text = if (normalizedQuery.isBlank()) "暂无翻译任务" else "未找到任务：$normalizedQuery",
+                text = if (normalizedQuery.isBlank()) appString(R.string.ui_no_translation_tasks_yet) else appString(R.string.ui_task_not_found, normalizedQuery),
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         return
     }
 
+    val selectedGroup = groups.firstOrNull { it.rjCode == selectedRj }
+        ?: groups.firstOrNull { it.rjCode == expandedGroups.lastOrNull() }
+        ?: groups.first()
+    CollectionPaneLayout(
+        hasDetail = true,
+        detail = {
+            androidx.compose.runtime.key(selectedGroup.rjCode) {
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                TranslationTaskGroupCard(
+                    group = selectedGroup,
+                    expanded = true,
+                    showHeader = false,
+                    onToggleExpanded = {},
+                    onDeleteSubtitle = onDeleteSubtitle,
+                    onRetrySubtitle = onRetrySubtitle,
+                    onPauseItem = onPauseItem,
+                    onResumeItem = onResumeItem,
+                    onCancelItem = onCancelItem,
+                    onRetryItem = onRetryItem,
+                )
+                Spacer(Modifier.height(LocalBottomOverlayPadding.current + 16.dp))
+            }
+            }
+        },
+    ) {
     LazyColumn(
         state = listState,
         flingBehavior = rememberCalmScrollableFlingBehavior(),
@@ -710,7 +778,7 @@ private fun TranslationManagementContent(
     ) {
         items(groups, key = { it.rjCode }) { group ->
             val colors = AsmrTheme.colorScheme
-            val expanded = expandedGroups.contains(group.rjCode)
+            val expanded = !tabletLayout.twoPane && expandedGroups.contains(group.rjCode)
             val activeTask = group.tasks.firstOrNull { it.state.isActivelyRunning() }
             val controlledTask = activeTask ?: group.tasks.firstOrNull()
             // 操作列：暂停/继续、润色、（有任务时）取消；（只有字幕时）润色、删除
@@ -740,7 +808,7 @@ private fun TranslationManagementContent(
                                     backgroundColor = colors.primary,
                                     tint = colors.onPrimary,
                                     icon = Icons.Rounded.PlayArrow,
-                                    contentDescription = "继续字幕任务",
+                                    contentDescription = appString(R.string.ui_continue_subtitle_task),
                                     enabled = groupActionsEnabled,
                                     onClick = { onResumeTask(task.taskId) }
                                 )
@@ -750,7 +818,7 @@ private fun TranslationManagementContent(
                                     backgroundColor = colors.primary,
                                     tint = colors.onPrimary,
                                     icon = Icons.Rounded.Pause,
-                                    contentDescription = "暂停字幕任务",
+                                    contentDescription = appString(R.string.ui_pause_subtitle_task),
                                     enabled = groupActionsEnabled,
                                     onClick = { onPauseTask(task.taskId) }
                                 )
@@ -761,7 +829,7 @@ private fun TranslationManagementContent(
                         backgroundColor = colors.primaryContainer,
                         tint = colors.onPrimaryContainer,
                         icon = Icons.Rounded.AutoAwesome,
-                        contentDescription = if (group.isPolishing) "润色中" else "润色该作品字幕",
+                        contentDescription = if (group.isPolishing) appString(R.string.ui_in_polishing) else appString(R.string.ui_polish_the_subtitles_of_this_work),
                         enabled = groupActionsEnabled,
                         onClick = {
                             onRevealedRjChange(null)
@@ -773,7 +841,7 @@ private fun TranslationManagementContent(
                             backgroundColor = colors.danger,
                             tint = Color.White,
                             icon = Icons.Rounded.Close,
-                            contentDescription = "取消字幕任务",
+                            contentDescription = appString(R.string.ui_cancel_subtitle_task),
                             enabled = groupActionsEnabled,
                             onClick = { onCancelTask(controlledTask.taskId) }
                         )
@@ -782,7 +850,7 @@ private fun TranslationManagementContent(
                             backgroundColor = colors.danger,
                             tint = Color.White,
                             icon = Icons.Rounded.Close,
-                            contentDescription = "删除该作品的全部字幕",
+                            contentDescription = appString(R.string.ui_delete_all_subtitles_for_this_work),
                             enabled = groupActionsEnabled,
                             onClick = {
                                 onDeleteSubtitleGroup(
@@ -796,9 +864,12 @@ private fun TranslationManagementContent(
             ) {
                 TranslationTaskGroupCard(
                     group = group,
+                    selected = tabletLayout.twoPane && group.rjCode == selectedGroup.rjCode,
                     expanded = expanded,
                     onToggleExpanded = {
-                        if (expanded) {
+                        if (tabletLayout.twoPane) {
+                            selectedRj = group.rjCode
+                        } else if (expanded) {
                             expandedGroups.remove(group.rjCode)
                         } else {
                             onRevealedRjChange(null)
@@ -815,12 +886,15 @@ private fun TranslationManagementContent(
             }
         }
     }
+    }
 }
 
 @Composable
 private fun TranslationTaskGroupCard(
     group: TranslationTaskGroupUi,
     expanded: Boolean,
+    showHeader: Boolean = true,
+    selected: Boolean = false,
     onToggleExpanded: () -> Unit,
     onDeleteSubtitle: (trackId: Long, title: String) -> Unit,
     onRetrySubtitle: (trackId: Long, title: String) -> Unit,
@@ -835,23 +909,24 @@ private fun TranslationTaskGroupCard(
     val controlledTask = remember(group.tasks, activeTask) { activeTask ?: group.tasks.firstOrNull() }
     val summary = remember(group.subtitles, group.tasks, activeTask, isPolishing) {
         when {
-            isPolishing -> "整体润色中"
+            isPolishing -> appString(R.string.ui_under_overall_polishing)
             activeTask != null -> activeTask.stage
-            group.subtitles.isNotEmpty() -> "${group.subtitles.size} 个字幕"
-            else -> "暂无字幕"
+            group.subtitles.isNotEmpty() -> appString(R.string.ui_subtitles_156375, group.subtitles.size)
+            else -> appString(R.string.ui_no_subtitles_yet)
         }
     }
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(6.dp))
-            .background(colors.surface.copy(alpha = 0.5f))
+            .background(if (selected) colors.primarySoft else colors.surface.copy(alpha = 0.5f))
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            TaskGroupHeader(
+            if (!showHeader) Text(group.title.ifBlank { group.rjCode }, style = MaterialTheme.typography.titleMedium, color = colors.textPrimary)
+            if (showHeader) TaskGroupHeader(
                 expanded = expanded,
                 title = group.rjCode,
                 subtitle = group.title,
@@ -981,7 +1056,7 @@ private fun TaskGroupHeader(
             } else {
                 Icons.AutoMirrored.Rounded.KeyboardArrowRight
             },
-            contentDescription = if (expanded) "收起任务详情" else "展开任务详情",
+            contentDescription = if (expanded) appString(R.string.ui_collapse_task_details) else appString(R.string.ui_expand_task_details),
             tint = colors.primary,
             modifier = Modifier.size(22.dp)
         )
@@ -1082,7 +1157,7 @@ private fun TaskGroupCover(albumCover: TaskAlbumCoverUi) {
     } else {
         AsmrAsyncImage(
             model = coverModel,
-            contentDescription = "作品封面",
+            contentDescription = appString(R.string.ui_work_cover),
             contentScale = ContentScale.Crop,
             placeholderCornerRadius = 8,
             fadeIn = false,
@@ -1133,7 +1208,7 @@ private fun TranslationSubtitleRow(
             )
             Text(
                 text = task?.message?.ifBlank { task.stage }
-                    ?: "${subtitle.subtitleCount} 行字幕",
+                    ?: appString(R.string.ui_lines_of_subtitles, subtitle.subtitleCount),
                 style = MaterialTheme.typography.labelSmall,
                 color = if (task?.state == SubtitleItemState.FAILED) colors.danger else colors.textTertiary,
                 maxLines = if (task?.state == SubtitleItemState.FAILED) 2 else 1,
@@ -1175,17 +1250,17 @@ private fun TranslationSubtitleRow(
         }
         if (onPause != null) {
             IconButton(onClick = onPause, enabled = actionsEnabled, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Rounded.Pause, "暂停字幕任务", tint = colors.textSecondary, modifier = Modifier.size(16.dp))
+                Icon(Icons.Rounded.Pause, appString(R.string.ui_pause_subtitle_task), tint = colors.textSecondary, modifier = Modifier.size(16.dp))
             }
         }
         if (onResume != null) {
             IconButton(onClick = onResume, enabled = actionsEnabled, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Rounded.PlayArrow, "继续字幕任务", tint = colors.primary, modifier = Modifier.size(16.dp))
+                Icon(Icons.Rounded.PlayArrow, appString(R.string.ui_continue_subtitle_task), tint = colors.primary, modifier = Modifier.size(16.dp))
             }
         }
         if (onRetryTask != null) {
             IconButton(onClick = onRetryTask, enabled = retryEnabled, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Rounded.Refresh, "重试字幕任务", tint = colors.primary, modifier = Modifier.size(16.dp))
+                Icon(Icons.Rounded.Refresh, appString(R.string.ui_retry_subtitle_task), tint = colors.primary, modifier = Modifier.size(16.dp))
             }
         }
         if (onCancel != null) {
@@ -1196,7 +1271,7 @@ private fun TranslationSubtitleRow(
             ) {
                 Icon(
                     Icons.Rounded.Close,
-                    contentDescription = "取消翻译",
+                    contentDescription = appString(R.string.ui_cancel_translation),
                     tint = colors.textSecondary,
                     modifier = Modifier.size(16.dp)
                 )
@@ -1210,7 +1285,7 @@ private fun TranslationSubtitleRow(
             ) {
                 Icon(
                     Icons.Rounded.Refresh,
-                    contentDescription = "重新翻译",
+                    contentDescription = appString(R.string.ui_retranslate),
                     tint = colors.primary,
                     modifier = Modifier.size(16.dp)
                 )
@@ -1222,7 +1297,7 @@ private fun TranslationSubtitleRow(
             ) {
                 Icon(
                     Icons.Rounded.Delete,
-                    contentDescription = "删除字幕",
+                    contentDescription = appString(R.string.ui_remove_subtitles),
                     tint = colors.textSecondary,
                     modifier = Modifier.size(16.dp)
                 )
@@ -1321,21 +1396,21 @@ internal fun TranslationTaskRow(
                 enabled = actionsEnabled,
                 modifier = Modifier.size(32.dp)
             ) {
-                Icon(Icons.Rounded.PlayArrow, "继续字幕任务", tint = colors.primary, modifier = Modifier.size(16.dp))
+                Icon(Icons.Rounded.PlayArrow, appString(R.string.ui_continue_subtitle_task), tint = colors.primary, modifier = Modifier.size(16.dp))
             }
             SubtitleItemState.FAILED -> IconButton(
                 onClick = onRetry,
                 enabled = retryEnabled,
                 modifier = Modifier.size(32.dp)
             ) {
-                Icon(Icons.Rounded.Refresh, "重试字幕任务", tint = colors.primary, modifier = Modifier.size(16.dp))
+                Icon(Icons.Rounded.Refresh, appString(R.string.ui_retry_subtitle_task), tint = colors.primary, modifier = Modifier.size(16.dp))
             }
             else -> IconButton(
                 onClick = onPause,
                 enabled = actionsEnabled,
                 modifier = Modifier.size(32.dp)
             ) {
-                Icon(Icons.Rounded.Pause, "暂停字幕任务", tint = colors.textSecondary, modifier = Modifier.size(16.dp))
+                Icon(Icons.Rounded.Pause, appString(R.string.ui_pause_subtitle_task), tint = colors.textSecondary, modifier = Modifier.size(16.dp))
             }
         }
         run {
@@ -1346,7 +1421,7 @@ internal fun TranslationTaskRow(
             ) {
                 Icon(
                     Icons.Rounded.Close,
-                    contentDescription = "取消翻译",
+                    contentDescription = appString(R.string.ui_cancel_translation),
                     tint = colors.textSecondary,
                     modifier = Modifier.size(16.dp)
                 )
@@ -1369,7 +1444,7 @@ private sealed class TranslationRowUi {
 private fun translationTaskProgressText(task: TranslationTaskUi): String {
     return when {
         task.progressLabel.isNotBlank() -> task.progressLabel
-        task.totalLines > 0 -> "${task.completedLines}/${task.totalLines} 行"
+        task.totalLines > 0 -> appString(R.string.ui_rows, task.completedLines, task.totalLines)
         else -> translationStateLabel(task.state)
     }
 }
@@ -1392,7 +1467,7 @@ internal fun SubtitleTaskItemUi.toTranslationTaskUi(task: SubtitleTaskUi): Trans
         progress = fraction,
         progressLabel = when {
             usesTranscriptionProgress -> "$transcriptionProgress%"
-            translationTotal > 0 -> "已确认 $translationCursor/$translationTotal"
+            translationTotal > 0 -> appString(R.string.ui_confirmed, translationCursor, translationTotal)
             else -> ""
         },
         completedLines = translationCursor,
@@ -1403,30 +1478,30 @@ internal fun SubtitleTaskItemUi.toTranslationTaskUi(task: SubtitleTaskUi): Trans
 }
 
 internal fun subtitleItemStage(item: SubtitleTaskItemUi): String = when (item.state) {
-    SubtitleItemState.QUEUED_TRANSCRIPTION -> "排队转录"
-    SubtitleItemState.TRANSCRIBING -> "转录中"
-    SubtitleItemState.QUEUED_TRANSLATION -> "日文已生成，等待翻译"
-    SubtitleItemState.WAITING_SLOT -> "等待翻译槽位"
-    SubtitleItemState.WAITING_NETWORK -> "等待网络"
-    SubtitleItemState.TRANSLATING -> "AI 正在确认字幕"
-    SubtitleItemState.RETRY_WAIT -> "重试等待 ${item.attempt + 1}/4${item.errorMessage.asStageReason()}"
-    SubtitleItemState.PAUSE_REQUESTED -> "暂停中"
-    SubtitleItemState.PAUSED -> "已暂停"
-    SubtitleItemState.INTERRUPTED -> "异常中断${item.errorMessage.asStageReason()}"
-    SubtitleItemState.CANCEL_REQUESTED -> "取消中"
-    SubtitleItemState.FAILED -> "失败"
-    SubtitleItemState.SUCCEEDED -> "已完成"
-    SubtitleItemState.CANCELED -> "已取消"
+    SubtitleItemState.QUEUED_TRANSCRIPTION -> appString(R.string.ui_queue_transcription)
+    SubtitleItemState.TRANSCRIBING -> appString(R.string.ui_transcribing)
+    SubtitleItemState.QUEUED_TRANSLATION -> appString(R.string.ui_japanese_text_has_been_generated_waiting_for_translation)
+    SubtitleItemState.WAITING_SLOT -> appString(R.string.ui_waiting_for_translation_slot)
+    SubtitleItemState.WAITING_NETWORK -> appString(R.string.ui_waiting_for_network_9267a3)
+    SubtitleItemState.TRANSLATING -> appString(R.string.ui_ai_is_confirming_subtitles)
+    SubtitleItemState.RETRY_WAIT -> appString(R.string.ui_retry_waiting_4, item.attempt + 1, item.errorMessage.asStageReason())
+    SubtitleItemState.PAUSE_REQUESTED -> appString(R.string.ui_paused)
+    SubtitleItemState.PAUSED -> appString(R.string.ui_suspended)
+    SubtitleItemState.INTERRUPTED -> appString(R.string.ui_abnormal_interruption, item.errorMessage.asStageReason())
+    SubtitleItemState.CANCEL_REQUESTED -> appString(R.string.ui_canceling)
+    SubtitleItemState.FAILED -> appString(R.string.ui_fail)
+    SubtitleItemState.SUCCEEDED -> appString(R.string.ui_completed)
+    SubtitleItemState.CANCELED -> appString(R.string.ui_canceled)
     else -> item.state
 }
 
 private fun String.asStageReason(): String = trim().takeIf(String::isNotEmpty)?.let { "：$it" }.orEmpty()
 
 private fun translationStateLabel(state: String): String = when (state) {
-    SubtitleItemState.PAUSED -> "已暂停"
-    SubtitleItemState.INTERRUPTED -> "异常中断"
-    SubtitleItemState.FAILED -> "失败"
-    else -> "处理中"
+    SubtitleItemState.PAUSED -> appString(R.string.ui_suspended)
+    SubtitleItemState.INTERRUPTED -> appString(R.string.ui_exception)
+    SubtitleItemState.FAILED -> appString(R.string.ui_fail)
+    else -> appString(R.string.ui_processing)
 }
 
 private fun String.isActivelyRunning(): Boolean = this !in setOf(
@@ -1454,6 +1529,8 @@ private fun String.translationTaskSortPriority(): Int = when (this) {
 private fun DownloadTaskCard(
     task: DownloadTaskUi,
     expanded: Boolean,
+    showHeader: Boolean = true,
+    selected: Boolean = false,
     onToggleExpanded: () -> Unit,
     onPauseItem: (String) -> Unit,
     onResumeItem: (String) -> Unit,
@@ -1461,8 +1538,8 @@ private fun DownloadTaskCard(
     onDeleteItem: (String) -> Unit
 ) {
     val folderExpanded = remember(task.taskId) { mutableStateListOf<String>() }
-    val treeEntries = remember(task.items, folderExpanded.toList()) {
-        flattenDownloadTreeForUi(task.items, folderExpanded.toSet())
+    val treeEntries = remember(task.items, folderExpanded.toList(), expanded) {
+        if (expanded) flattenDownloadTreeForUi(task.items, folderExpanded.toSet()) else emptyList()
     }
     val hasUnknownTotalRunningItem = remember(task.items) {
         task.items.any { it.state == DownloadItemState.RUNNING && it.total <= 0 }
@@ -1480,13 +1557,14 @@ private fun DownloadTaskCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(6.dp))
-            .background(colors.surface.copy(alpha = 0.5f))
+            .background(if (selected) colors.primarySoft else colors.surface.copy(alpha = 0.5f))
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            TaskGroupHeader(
+            if (!showHeader) Text(task.subtitle.ifBlank { task.title }, style = MaterialTheme.typography.titleMedium, color = colors.textPrimary)
+            if (showHeader) TaskGroupHeader(
                 expanded = expanded,
                 title = task.title,
                 subtitle = task.subtitle,
@@ -1908,7 +1986,7 @@ private fun buildTaskSummaryText(
     }
     val speedText = when {
         speed > 0L -> formatSpeed(speed)
-        hasUnknownTotalRunning || state == DownloadItemState.RUNNING -> "下载中"
+        hasUnknownTotalRunning || state == DownloadItemState.RUNNING -> appString(R.string.ui_downloading)
         else -> ""
     }
     return when {
@@ -1916,33 +1994,6 @@ private fun buildTaskSummaryText(
         speedText.isBlank() -> progressText
         else -> "$progressText · $speedText"
     }
-}
-
-@Composable
-private fun TaskProgressMeta(
-    progressFraction: Float?,
-    hasUnknownTotalRunning: Boolean,
-    state: DownloadItemState,
-    emphasizeProgress: Boolean = false
-) {
-    val colors = AsmrTheme.colorScheme
-    val text = when {
-        progressFraction != null -> "${(progressFraction * 100).toInt()}%"
-        hasUnknownTotalRunning -> "下载中"
-        else -> downloadItemStateLabel(state)
-    }
-    val color = when (state) {
-        DownloadItemState.FAILED -> colors.danger
-        DownloadItemState.RUNNING, DownloadItemState.ENQUEUED, DownloadItemState.SUCCEEDED -> if (emphasizeProgress) colors.textSecondary else colors.primary
-        else -> colors.textSecondary
-    }
-
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
-        color = color,
-        maxLines = 1
-    )
 }
 
 @Composable
@@ -2011,12 +2062,12 @@ private fun CompactProgressBar(
 
 private fun downloadItemStateLabel(state: DownloadItemState): String {
     return when (state) {
-        DownloadItemState.SUCCEEDED -> "已完成"
-        DownloadItemState.FAILED -> "失败"
-        DownloadItemState.RUNNING, DownloadItemState.FINALIZING -> "下载中"
-        DownloadItemState.PAUSED -> "已暂停"
-        DownloadItemState.CANCELLED -> "已取消"
-        DownloadItemState.ENQUEUED -> "等待中"
+        DownloadItemState.SUCCEEDED -> appString(R.string.ui_completed)
+        DownloadItemState.FAILED -> appString(R.string.ui_fail)
+        DownloadItemState.RUNNING, DownloadItemState.FINALIZING -> appString(R.string.ui_downloading)
+        DownloadItemState.PAUSED -> appString(R.string.ui_suspended)
+        DownloadItemState.CANCELLED -> appString(R.string.ui_canceled)
+        DownloadItemState.ENQUEUED -> appString(R.string.ui_waiting)
     }
 }
 

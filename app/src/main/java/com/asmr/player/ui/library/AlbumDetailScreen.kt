@@ -1,5 +1,10 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
+import com.asmr.player.domain.model.localizedTags
+import com.asmr.player.domain.model.originalTagForDisplay
 import com.asmr.player.util.AlbumWorkNo
 import com.asmr.player.data.remote.crawler.AlbumResourceSource
 
@@ -14,7 +19,6 @@ import android.graphics.RenderEffect
 import android.graphics.Shader
 import android.net.Uri
 import android.os.Build
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
@@ -36,9 +40,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -51,17 +53,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
-import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -82,7 +81,6 @@ import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.CompositingStrategy as LayerCompositingStrategy
@@ -95,13 +93,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -118,46 +112,23 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.PlayerView
-import com.asmr.player.data.local.db.AppDatabaseProvider
-import com.asmr.player.data.local.db.entities.LocalTreeCacheEntity
 import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
 import com.asmr.player.data.remote.scraper.DLSITE_DOMAIN
 import com.asmr.player.data.remote.scraper.DlsiteRecommendedWork
-import com.asmr.player.data.remote.scraper.DlsiteRecommendations
 import com.asmr.player.data.remote.scraper.storeSegment
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
 import com.asmr.player.playback.MediaItemFactory
 import com.asmr.player.ui.common.HorizontalStereoSpectrum
-import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.cache.CacheImageModel
 import com.asmr.player.data.remote.dlsite.DlsiteLanguageEdition
-import com.asmr.player.ui.dlsite.DlsitePlayViewModel
 import com.asmr.player.util.DlsiteAntiHotlink
-import com.asmr.player.util.SmartSortKey
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
-import android.webkit.CookieManager
-import android.webkit.URLUtil
-import android.webkit.WebChromeClient
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import androidx.compose.material.icons.automirrored.rounded.Label
-import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
-import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
-import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import java.io.File
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -168,11 +139,9 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.zIndex
 import com.asmr.player.data.lyrics.deriveLyricsRelativePathNoExt
-import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.AsmrImageLoadingPlaceholder
@@ -190,9 +159,7 @@ import com.asmr.player.ui.playlists.PlaylistsViewModel
 import com.asmr.player.ui.player.PlayerViewModel
 import com.asmr.player.ui.settings.SettingsViewModel
 import com.asmr.player.ui.theme.AsmrTheme
-import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.ui.theme.dynamicPageContainerColor
-import com.asmr.player.util.Formatting
 import com.asmr.player.util.MessageManager
 import com.asmr.player.util.RemoteSubtitleSource
 import java.util.UUID
@@ -284,19 +251,20 @@ private const val AlbumLandscapeSpectrumArtworkOffsetFraction = 0.15f
 private const val AlbumLandscapeSpectrumCollapseFollowFraction = 0.82f
 
 internal fun shouldUseAlbumDetailLandscapeLayout(
-    compactWidth: Boolean,
-    screenWidthDp: Int,
-    screenHeightDp: Int
+    availableWidth: Dp,
+    availableHeight: Dp,
+    fontScale: Float = 1f,
 ): Boolean {
-    return !compactWidth && screenWidthDp > screenHeightDp
+    val artworkSize = albumLandscapeArtworkSize(availableWidth, availableHeight)
+    val headerWidth = availableWidth - albumLandscapeHeaderStart(artworkSize) - AlbumLandscapeHeaderEndPadding
+    return availableWidth > availableHeight && headerWidth >= 360.dp * fontScale.coerceAtLeast(1f)
 }
+
+internal fun albumLandscapeArtworkSize(availableWidth: Dp, availableHeight: Dp): Dp =
+    minOf(availableWidth * 0.30f, availableHeight * 0.56f).coerceIn(300.dp, 460.dp)
 
 internal fun albumLandscapeHeaderStart(artworkSize: Dp): Dp {
     return AlbumLandscapeArtworkStartPadding + artworkSize + AlbumLandscapeArtworkContentGap
-}
-
-internal fun albumLandscapeArtworkRight(artworkSize: Dp): Dp {
-    return AlbumLandscapeArtworkStartPadding + artworkSize
 }
 
 internal fun albumLandscapeCollapseDistance(artworkSize: Dp): Dp {
@@ -542,7 +510,6 @@ fun AlbumDetailScreen(
     viewModel: AlbumDetailViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val cloudSyncSelectionDialogState by viewModel.cloudSyncSelectionDialogState.collectAsStateWithLifecycle()
     val colorScheme = AsmrTheme.colorScheme
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -617,11 +584,12 @@ fun AlbumDetailScreen(
     LaunchedEffect(viewModel) {
         viewModel.setListenTogetherRjSummaryPollingEnabled(true)
     }
-    LaunchedEffect(albumId, rjCode, initialResourceSource) {
+    LaunchedEffect(albumId, rjCode, initialResourceSource, androidx.compose.ui.platform.LocalConfiguration.current) {
         val hasCachedAlbum = viewModel.hasCachedAlbum(albumId, rjCode)
         isInitialRouteReady = hasCachedAlbum
         if (!hasCachedAlbum) withFrameNanos { }
         viewModel.loadAlbumAndAwait(albumId, rjCode, force = false, initialResourceSource = initialResourceSource)
+        viewModel.refreshApplicationLocale()
         isInitialRouteReady = true
     }
     DisposableEffect(screenKey, viewModel) {
@@ -640,18 +608,17 @@ fun AlbumDetailScreen(
         )
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(AsmrTheme.colorScheme.background),
         contentAlignment = Alignment.TopCenter
     ) {
-        val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
-        val configuration = LocalConfiguration.current
+        val isCompact = maxWidth < 600.dp
         val useLandscapeArtworkTide = shouldUseAlbumDetailLandscapeLayout(
-            compactWidth = isCompact,
-            screenWidthDp = configuration.screenWidthDp,
-            screenHeightDp = configuration.screenHeightDp
+            availableWidth = maxWidth,
+            availableHeight = maxHeight,
+            fontScale = LocalDensity.current.fontScale,
         )
 
         Column(
@@ -710,7 +677,7 @@ fun AlbumDetailScreen(
                             } catch (error: CancellationException) {
                                 throw error
                             } catch (_: Exception) {
-                                viewModel.messageManager.showError("读取本地文件状态失败，请稍后重试")
+                                viewModel.messageManager.showError(appString(R.string.ui_failed_to_read_local_file_status_please_try))
                                 return@launch
                             }
                             when (action) {
@@ -734,7 +701,7 @@ fun AlbumDetailScreen(
                     val shouldAnimateHeaderIntro = true
                     var showTagManager by remember { mutableStateOf(false) }
                     var tagManageTrack by remember { mutableStateOf<Track?>(null) }
-                    var localPreviewFile by remember { mutableStateOf<LocalTreeUiEntry.File?>(null) }
+                    var localPreviewFile by remember { mutableStateOf<DirectoryFileItem?>(null) }
                     var onlinePreviewFile by remember { mutableStateOf<AsmrTreeUiEntry.File?>(null) }
                     var imagePreviewRequest by remember { mutableStateOf<ImagePreviewRequest?>(null) }
                     var landscapeActiveListState by remember(screenKey, useLandscapeArtworkTide) {
@@ -750,10 +717,7 @@ fun AlbumDetailScreen(
                         val heroDensity = LocalDensity.current
                         val landscapePageWidth = maxWidth
                         val pageContainerColor = dynamicPageContainerColor(colorScheme)
-                        val landscapeArtworkSize = minOf(
-                            maxWidth * 0.30f,
-                            maxHeight * 0.56f
-                        ).coerceIn(300.dp, 460.dp)
+                        val landscapeArtworkSize = albumLandscapeArtworkSize(maxWidth, maxHeight)
                         val landscapeContentTop = AlbumLandscapeArtworkTopPadding +
                             landscapeArtworkSize * 0.50f
                         val landscapeContentWaveDepth = (landscapeArtworkSize * 0.50f)
@@ -1315,7 +1279,7 @@ fun AlbumDetailScreen(
                                                     else -> "localTree:localId:${local.id}"
                                                 }
                                             }
-                                            AlbumLocalBreadcrumbTabV2(
+                                            AlbumLocalBreadcrumbTab(
                                                 stateKey = localTreeStateKey,
                                                 initialCurrentPath = viewModel.getPreferredTreeCurrentPath(localTreeStateKey)
                                                     .ifBlank { viewModel.getTreeCurrentPath(localTreeStateKey) },
@@ -1340,7 +1304,7 @@ fun AlbumDetailScreen(
                                                 onTogglePreferredCurrentPath = { path, enabled ->
                                                     if (enabled) {
                                                         viewModel.persistPreferredTreeCurrentPath(localTreeStateKey, path)
-                                                        viewModel.messageManager.showSuccess("已设为默认打开目录")
+                                                        viewModel.messageManager.showSuccess(appString(R.string.ui_set_as_default_directory_to_open))
                                                     } else {
                                                         viewModel.clearPreferredTreeCurrentPath(localTreeStateKey)
                                                     }
@@ -1365,8 +1329,8 @@ fun AlbumDetailScreen(
                                                         onComplete = onComplete,
                                                     )
                                                 },
-                                                onSetCoverFromImage = { pathOrUri ->
-                                                    viewModel.setLocalCoverPath(pathOrUri)
+                                                onToggleCoverFromImage = { pathOrUri ->
+                                                    viewModel.toggleLocalCoverPath(pathOrUri)
                                                 },
                                                 onPreviewImages = { request -> imagePreviewRequest = request },
                                                 onPreviewFile = { localPreviewFile = it },
@@ -1385,12 +1349,12 @@ fun AlbumDetailScreen(
                                                 if (albumId != null && albumId > 0) {
                                                     EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
                                                 } else {
-                                                    Text("未下载到本地")
+                                                    Text(androidx.compose.ui.res.stringResource(R.string.ui_not_downloaded_to_local))
                                                 }
                                             }
                                         }
                                     }
-                                    1 -> AlbumDlsiteInfoBreadcrumbTabV2(
+                                    1 -> AlbumDlsiteInfoBreadcrumbTab(
                                         album = album,
                                         header = { listHeaderContent(1) },
                                         galleryUrls = model.dlsiteGalleryUrls,
@@ -1425,7 +1389,7 @@ fun AlbumDetailScreen(
                                             viewModel.downloadAsmrOneSelected(setOf(relPath))
                                         },
                                         onAddToPlaylistOne = { relPath ->
-                                            val target = PlaylistAddTarget.fromAsmrOne(album, asmrOneTree, relPath) ?: return@AlbumDlsiteInfoBreadcrumbTabV2
+                                            val target = PlaylistAddTarget.fromAsmrOne(album, asmrOneTree, relPath) ?: return@AlbumDlsiteInfoBreadcrumbTab
                                             onOpenPlaylistPicker(target.toMediaItem())
                                         },
                                         onAddToPlaylist = { track ->
@@ -1460,7 +1424,7 @@ fun AlbumDetailScreen(
                                         onOpenAlbumByRj = onOpenAlbumByRj,
                                         loadRemoteFileSize = { viewModel.loadRemoteFileSize(it) }
                                     )
-                                    else -> AlbumDlsitePlayBreadcrumbTabV2(
+                                    else -> AlbumDlsitePlayBreadcrumbTab(
                                         header = { listHeaderContent(2) },
                                         album = album,
                                         rjCode = model.rjCode,
@@ -1737,9 +1701,9 @@ fun AlbumDetailScreen(
                                 }
                                 settingsViewModel.addSearchBlockedKeyword(normalized)
                                 if (exists) {
-                                    viewModel.messageManager.showInfo("屏蔽词已存在：$normalized")
+                                    viewModel.messageManager.showInfo(appString(R.string.ui_blocked_word_already_exists, normalized))
                                 } else {
-                                    viewModel.messageManager.showSuccess("已添加屏蔽词：$normalized")
+                                    viewModel.messageManager.showSuccess(appString(R.string.ui_blocked_word_added, normalized))
                                 }
                             }
                         },
@@ -1791,14 +1755,6 @@ fun AlbumDetailScreen(
                     }
                 }
             }
-        }
-
-        cloudSyncSelectionDialogState?.let { dialogState ->
-            CloudSyncSelectionDialog(
-                state = dialogState,
-                onSelect = viewModel::confirmCloudSyncSelection,
-                onCancel = viewModel::cancelCloudSyncSelection
-            )
         }
     }
 }
@@ -2370,7 +2326,7 @@ private fun AlbumDetailLandscapeIdentity(
     ) {
         Text(
             text = translatedPageText(identity.title),
-            modifier = Modifier.clickable { copyMeta("标题", identity.title) },
+            modifier = Modifier.clickable { copyMeta(appString(R.string.ui_title), identity.title) },
             style = MaterialTheme.typography.headlineMedium.copy(
                 fontWeight = FontWeight.Bold,
                 fontSize = 24.sp,
@@ -2391,8 +2347,8 @@ private fun AlbumDetailLandscapeIdentity(
                 circle = identity.circle,
                 emphasized = true,
                 modifier = Modifier.weight(1f),
-                rjOnClick = { copyMeta("作品编号", identity.rj) },
-                circleOnClick = { copyMeta("社团", identity.circle) },
+                rjOnClick = { copyMeta(appString(R.string.ui_work_id), identity.rj) },
+                circleOnClick = { copyMeta(appString(R.string.ui_circle), identity.circle) },
                 circleOnLongClick = { onMetaLongClick(identity.circle) }
             )
             AlbumOnlineListenerInfo(
@@ -2443,7 +2399,7 @@ private fun AlbumDetailLandscapeSimilarWorksPane(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
-            text = "相似作品",
+            text = appString(R.string.ui_similar_works),
             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
             color = colorScheme.textPrimary
         )
@@ -2473,7 +2429,7 @@ private fun AlbumDetailLandscapeSimilarWorksPane(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
-                            text = if (state.failed) "相似作品加载失败" else "暂时没有相似作品推荐",
+                            text = if (state.failed) appString(R.string.ui_similar_works_failed_to_load) else appString(R.string.ui_there_are_currently_no_similar_works_recommended),
                             style = MaterialTheme.typography.bodyMedium,
                             color = colorScheme.textSecondary,
                             textAlign = TextAlign.Center
@@ -2486,7 +2442,7 @@ private fun AlbumDetailLandscapeSimilarWorksPane(
                                     force = true
                                 )
                             }) {
-                                Text("重试")
+                                Text(androidx.compose.ui.res.stringResource(R.string.ui_retry))
                             }
                         }
                     }
@@ -2565,7 +2521,7 @@ private fun AlbumDetailPortraitSimilarWorksRow(
             .padding(horizontal = AlbumDetailHorizontalPadding, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        AlbumDetailSectionHeading(title = "相似作品推荐")
+        AlbumDetailSectionHeading(title = appString(R.string.ui_recommended_similar_works))
         when {
             (!isRouteReady && state.works.isEmpty()) ||
                 (state.isLoading && state.works.isEmpty()) -> {
@@ -2581,7 +2537,7 @@ private fun AlbumDetailPortraitSimilarWorksRow(
                     verticalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        text = if (state.failed) "相似作品加载失败" else "暂时没有相似作品推荐",
+                        text = if (state.failed) appString(R.string.ui_similar_works_failed_to_load) else appString(R.string.ui_there_are_currently_no_similar_works_recommended),
                         style = MaterialTheme.typography.bodyMedium,
                         color = colorScheme.textSecondary,
                         textAlign = TextAlign.Center
@@ -2596,7 +2552,7 @@ private fun AlbumDetailPortraitSimilarWorksRow(
                                 )
                             }
                         ) {
-                            Text("重试")
+                            Text(androidx.compose.ui.res.stringResource(R.string.ui_retry))
                         }
                     }
                 }
@@ -3042,7 +2998,7 @@ private fun AlbumHeroIdentityOverlay(
     ) {
         Text(
             text = translatedPageText(identity.title),
-            modifier = Modifier.clickable { copyMeta("标题", identity.title) },
+            modifier = Modifier.clickable { copyMeta(appString(R.string.ui_title), identity.title) },
             style = MaterialTheme.typography.titleMedium.copy(
                 fontWeight = FontWeight.Bold,
                 fontSize = 20.sp,
@@ -3066,8 +3022,8 @@ private fun AlbumHeroIdentityOverlay(
                     rjCode = rj,
                     circle = circle,
                     modifier = Modifier.weight(1f),
-                    rjOnClick = { copyMeta("作品编号", rj) },
-                    circleOnClick = { copyMeta("社团", circle) },
+                    rjOnClick = { copyMeta(appString(R.string.ui_work_id), rj) },
+                    circleOnClick = { copyMeta(appString(R.string.ui_circle), circle) },
                     circleOnLongClick = { onMetaLongClick(circle) },
                 )
                 AlbumOnlineListenerInfo(
@@ -3124,7 +3080,7 @@ private fun AlbumOnlineListenerInfo(
                     modifier = Modifier.size(if (emphasized) 14.dp else 12.dp)
                 )
                 Text(
-                    text = "$count 人正在听",
+                    text = appString(R.string.ui_people_are_listening, count),
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontSize = if (emphasized) 12.sp else MaterialTheme.typography.labelSmall.fontSize,
                         shadow = textShadow
@@ -3149,10 +3105,10 @@ internal fun resolveStableAlbumHeroIdentity(
     current: StableAlbumHeroIdentity
 ): StableAlbumHeroIdentity {
     val stableTitleIsPlaceholder = stable.title.isBlank() ||
-        stable.title == "专辑" ||
+        stable.title in setOf("专辑", "Album") ||
         stable.title.equals(stable.rj, ignoreCase = true)
     val currentTitleIsResolved = current.title.isNotBlank() &&
-        current.title != "专辑" &&
+        current.title !in setOf("专辑", "Album") &&
         !current.title.equals(current.rj, ignoreCase = true)
     return StableAlbumHeroIdentity(
         title = if (stableTitleIsPlaceholder && currentTitleIsResolved) current.title else stable.title,
@@ -3164,7 +3120,7 @@ internal fun resolveStableAlbumHeroIdentity(
 @Composable
 private fun rememberStableAlbumHeroIdentity(album: Album, identitySessionKey: String): StableAlbumHeroIdentity {
     val current = StableAlbumHeroIdentity(
-        title = album.title.trim().ifBlank { "专辑" },
+        title = album.title.trim().ifBlank { appString(R.string.ui_album) },
         rj = album.rjCode.ifBlank { album.workId }.trim(),
         circle = album.circle.trim()
     )
@@ -3179,7 +3135,7 @@ private fun rememberStableAlbumHeroIdentity(album: Album, identitySessionKey: St
 private fun rememberStableAlbumHeroCoverSource(album: Album, coverSessionKey: String): String {
     val currentLocal = album.coverPath.trim()
     val current = currentLocal.ifEmpty { album.coverUrl.trim() }
-    var stable by remember(coverSessionKey) { mutableStateOf(current) }
+    var stable by remember(coverSessionKey, album.manualCoverPath) { mutableStateOf(current) }
     LaunchedEffect(currentLocal, current) {
         stable = resolveStableAlbumHeroCoverSource(
             stable = stable,
@@ -3306,7 +3262,7 @@ private fun AlbumHeader(
                 AlbumHeaderCvLightweight(
                     cvText = album.cv,
                     emphasized = landscapeFloatingActions,
-                    onCvClick = { cv -> copyMeta("声优", cv) },
+                    onCvClick = { cv -> copyMeta(appString(R.string.ui_voice_actor), cv) },
                     onCvLongClick = onMetaLongClick
                 )
             }
@@ -3320,10 +3276,10 @@ private fun AlbumHeader(
         ) {
             Box(modifier = Modifier.padding(bottom = 8.dp)) {
                 AlbumHeaderTagsLightweight(
-                    tags = album.tags,
+                    tags = album.localizedTags(),
                     emphasized = landscapeFloatingActions,
-                    onTagClick = { tag -> copyMeta("标签", tag) },
-                    onTagLongClick = onMetaLongClick
+                    onTagClick = { tag -> copyMeta(appString(R.string.ui_label), tag) },
+                    onTagLongClick = { label -> onMetaLongClick(album.originalTagForDisplay(label)) }
                 )
             }
         }
@@ -3403,8 +3359,8 @@ internal fun AlbumHeaderActionBar(
     }
     var languageMenuExpanded by rememberSaveable { mutableStateOf(false) }
     val secondaryAction = when (groupState) {
-        AlbumHeaderButtonGroupState.Save -> Triple("保存", Icons.Rounded.Bookmark, saveEnabled)
-        AlbumHeaderButtonGroupState.Lossless -> Triple("无损下载", Icons.Rounded.LibraryMusic, losslessDownloadEnabled)
+        AlbumHeaderButtonGroupState.Save -> Triple(appString(R.string.ui_save), Icons.Rounded.Bookmark, saveEnabled)
+        AlbumHeaderButtonGroupState.Lossless -> Triple(appString(R.string.ui_lossless_download), Icons.Rounded.LibraryMusic, losslessDownloadEnabled)
         AlbumHeaderButtonGroupState.DownloadOnly -> null
     }
     val hasSecondaryAction = secondaryAction != null
@@ -3438,8 +3394,7 @@ internal fun AlbumHeaderActionBar(
         ) {
             Surface(
                 modifier = Modifier
-                    .weight(1f, fill = false)
-                    .widthIn(min = 160.dp, max = 220.dp)
+                    .weight(1f)
                     .fillMaxHeight(),
                 shape = floatingShape,
                 color = containerColor,
@@ -3455,9 +3410,8 @@ internal fun AlbumHeaderActionBar(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     AlbumHeaderBarAction(
-                        label = "下载",
+                        label = appString(R.string.ui_download),
                         icon = Icons.Rounded.Download,
-                        showLabel = true,
                         enabled = downloadEnabled,
                         style = AlbumHeaderActionStyle.Primary,
                         shape = floatingInnerStartShape,
@@ -3470,7 +3424,6 @@ internal fun AlbumHeaderActionBar(
                         AlbumHeaderBarAction(
                             label = label,
                             icon = icon,
-                            showLabel = true,
                             enabled = enabled,
                             style = AlbumHeaderActionStyle.Secondary,
                             shape = floatingInnerEndShape,
@@ -3486,8 +3439,6 @@ internal fun AlbumHeaderActionBar(
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.weight(1f))
 
             Surface(
                 modifier = Modifier
@@ -3508,9 +3459,8 @@ internal fun AlbumHeaderActionBar(
                 ) {
                     if (showGroupAction) {
                         AlbumHeaderBarAction(
-                            label = "分组",
+                            label = appString(R.string.ui_group),
                             icon = Icons.Rounded.CreateNewFolder,
-                            showLabel = true,
                             enabled = groupEnabled,
                             onClick = onGroupClick,
                             shape = floatingSegmentShape,
@@ -3536,7 +3486,6 @@ internal fun AlbumHeaderActionBar(
                             AlbumHeaderBarAction(
                                 label = selectedLangLabel,
                                 icon = Icons.Rounded.Translate,
-                                showLabel = true,
                                 enabled = languageSelectable,
                                 onClick = { languageMenuExpanded = true },
                                 shape = floatingSegmentShape,
@@ -3605,9 +3554,8 @@ internal fun AlbumHeaderActionBar(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 AlbumHeaderBarAction(
-                    label = "下载",
+                    label = appString(R.string.ui_download),
                     icon = Icons.Rounded.Download,
-                    showLabel = true,
                     enabled = downloadEnabled,
                     style = AlbumHeaderActionStyle.Primary,
                     shape = downloadShape,
@@ -3621,7 +3569,6 @@ internal fun AlbumHeaderActionBar(
                     AlbumHeaderBarAction(
                         label = label,
                         icon = icon,
-                        showLabel = true,
                         enabled = enabled,
                         style = AlbumHeaderActionStyle.Secondary,
                         shape = secondaryShape,
@@ -3647,9 +3594,8 @@ internal fun AlbumHeaderActionBar(
 
             if (showGroupAction) {
                 AlbumHeaderBarAction(
-                    label = "分组",
+                    label = appString(R.string.ui_group),
                     icon = Icons.Rounded.CreateNewFolder,
-                    showLabel = true,
                     enabled = groupEnabled,
                     onClick = onGroupClick,
                     modifier = Modifier
@@ -3668,7 +3614,6 @@ internal fun AlbumHeaderActionBar(
                     AlbumHeaderBarAction(
                         label = selectedLangLabel,
                         icon = Icons.Rounded.Translate,
-                        showLabel = true,
                         enabled = languageSelectable,
                         onClick = { languageMenuExpanded = true },
                         modifier = Modifier.fillMaxSize(),
@@ -3707,7 +3652,6 @@ private enum class AlbumHeaderActionStyle {
 @Composable
 private fun AlbumHeaderBarAction(
     label: String,
-    showLabel: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -3743,53 +3687,19 @@ private fun AlbumHeaderBarAction(
     )
 
     CompositionLocalProvider(LocalContentColor provides contentColor) {
-        Row(
+        AlbumHeaderActionContent(
+            label = label,
+            icon = icon,
+            trailingIcon = trailingIcon,
+            color = contentColor,
+            textStyle = MaterialTheme.typography.labelMedium.copy(
+                fontWeight = if (style == AlbumHeaderActionStyle.Standard) FontWeight.Medium else FontWeight.SemiBold,
+            ),
             modifier = modifier
                 .clip(shape)
                 .background(containerColor, shape)
-                .clickable(
-                    enabled = enabled,
-                    role = Role.Button,
-                    onClick = onClick,
-                )
-                .padding(horizontal = if (showLabel && icon != null) 7.dp else 5.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (icon != null) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = if (showLabel) null else label,
-                    tint = contentColor,
-                    modifier = Modifier.size(17.dp),
-                )
-            }
-            if (showLabel) {
-                if (icon != null) Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontWeight = if (style == AlbumHeaderActionStyle.Standard) {
-                            FontWeight.Medium
-                        } else {
-                            FontWeight.SemiBold
-                        },
-                    ),
-                    color = contentColor,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            if (trailingIcon != null) {
-                Spacer(modifier = Modifier.width(4.dp))
-                Icon(
-                    imageVector = trailingIcon,
-                    contentDescription = null,
-                    tint = contentColor,
-                    modifier = Modifier.size(17.dp),
-                )
-            }
-        }
+                .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
+        )
     }
 }
 
@@ -3815,8 +3725,7 @@ private fun AlbumHeaderSiteDropdown(
     val menuContainer = lerp(colorScheme.surface, colorScheme.primarySoft, if (colorScheme.isDark) 0.24f else 0.46f)
     Box(modifier = modifier) {
         AlbumHeaderBarAction(
-            label = "打开网页",
-            showLabel = true,
+            label = appString(R.string.ui_open_webpage),
             trailingIcon = if (expanded) Icons.Rounded.ArrowDropUp else Icons.Rounded.ArrowDropDown,
             enabled = links.any { it.second.isNotBlank() },
             onClick = { expanded = !expanded },
@@ -3879,10 +3788,10 @@ private fun AlbumHeaderSiteDropdown(
 
 private fun dlsiteLanguageButtonLabel(lang: String): String {
     return when (lang.trim().uppercase()) {
-        "CHI_HANS" -> "简中"
-        "CHI_HANT" -> "繁中"
-        "JPN" -> "日语"
-        else -> lang.trim().ifBlank { "日语" }
+        "CHI_HANS" -> appString(R.string.ui_simplified_chinese)
+        "CHI_HANT" -> appString(R.string.ui_traditional_chinese)
+        "JPN" -> appString(R.string.ui_japanese)
+        else -> lang.trim().ifBlank { appString(R.string.ui_japanese) }
     }
 }
 

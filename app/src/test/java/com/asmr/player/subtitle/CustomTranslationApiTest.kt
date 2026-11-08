@@ -12,7 +12,7 @@ import okhttp3.mockwebserver.MockWebServer
 import org.junit.Assert.*
 import org.junit.Test
 
-class CustomTranslationApiTest {
+class CustomTranslationApiTest : com.asmr.player.LocalizedRobolectricTest() {
     private val gson = Gson()
 
     @Test

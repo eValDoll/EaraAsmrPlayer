@@ -1,5 +1,8 @@
 package com.asmr.player.ui.common
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -74,7 +77,7 @@ fun NetworkRouteSettingsSection(
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
         Text(
-            text = "代理设置",
+            text = appString(R.string.ui_proxy_settings),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
             color = colorScheme.textPrimary
@@ -129,7 +132,7 @@ fun NetworkRouteSettingsSection(
                 OutlinedTextField(
                     value = proxyHostDraft,
                     onValueChange = { proxyHostDraft = it },
-                    label = { Text("主机或 IP") },
+                    label = { Text(androidx.compose.ui.res.stringResource(R.string.ui_host_or_ip)) },
                     placeholder = { Text("127.0.0.1") },
                     singleLine = true,
                     colors = inputColors,
@@ -138,7 +141,7 @@ fun NetworkRouteSettingsSection(
                 OutlinedTextField(
                     value = proxyPortDraft,
                     onValueChange = { value -> proxyPortDraft = value.filter(Char::isDigit).take(5) },
-                    label = { Text("端口") },
+                    label = { Text(androidx.compose.ui.res.stringResource(R.string.ui_port)) },
                     placeholder = { Text("7890") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -152,14 +155,14 @@ fun NetworkRouteSettingsSection(
                     proxyAuthenticationEnabledDraft = !proxyAuthenticationEnabledDraft
                     if (!proxyAuthenticationEnabledDraft) proxyPasswordDraft = ""
                 },
-                label = { Text("账户密码认证") },
+                label = { Text(androidx.compose.ui.res.stringResource(R.string.ui_account_password_authentication)) },
                 colors = chipColors
             )
             if (proxyAuthenticationEnabledDraft) {
                 OutlinedTextField(
                     value = proxyUsernameDraft,
                     onValueChange = { proxyUsernameDraft = it },
-                    label = { Text("用户名") },
+                    label = { Text(androidx.compose.ui.res.stringResource(R.string.ui_username)) },
                     singleLine = true,
                     colors = inputColors,
                     modifier = Modifier.fillMaxWidth()
@@ -168,14 +171,14 @@ fun NetworkRouteSettingsSection(
                     value = proxyPasswordDraft,
                     onValueChange = { proxyPasswordDraft = it },
                     label = {
-                        Text(if (settings.proxyPasswordConfigured) "密码（已保存）" else "密码")
+                        Text(if (settings.proxyPasswordConfigured) appString(R.string.ui_password_saved) else appString(R.string.ui_password))
                     },
                     supportingText = {
                         Text(
                             if (settings.proxyPasswordConfigured) {
-                                "留空将继续使用已加密保存的密码"
+                                appString(R.string.ui_leave_blank_to_continue_using_encrypted_saved_passwords)
                             } else {
-                                "密码会使用 Android Keystore 加密保存在本机"
+                                appString(R.string.ui_the_password_will_be_encrypted_and_saved_locally)
                             }
                         )
                     },
@@ -207,18 +210,18 @@ fun NetworkRouteSettingsSection(
                 colors = primaryButtonColors,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("应用高级代理")
+                Text(androidx.compose.ui.res.stringResource(R.string.ui_apply_advanced_proxy))
             }
         }
         Text(
-            text = "当前代理：${currentProxyLabel(settings)}",
+            text = appString(R.string.ui_current_agent, currentProxyLabel(settings)),
             style = MaterialTheme.typography.labelSmall,
             color = colorScheme.textTertiary
         )
 
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
         Text(
-            text = "DNS 服务",
+            text = appString(R.string.ui_dns_service),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
             color = colorScheme.textPrimary
@@ -230,7 +233,7 @@ fun NetworkRouteSettingsSection(
         OutlinedTextField(
             value = customDnsServerDraft,
             onValueChange = { customDnsServerDraft = it },
-            label = { Text("DNS 服务器 IP") },
+            label = { Text(androidx.compose.ui.res.stringResource(R.string.ui_dns_server_ip)) },
             placeholder = { Text("223.5.5.5") },
             singleLine = true,
             colors = inputColors,
@@ -242,17 +245,17 @@ fun NetworkRouteSettingsSection(
             colors = primaryButtonColors,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("应用 DNS")
+            Text(androidx.compose.ui.res.stringResource(R.string.ui_apply_dns))
         }
         TextButton(
             onClick = onUseSystemDns,
             colors = ButtonDefaults.textButtonColors(contentColor = colorScheme.primaryStrong),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("清除设置并使用系统 DNS")
+            Text(androidx.compose.ui.res.stringResource(R.string.ui_clear_settings_and_use_system_dns))
         }
         Text(
-            text = "当前 DNS：${currentDnsLabel(settings)}",
+            text = appString(R.string.ui_current_dns, currentDnsLabel(settings)),
             style = MaterialTheme.typography.labelSmall,
             color = colorScheme.textTertiary
         )
@@ -260,7 +263,7 @@ fun NetworkRouteSettingsSection(
 }
 
 internal fun proxyModeLabel(mode: AppProxyMode): String = when (mode) {
-    AppProxyMode.SYSTEM -> "系统/VPN"
+    AppProxyMode.SYSTEM -> appString(R.string.ui_system_vpn)
     AppProxyMode.HTTP -> "HTTP"
     AppProxyMode.SOCKS5 -> "SOCKS5"
 }
@@ -271,11 +274,11 @@ private fun currentProxyLabel(settings: NetworkRouteSettings): String {
     } else {
         buildString {
             append("${proxyModeLabel(settings.proxyMode)} ${settings.proxyHost}:${settings.proxyPort}")
-            if (settings.proxyAuthenticationEnabled) append("（账户密码）")
+            if (settings.proxyAuthenticationEnabled) append(appString(R.string.ui_account_password))
         }
     }
 }
 
 private fun currentDnsLabel(settings: NetworkRouteSettings): String {
-    return settings.activeDnsServerAddresses.takeIf { it.isNotEmpty() }?.joinToString() ?: "系统 DNS"
+    return settings.activeDnsServerAddresses.takeIf { it.isNotEmpty() }?.joinToString() ?: appString(R.string.ui_system_dns)
 }

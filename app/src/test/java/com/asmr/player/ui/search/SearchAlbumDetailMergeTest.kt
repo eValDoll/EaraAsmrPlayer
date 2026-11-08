@@ -133,11 +133,11 @@ class SearchAlbumDetailMergeTest {
     }
 
     @Test
-    fun resolveSearchDetailLocale_keepsChineseWorksLocalizedAndNormalizesSelection() {
-        assertEquals("ja_JP", resolveSearchDetailLocale("ja_JP", chineseTranslatedOnly = false))
-        assertEquals("zh_CN", resolveSearchDetailLocale("zh_CN", chineseTranslatedOnly = false))
-        assertEquals("zh_TW", resolveSearchDetailLocale("zh_TW", chineseTranslatedOnly = false))
-        assertEquals("zh_CN", resolveSearchDetailLocale("ja_JP", chineseTranslatedOnly = true))
+    fun resolveSearchDetailLocaleHonorsExplicitLanguageWithoutChangingWorkEdition() {
+        assertEquals("ja_JP", resolveSearchDetailLocale("ja_JP"))
+        assertEquals("zh_CN", resolveSearchDetailLocale("zh_CN"))
+        assertEquals("zh_TW", resolveSearchDetailLocale("zh_TW"))
+        assertEquals("en_US", resolveSearchDetailLocale("en_US"))
     }
 
     @Test

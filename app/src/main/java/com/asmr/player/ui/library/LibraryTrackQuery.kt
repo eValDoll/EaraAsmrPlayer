@@ -30,7 +30,7 @@ object LibraryTrackQueryBuilder {
                 a.circle AS circle,
                 a.cv AS cv,
                 a.coverUrl AS coverUrl,
-                CASE WHEN a.coverThumbPath IS NOT NULL AND a.coverThumbPath != '' AND a.coverThumbPath LIKE '%_v2%' THEN a.coverThumbPath ELSE a.coverPath END AS coverPath,
+                CASE WHEN a.manualCoverPath != '' THEN a.manualCoverPath WHEN a.coverThumbPath IS NOT NULL AND a.coverThumbPath != '' AND a.coverThumbPath LIKE '%_v2%' THEN a.coverThumbPath ELSE a.coverPath END AS coverPath,
                 a.workId AS workId,
                 a.rjCode AS rjCode
             FROM tracks t
@@ -156,7 +156,7 @@ object LibraryTrackQueryBuilder {
                 a.circle AS circle,
                 a.cv AS cv,
                 a.coverUrl AS coverUrl,
-                CASE WHEN a.coverThumbPath IS NOT NULL AND a.coverThumbPath != '' AND a.coverThumbPath LIKE '%_v2%' THEN a.coverThumbPath ELSE a.coverPath END AS coverPath,
+                CASE WHEN a.manualCoverPath != '' THEN a.manualCoverPath WHEN a.coverThumbPath IS NOT NULL AND a.coverThumbPath != '' AND a.coverThumbPath LIKE '%_v2%' THEN a.coverThumbPath ELSE a.coverPath END AS coverPath,
                 a.workId AS workId,
                 a.rjCode AS rjCode
             FROM tracks t
@@ -276,7 +276,7 @@ object LibraryTrackQueryBuilder {
                 a.circle AS circle,
                 a.cv AS cv,
                 a.coverUrl AS coverUrl,
-                CASE WHEN a.coverThumbPath IS NOT NULL AND a.coverThumbPath != '' AND a.coverThumbPath LIKE '%_v2%' THEN a.coverThumbPath ELSE a.coverPath END AS coverPath,
+                CASE WHEN a.manualCoverPath != '' THEN a.manualCoverPath WHEN a.coverThumbPath IS NOT NULL AND a.coverThumbPath != '' AND a.coverThumbPath LIKE '%_v2%' THEN a.coverThumbPath ELSE a.coverPath END AS coverPath,
                 a.workId AS workId,
                 a.rjCode AS rjCode,
                 COALESCE(NULLIF(a.audioTrackCount, 0), COUNT(t.id)) AS trackCount,

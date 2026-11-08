@@ -1,96 +1,51 @@
 package com.asmr.player.ui.player
 
+import com.asmr.player.i18n.appString
+
 import android.view.LayoutInflater
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
-import androidx.compose.material3.windowsizeclass.WindowHeightSizeClass
-import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
-import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.ui.PlayerView
 import com.asmr.player.R
-import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.ui.common.AsmrAsyncImage
-import com.asmr.player.ui.common.AudioOutputRouteIcon
 import com.asmr.player.ui.common.HorizontalStereoSpectrum
-import com.asmr.player.ui.common.DismissOutsideBoundsOverlay
-import com.asmr.player.ui.common.AppVolumeHearingWarningDialog
-import com.asmr.player.ui.common.AppVolumeSlider
-import com.asmr.player.ui.common.AppVolumeWarningSessionState
 import com.asmr.player.ui.common.AsmrImageLoadingPlaceholder
-import com.asmr.player.playback.AppVolume
-import com.asmr.player.playback.PlaybackSnapshot
-import com.asmr.player.ui.common.EqualizerPanel
-import com.asmr.player.ui.common.rememberProtectedAppVolumeChangeState
-import com.asmr.player.ui.common.smoothScrollToIndex
-import com.asmr.player.ui.library.TagAssignDialog
-import com.asmr.player.service.AudioOutputRouteKind
 import com.asmr.player.ui.theme.AsmrTheme
-import com.asmr.player.util.Formatting
 import com.asmr.player.util.SubtitleEntry
-import com.asmr.player.util.SubtitleIndexFinder
-import kotlin.math.abs
 import kotlin.math.roundToInt
-import kotlin.math.roundToLong
 
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
@@ -133,7 +88,7 @@ internal fun PlayerSurfaceHeader(
         }
         if (showTitle) {
             Text(
-                text = title.ifBlank { "未播放" },
+                text = title.ifBlank { appString(R.string.ui_not_played) },
                 style = MaterialTheme.typography.titleSmall.copy(
                     fontSize = if (isLandscape) 14.sp else 16.sp,
                     shadow = headerShadow
@@ -153,7 +108,7 @@ internal fun PlayerSurfaceHeader(
                 IconButton(onClick = onManualBindLyrics) {
                     Icon(
                         painter = painterResource(R.drawable.ic_manual_subtitle_import),
-                        contentDescription = "手动绑定歌词",
+                        contentDescription = appString(R.string.ui_manually_bind_lyrics),
                         modifier = Modifier.size(if (isLandscape) 20.dp else 22.dp),
                         tint = colorScheme.onSurface
                     )
@@ -195,13 +150,12 @@ internal fun NowPlayingLyricsSurface(
     playbackPositionMs: Long,
     lyrics: List<SubtitleEntry>,
     lyricColors: LyricReadableColors,
-    accentColor: Color,
     spectrumColor: Color,
-    onAccentColor: Color,
     lyricsPageSettings: LyricsPageSettings,
     onSeekTo: (Long) -> Unit,
     onTimelinePlay: ((Long) -> Unit)? = null,
     onAddLyrics: (() -> Unit)? = null,
+    transparentTimelineControls: Boolean = false,
     interactionEnabled: Boolean = true,
     stableFocusAnchor: Boolean = false,
     expandedHomeVisualEffects: Boolean = false,
@@ -241,21 +195,29 @@ internal fun NowPlayingLyricsSurface(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "暂无歌词",
+                    text = appString(R.string.ui_no_lyrics_yet),
                     style = MaterialTheme.typography.titleMedium,
-                    color = AsmrTheme.colorScheme.textSecondary
+                    color = playerSupportingTextColor(AsmrTheme.colorScheme.isDark)
                 )
                 if (onAddLyrics != null) {
                     Spacer(modifier = Modifier.height(14.dp))
-                    Button(
+                    TextButton(
                         onClick = onAddLyrics,
                         enabled = effectiveInteractionEnabled,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = accentColor,
-                            contentColor = onAccentColor
+                        colors = ButtonDefaults.textButtonColors(
+                            containerColor = Color.Transparent,
+                            contentColor = AsmrTheme.colorScheme.onSurface,
+                            disabledContainerColor = Color.Transparent,
+                            disabledContentColor = AsmrTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                         )
                     ) {
-                        Text("添加歌词")
+                        Icon(
+                            imageVector = Icons.Rounded.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(androidx.compose.ui.res.stringResource(R.string.ui_add_lyrics))
                     }
                 }
             }
@@ -265,6 +227,7 @@ internal fun NowPlayingLyricsSurface(
                 currentPosition = playbackPositionMs,
                 onSeekTo = onSeekTo,
                 onTimelinePlay = onTimelinePlay,
+                transparentTimelineControls = transparentTimelineControls,
                 showPlaybackTimeline = true,
                 colors = lyricColors,
                 modifier = Modifier.fillMaxSize(),
@@ -539,7 +502,7 @@ private fun NowPlayingVideoPlayer(
         ) {
             Icon(
                 imageVector = if (fullscreen) Icons.Rounded.FullscreenExit else Icons.Rounded.Fullscreen,
-                contentDescription = if (fullscreen) "退出全屏" else "全屏",
+                contentDescription = if (fullscreen) appString(R.string.ui_exit_full_screen) else appString(R.string.ui_full_screen),
                 tint = Color.White
             )
         }

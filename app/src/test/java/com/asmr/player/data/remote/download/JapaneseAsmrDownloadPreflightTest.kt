@@ -21,7 +21,7 @@ import org.junit.Test
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-class JapaneseAsmrDownloadPreflightTest {
+class JapaneseAsmrDownloadPreflightTest : com.asmr.player.LocalizedRobolectricTest() {
     private fun item(name: String = "track.m4a", native: String? = null) = RelativeDownloadItem(
         ChapterMediaReference("https://audio.example/work.m3u8", 10_000L, 20_000L, native, name).encode(),
         "japaneseasmr.com/$name",

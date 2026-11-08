@@ -1,6 +1,5 @@
 package com.asmr.player.ui.library
 
-import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
@@ -19,7 +18,7 @@ import org.robolectric.Robolectric
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], application = Application::class)
+@Config(sdk = [28], application = com.asmr.player.LocalizedTestApplication::class)
 class CollectedCoverRibbonTest {
     @get:Rule
     val composeRule = createEmptyComposeRule()

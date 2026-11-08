@@ -3,19 +3,6 @@ package com.asmr.player.util
 import java.util.Locale
 
 object Formatting {
-    fun formatDuration(ms: Long): String {
-        val totalSeconds = ms / 1000
-        val hours = totalSeconds / 3600
-        val minutes = (totalSeconds % 3600) / 60
-        val seconds = totalSeconds % 60
-        
-        return if (hours > 0) {
-            String.format(Locale.getDefault(), "%dh %dm", hours, minutes)
-        } else {
-            String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)
-        }
-    }
-
     fun formatTrackTime(ms: Long): String {
         val totalSeconds = (ms / 1000).coerceAtLeast(0)
         val minutes = totalSeconds / 60

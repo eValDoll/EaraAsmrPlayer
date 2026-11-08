@@ -5,18 +5,24 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.media3.common.MediaItem
+import com.asmr.player.data.settings.PlayerBackgroundMode
 import com.asmr.player.ui.theme.AsmrTheme
 
 @Composable
 internal fun PlayerSharedBackdrop(
     mediaItem: MediaItem?,
-    enabled: Boolean,
+    backgroundMode: PlayerBackgroundMode,
+    coverEnabled: Boolean,
     clarity: Float,
-    artworkAlignment: Alignment
+    artworkAlignment: Alignment,
+    isPlaying: Boolean = true,
+    isActive: Boolean = true,
+    dynamicEnabled: Boolean = true
 ) {
-    if (!enabled) return
-
-    val colorScheme = AsmrTheme.colorScheme
+    val appColors = AsmrTheme.colorScheme
+    val colorScheme = remember(appColors, backgroundMode, coverEnabled) {
+        playerSurfaceColors(appColors, backgroundMode, coverEnabled)
+    }
     val metadata = mediaItem?.mediaMetadata
     val uriText = mediaItem?.localConfiguration?.uri?.toString().orEmpty()
     val mimeType = mediaItem?.localConfiguration?.mimeType.orEmpty()
@@ -28,21 +34,27 @@ internal fun PlayerSharedBackdrop(
     val artworkModel = remember(metadata?.artworkUri) {
         sanitizeBackdropArtworkModel(metadata?.artworkUri)
     }
-    val playerThemeColors = rememberPlayerThemeColors(
-        mediaItem = mediaItem,
-        colorScheme = colorScheme,
-        coverBackgroundEnabled = enabled,
-        transitionDurationMs = 0,
-        cachedTransitionDurationMs = 0
-    )
-
+    val tintBaseColor = if (backgroundMode == PlayerBackgroundMode.Theme && coverEnabled) {
+        val playerThemeColors = rememberPlayerThemeColors(
+            mediaItem = mediaItem,
+            colorScheme = colorScheme,
+            coverBackgroundEnabled = coverEnabled,
+            transitionDurationMs = 0,
+            cachedTransitionDurationMs = 0
+        )
+        if (isVideo) playerThemeColors.videoBackdropColor else playerThemeColors.backdropTintColor
+    } else colorScheme.background
     CoverArtworkBackground(
         artworkModel = artworkModel,
-        enabled = enabled,
+        backgroundMode = backgroundMode,
+        coverEnabled = coverEnabled,
         clarity = clarity,
-        overlayBaseColor = colorScheme.background,
-        tintBaseColor = if (isVideo) playerThemeColors.videoBackdropColor else playerThemeColors.backdropTintColor,
         artworkAlignment = artworkAlignment,
+        isPlaying = isPlaying,
+        isActive = isActive,
+        dynamicEnabled = dynamicEnabled,
+        overlayBaseColor = colorScheme.background,
+        tintBaseColor = tintBaseColor,
         isDark = colorScheme.isDark
     )
 }

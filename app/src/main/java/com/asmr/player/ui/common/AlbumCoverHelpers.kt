@@ -28,9 +28,13 @@ fun shouldFadeInCover(isScrollInProgress: Boolean, baseEnabled: Boolean = true):
 }
 
 fun albumCoverImageModel(album: Album): Any? {
+    val manualCoverPath = album.manualCoverPath.trim()
+    val coverThumbPath = album.coverThumbPath.takeIf {
+        manualCoverPath.isBlank() || it.endsWith("_${manualCoverPath.hashCode()}_v2.jpg")
+    }.orEmpty()
     return albumCoverImageModel(
-        coverThumbPath = album.coverThumbPath,
-        coverPath = album.coverPath,
+        coverThumbPath = coverThumbPath,
+        coverPath = manualCoverPath.ifBlank { album.coverPath },
         coverUrl = album.coverUrl
     )
 }

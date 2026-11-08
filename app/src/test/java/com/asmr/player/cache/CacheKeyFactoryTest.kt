@@ -39,10 +39,46 @@ class CacheKeyFactoryTest {
             assertNotEquals(firstKey, replacedKey)
             assertEquals(
                 replacedKey,
+                CacheKeyFactory.createKey(context, file.absolutePath, IntSize(320, 240), "test")
+            )
+            assertEquals(
+                replacedKey,
                 CacheKeyFactory.createKey(context, file, IntSize(320, 240), "test")
             )
         } finally {
             file.delete()
         }
+    }
+
+    @Test
+    fun localPathAndFile_shareTheSameCacheKeys() {
+        val file = File(context.cacheDir, "prefetched-cover.jpg")
+        val size = IntSize(320, 240)
+
+        assertEquals(
+            CacheKeyFactory.createKey(context, file, size, "test"),
+            CacheKeyFactory.createKey(context, file.absolutePath, size, "test"),
+        )
+        assertEquals(
+            CacheKeyFactory.createDataKey(context, file, "test"),
+            CacheKeyFactory.createDataKey(context, file.absolutePath, "test"),
+        )
+    }
+
+    @Test
+    fun memoryLookup_doesNotReadFileMetadata() {
+        val file = object : File(context.cacheDir, "memory-only-cover.jpg") {
+            override fun length(): Long = error("内存占位查找不应读取文件大小")
+            override fun lastModified(): Long = error("内存占位查找不应读取修改时间")
+        }
+
+        assertEquals(
+            CacheKeyFactory.createMemoryLookupKey(context, file, "test"),
+            CacheKeyFactory.createMemoryLookupKey(context, file.absolutePath, "test"),
+        )
+        assertEquals(
+            CacheKeyFactory.createMemoryLookupKey(context, CacheImageModel(file, keyTag = "cover"), "test"),
+            CacheKeyFactory.createMemoryLookupKey(context, CacheImageModel(file.absolutePath, keyTag = "cover"), "test"),
+        )
     }
 }

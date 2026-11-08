@@ -82,18 +82,6 @@ object EmbeddedMediaExtractor {
         }
     }
 
-    private fun readUslt(context: Context, pathOrUri: String): String? {
-        return runCatching {
-            val p = pathOrUri.trim()
-            val input: InputStream? = if (p.startsWith("content://", true)) {
-                context.contentResolver.openInputStream(Uri.parse(p))
-            } else {
-                File(p).inputStream()
-            }
-            input?.use { parseId3Uslt(it) }
-        }.getOrNull()
-    }
-
     private fun readEmbeddedLyricsText(context: Context, pathOrUri: String): String? {
         val p = pathOrUri.trim()
         val inputRaw: InputStream = if (p.startsWith("content://", true)) {

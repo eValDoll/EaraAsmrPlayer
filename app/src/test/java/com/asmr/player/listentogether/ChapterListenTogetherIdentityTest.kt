@@ -17,7 +17,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class)
+@Config(application = com.asmr.player.LocalizedTestApplication::class)
 class ChapterListenTogetherIdentityTest {
     private val chapter = ChapterMediaReference(
         "https://v.weeab0o.xyz/RJ01707048.m3u8", 0L, 106000L,

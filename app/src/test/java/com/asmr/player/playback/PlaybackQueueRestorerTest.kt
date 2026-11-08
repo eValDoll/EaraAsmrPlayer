@@ -39,7 +39,7 @@ import org.robolectric.shadows.ShadowContentResolver
 import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
-@Config(manifest = Config.NONE, application = Application::class, sdk = [34])
+@Config(manifest = Config.NONE, application = com.asmr.player.LocalizedTestApplication::class, sdk = [34])
 class PlaybackQueueRestorerTest {
     private lateinit var context: Context
     private lateinit var database: AppDatabase
@@ -143,7 +143,7 @@ class PlaybackQueueRestorerTest {
         val gson = Gson()
         val json = gson.toJsonTree(state(listOf(item(""), current), 1, 987L)).asJsonObject
         json.getAsJsonArray("queue").set(0, JsonNull.INSTANCE)
-        stateStore.save(gson.fromJson(json, PersistedPlaybackStateV2::class.java))
+        stateStore.save(gson.fromJson(json, PersistedPlaybackState::class.java))
         assertEquals(987L, restorer.restore()?.state?.positionMs)
 
         stateStore.save(state(emptyList(), -1))
@@ -168,6 +168,7 @@ class PlaybackQueueRestorerTest {
         val entry = item("https://127.0.0.1:1/audio.mp3").copy(
             albumCv = "测试 CV",
             durationMs = 123_456L,
+            sourcePlaylistId = 42L,
             remoteSubtitleSources = listOf(PersistedRemoteSubtitleSource("https://example.com/a.lrc", "ja", "lrc")),
         )
         stateStore.save(state(listOf(entry), positionMs = 2_000L))
@@ -176,11 +177,79 @@ class PlaybackQueueRestorerTest {
         assertEquals(entry, restored.state.queue.single())
         assertEquals("测试 CV", restored.items.single().mediaMetadata.extras?.getString(EXTRA_ALBUM_CV))
         assertEquals(123_456L, restored.items.single().mediaMetadata.durationMs)
+        assertEquals(42L, restored.items.single().sourcePlaylistId())
         assertFalse(restored.state.playWhenReady)
         assertEquals(Player.REPEAT_MODE_ONE, restored.state.repeatMode)
         assertTrue(restored.state.shuffleEnabled)
         assertEquals(1.25f, restored.state.speed)
         assertEquals(0.9f, restored.state.pitch)
+    }
+
+    @Test
+    fun restoredLibraryItemsUseCurrentDisplayTitlesAndFallBackToOriginalTitles() = runBlocking {
+        val audio = localFile()
+        val albumId = database.albumDao().insertAlbum(
+            AlbumEntity(title = "添い寝", displayTitle = "陪睡", path = audio.parent!!)
+        )
+        val trackId = database.trackDao().insertTrack(
+            TrackEntity(albumId = albumId, title = "囁き", displayTitle = "耳语", path = audio.path)
+        )
+        stateStore.save(
+            state(listOf(item(audio.path).copy(albumId = albumId, trackId = trackId)))
+        )
+
+        val translated = requireNotNull(restorer.restore()).items.single().mediaMetadata
+        assertEquals("耳语", translated.title.toString())
+        assertEquals("陪睡", translated.albumTitle.toString())
+
+        database.trackDao().updateTrackDisplayTitle(trackId, "晚安耳语")
+        database.albumDao().updateAlbumDisplayTitle(albumId, "晚安陪睡")
+        val updated = requireNotNull(restorer.restore()).items.single().mediaMetadata
+        assertEquals("晚安耳语", updated.title.toString())
+        assertEquals("晚安陪睡", updated.albumTitle.toString())
+
+        database.trackDao().updateTrackDisplayTitle(trackId, "")
+        database.albumDao().updateAlbumDisplayTitle(albumId, "")
+        val original = requireNotNull(restorer.restore()).items.single().mediaMetadata
+        assertEquals("囁き", original.title.toString())
+        assertEquals("添い寝", original.albumTitle.toString())
+    }
+
+    @Test
+    fun restoredLibraryAndAlbumOnlyItemsUseCurrentManualCoverAndItsCancellation() = runBlocking {
+        val audio = localFile()
+        val automatic = localFile()
+        val manual = localFile()
+        val albumId = database.albumDao().insertAlbum(
+            AlbumEntity(
+                title = "本地作品", path = audio.parent!!,
+                coverPath = automatic.path, manualCoverPath = manual.path,
+            )
+        )
+        val trackId = database.trackDao().insertTrack(
+            TrackEntity(albumId = albumId, title = "音频", path = audio.path)
+        )
+        stateStore.save(
+            state(
+                listOf(
+                    item(audio.path).copy(albumId = albumId, trackId = trackId, artworkUri = automatic.path, sourcePlaylistId = 17L),
+                    item("https://example.com/audio.mp3").copy(albumId = albumId, artworkUri = automatic.path),
+                )
+            )
+        )
+        assertEquals(
+            List(2) { Uri.fromFile(manual) },
+            restorer.restore()?.items?.map { it.mediaMetadata.artworkUri },
+        )
+        val sources = requireNotNull(restorer.restore()).items.map { it.sourcePlaylistId() }
+        assertEquals(listOf(17L, null), sources)
+
+        val album = requireNotNull(database.albumDao().getAlbumById(albumId))
+        database.albumDao().updateAlbum(album.copy(manualCoverPath = ""))
+        assertEquals(
+            List(2) { Uri.fromFile(automatic) },
+            restorer.restore()?.items?.map { it.mediaMetadata.artworkUri },
+        )
     }
 
     @Test
@@ -252,7 +321,7 @@ class PlaybackQueueRestorerTest {
     )
 
     private fun state(queue: List<PersistedPlaybackQueueItem>, index: Int = 0, positionMs: Long = 0L) =
-        PersistedPlaybackStateV2(
+        PersistedPlaybackState(
             queue, index, positionMs, true, Player.REPEAT_MODE_ONE, true, 1.25f, 0.9f, 123L
         )
 

@@ -5,15 +5,13 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
+import androidx.room.Update
 import com.asmr.player.data.local.db.entities.PlaylistItemEntity
 import com.asmr.player.data.local.db.entities.PlaylistItemWithSubtitles
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface PlaylistItemDao {
-    @Query("SELECT * FROM playlist_items WHERE playlistId = :playlistId ORDER BY itemOrder ASC, rowid ASC")
-    fun observeItems(playlistId: Long): Flow<List<PlaylistItemEntity>>
-
     @Query("SELECT * FROM playlist_items WHERE playlistId = :playlistId ORDER BY itemOrder ASC, rowid ASC")
     suspend fun getItemsOnce(playlistId: Long): List<PlaylistItemEntity>
 
@@ -29,6 +27,7 @@ interface PlaylistItemDao {
             pi.uri,
             COALESCE(t.duration, 0) AS duration,
             COALESCE(
+                NULLIF(a.manualCoverPath, ''),
                 NULLIF(a.coverThumbPath, ''),
                 NULLIF(a.coverPath, ''),
                 NULLIF(a.coverUrl, ''),
@@ -36,6 +35,7 @@ interface PlaylistItemDao {
                 ''
             ) AS artworkUri,
             COALESCE(
+                NULLIF(a.manualCoverPath, ''),
                 NULLIF(a.coverPath, ''),
                 NULLIF(a.coverUrl, ''),
                 NULLIF(pi.artworkUri, ''),
@@ -79,11 +79,18 @@ interface PlaylistItemDao {
     @Query("DELETE FROM playlist_items WHERE playlistId = :playlistId")
     suspend fun clearPlaylist(playlistId: Long)
 
-    @Query("SELECT COALESCE(MAX(itemOrder), -1) FROM playlist_items WHERE playlistId = :playlistId")
-    suspend fun getMaxItemOrder(playlistId: Long): Int
+    @Transaction
+    suspend fun upsertItems(items: List<PlaylistItemEntity>) {
+        val insertedIds = insertMissingItems(items)
+        val existingItems = items.filterIndexed { index, _ -> insertedIds[index] == -1L }
+        if (existingItems.isNotEmpty()) updateItems(existingItems)
+    }
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsertItems(items: List<PlaylistItemEntity>)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertMissingItems(items: List<PlaylistItemEntity>): List<Long>
+
+    @Update
+    suspend fun updateItems(items: List<PlaylistItemEntity>)
 
     @Query("UPDATE playlist_items SET remoteSubtitleSources = :sources WHERE playlistId = :playlistId AND mediaId = :mediaId")
     suspend fun updateRemoteSubtitleSources(playlistId: Long, mediaId: String, sources: String)
@@ -116,12 +123,4 @@ interface PlaylistItemDao {
     @Query("SELECT EXISTS(SELECT 1 FROM playlist_items WHERE playlistId = :playlistId AND mediaId = :mediaId)")
     fun observeIsItemInPlaylist(playlistId: Long, mediaId: String): Flow<Boolean>
 
-    @Query("SELECT EXISTS(SELECT 1 FROM playlist_items WHERE playlistId = :playlistId AND mediaId = :mediaId)")
-    suspend fun isItemInPlaylist(playlistId: Long, mediaId: String): Boolean
-
-    @Transaction
-    suspend fun replaceAll(playlistId: Long, items: List<PlaylistItemEntity>) {
-        clearPlaylist(playlistId)
-        upsertItems(items)
-    }
 }

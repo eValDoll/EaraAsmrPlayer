@@ -1,5 +1,8 @@
 package com.asmr.player.ui.player
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -60,6 +63,7 @@ internal fun TabletLandscapeQueuePanel(
 ) {
     val queue by viewModel.queue.collectAsStateWithLifecycle()
     val colorScheme = AsmrTheme.colorScheme
+    val supportingTextColor = playerSupportingTextColor(colorScheme.isDark)
     val listState = rememberLazyListState()
     val currentIndex = remember(queue, currentMediaId) {
         queue.indexOfFirst { it.mediaId == currentMediaId }
@@ -97,22 +101,22 @@ internal fun TabletLandscapeQueuePanel(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "播放队列",
+                text = appString(R.string.ui_play_queue),
                 style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
                 color = colorScheme.textPrimary
             )
             if (queue.isNotEmpty()) {
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "${queue.size} 首",
+                    text = appString(R.string.ui_first, queue.size),
                     style = MaterialTheme.typography.labelSmall,
-                    color = colorScheme.textTertiary
+                    color = supportingTextColor
                 )
             }
             Spacer(modifier = Modifier.weight(1f))
             Icon(
                 imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                contentDescription = if (expanded) "收起播放列表" else "展开播放列表",
+                contentDescription = if (expanded) appString(R.string.ui_collapse_playlist) else appString(R.string.ui_expand_playlist),
                 tint = colorScheme.textSecondary,
                 modifier = Modifier.size(20.dp)
             )
@@ -137,10 +141,10 @@ internal fun TabletLandscapeQueuePanel(
                     contentAlignment = Alignment.CenterStart
                 ) {
                     Text(
-                        text = "播放队列为空",
+                        text = appString(R.string.ui_play_queue_is_empty),
                         modifier = Modifier.padding(horizontal = 32.dp),
                         style = MaterialTheme.typography.bodySmall,
-                        color = colorScheme.textTertiary
+                        color = supportingTextColor
                     )
                 }
             } else {
@@ -185,7 +189,7 @@ internal fun TabletLandscapeQueuePanel(
                                 text = (index + 1).toString().padStart(2, '0'),
                                 modifier = Modifier.width(30.dp),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = if (selected) activeColor else colorScheme.textTertiary
+                                color = if (selected) activeColor else supportingTextColor
                             )
                             Text(
                                 text = title,
@@ -193,13 +197,13 @@ internal fun TabletLandscapeQueuePanel(
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
                                 ),
-                                color = if (selected) activeColor else colorScheme.textSecondary,
+                                color = if (selected) activeColor else supportingTextColor,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                             if (selected && isPlaying) {
                                 Text(
-                                    text = "播放中",
+                                    text = appString(R.string.ui_playing),
                                     modifier = Modifier.padding(start = 8.dp),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = activeColor

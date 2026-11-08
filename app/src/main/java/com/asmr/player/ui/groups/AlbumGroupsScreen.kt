@@ -1,9 +1,11 @@
 package com.asmr.player.ui.groups
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.ui.common.LocalMainHeaderPadding
 
 import androidx.compose.foundation.MutatePriority
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -37,6 +39,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.background
+import com.asmr.player.ui.common.CollectionPaneLayout
+import com.asmr.player.ui.common.LocalTabletLayout
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -78,6 +84,7 @@ fun AlbumGroupsScreen(
     isDataActive: Boolean = isActive,
     onGroupClick: (AlbumGroupEntity) -> Unit,
     scrollToTopSignal: Long = 0L,
+    detailContent: (@Composable (AlbumGroupEntity) -> Unit)? = null,
     viewModel: AlbumGroupsViewModel = hiltViewModel()
 ) {
     val groups by viewModel.groups.collectAsStateWhileActive(isDataActive)
@@ -86,6 +93,9 @@ fun AlbumGroupsScreen(
     var showCreate by remember { mutableStateOf(false) }
 
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
+    val tabletLayout = LocalTabletLayout.current
+    var selectedId by rememberSaveable { mutableStateOf<Long?>(null) }
+    val selected = groups.firstOrNull { it.id == selectedId } ?: groups.firstOrNull()
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = Color.Transparent,
@@ -105,7 +115,7 @@ fun AlbumGroupsScreen(
                 .padding(padding),
             contentAlignment = Alignment.TopCenter
         ) {
-            val contentModifier = if (isCompact) {
+            val contentModifier = if (isCompact || tabletLayout.isTablet) {
                 Modifier.fillMaxSize()
             } else {
                 Modifier
@@ -113,11 +123,19 @@ fun AlbumGroupsScreen(
                     .widthIn(max = 760.dp)
                     .fillMaxWidth()
             }
-            Box(modifier = contentModifier) {
+            CollectionPaneLayout(
+                modifier = contentModifier.padding(horizontal = tabletLayout.horizontalPadding),
+                hasDetail = selected != null && detailContent != null,
+                detail = {
+                    selected?.let { selected ->
+                        detailContent?.invoke(AlbumGroupEntity(id = selected.id, name = selected.name, createdAt = selected.createdAt))
+                    }
+                },
+            ) {
                 if (groups.isEmpty()) {
                     EaraBrandedEmptyState(
-                        sectionTitle = "我的分组",
-                        headline = "还没有创建分组",
+                        sectionTitle = appString(R.string.ui_groups),
+                        headline = appString(R.string.ui_no_group_has_been_created_yet),
                         sectionIcon = Icons.Rounded.Folder,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(top = LocalMainHeaderPadding.current, bottom = LocalBottomOverlayPadding.current + 88.dp)
@@ -141,7 +159,11 @@ fun AlbumGroupsScreen(
                             }
                             AlbumGroupRow(
                                 group = group,
-                                onClick = { onGroupClick(entity) },
+                                selected = tabletLayout.twoPane && selected?.id == entity.id,
+                                onClick = {
+                                    if (tabletLayout.twoPane && detailContent != null) selectedId = entity.id
+                                    else onGroupClick(entity)
+                                },
                                 onDelete = { viewModel.deleteGroup(entity) },
                                 onRename = { newName -> viewModel.renameGroup(entity.id, newName) }
                             )
@@ -176,6 +198,7 @@ fun AlbumGroupsScreen(
 
 @Composable
 private fun AlbumGroupRow(
+    selected: Boolean = false,
     group: AlbumGroupStatsRow,
     onClick: () -> Unit,
     onDelete: () -> Unit,
@@ -190,7 +213,7 @@ private fun AlbumGroupRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(colorScheme.surface.copy(alpha = 0.5f))
+            .background(if (selected) colorScheme.primarySoft else Color.Transparent)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
@@ -215,7 +238,7 @@ private fun AlbumGroupRow(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "共 ${group.albumCount} 张专辑 · ${group.itemCount} 首",
+                    text = appString(R.string.ui_total_albums_songs, group.albumCount, group.itemCount),
                     style = MaterialTheme.typography.bodySmall,
                     color = colorScheme.textTertiary
                 )
@@ -242,11 +265,11 @@ private fun AlbumGroupRow(
     if (showDeleteConfirm) {
         FlatActionDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            message = "确定要删除分组“${group.name}”吗？此操作不可撤销。",
+            message = appString(R.string.ui_are_you_sure_you_want_to_delete_group, group.name),
             actions = listOf(
-                FlatDialogAction("取消", onClick = { showDeleteConfirm = false }),
+                FlatDialogAction(appString(R.string.ui_cancel), onClick = { showDeleteConfirm = false }),
                 FlatDialogAction(
-                    text = "删除",
+                    text = appString(R.string.ui_delete),
                     tone = FlatDialogActionTone.Danger,
                     onClick = {
                         showDeleteConfirm = false
@@ -278,11 +301,11 @@ private fun CreateAlbumGroupDialog(
 
     FlatTextFieldDialog(
         onDismissRequest = onDismiss,
-        message = "请输入新分组名称。",
+        message = appString(R.string.ui_please_enter_a_new_group_name),
         value = name,
         onValueChange = { name = it },
-        placeholder = "分组名称",
-        confirmText = "创建",
+        placeholder = appString(R.string.ui_group_name),
+        confirmText = appString(R.string.ui_create),
         confirmEnabled = name.trim().isNotBlank(),
         onConfirm = { onCreate(name.trim()) },
     )
@@ -298,11 +321,11 @@ private fun RenameAlbumGroupDialog(
 
     FlatTextFieldDialog(
         onDismissRequest = onDismiss,
-        message = "请输入新的分组名称。",
+        message = appString(R.string.ui_please_enter_a_new_group_name_d88c11),
         value = name,
         onValueChange = { name = it },
-        placeholder = "分组名称",
-        confirmText = "确定",
+        placeholder = appString(R.string.ui_group_name),
+        confirmText = appString(R.string.ui_ok),
         confirmEnabled = name.trim().isNotBlank(),
         onConfirm = { onRename(name.trim()) },
     )

@@ -12,6 +12,22 @@ import org.junit.Test
 
 class AlbumCoverHelpersTest {
     @Test
+    fun manualCoverSkipsAnOldAutomaticThumbnailAndReusesItsOwnThumbnail() {
+        val manual = "/albums/cover.jpg"
+        val album = Album(
+            title = "作品",
+            path = "/albums",
+            coverPath = "/covers/default.jpg",
+            coverThumbPath = "/thumbs/a_1_old_v2.jpg",
+            manualCoverPath = manual
+        )
+        assertEquals(manual, albumCoverImageModel(album))
+
+        val thumbnail = "/thumbs/a_1_${manual.hashCode()}_v2.jpg"
+        assertEquals(thumbnail, albumCoverImageModel(album.copy(coverThumbPath = thumbnail)))
+    }
+
+    @Test
     fun japaneseCoverCarriesRefererAndReusesItsModel() {
         val album = Album(title = "作品", path = "", coverUrl = "https://pic.weeabo0.xyz/RJ01728295_img_main.jpg")
         val model = albumCoverImageModel(album) as CacheImageModel

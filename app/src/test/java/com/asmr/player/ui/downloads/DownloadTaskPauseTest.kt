@@ -17,7 +17,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [34])
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [34])
 class DownloadTaskPauseTest {
     private lateinit var database: AppDatabase
 

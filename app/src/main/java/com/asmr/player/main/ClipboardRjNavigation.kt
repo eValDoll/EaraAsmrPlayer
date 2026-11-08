@@ -1,5 +1,8 @@
 package com.asmr.player
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.content.ClipboardManager
 import android.content.Context
 import android.os.Build
@@ -63,6 +66,28 @@ internal fun shouldShowClipboardRjPrompt(
     return eventKey != lastHandledEventKey && eventKey != currentPromptEventKey
 }
 
+internal class ClipboardEntryInspection {
+    private var pending = true
+
+    fun onLifecycleEvent(event: Lifecycle.Event) {
+        if (event == Lifecycle.Event.ON_STOP) {
+            pending = true
+        }
+    }
+
+    fun consumeIfReady(
+        enabled: Boolean,
+        hasWindowFocus: Boolean,
+        lifecycleState: Lifecycle.State
+    ): Boolean {
+        if (!pending || !enabled || !hasWindowFocus || !lifecycleState.isAtLeast(Lifecycle.State.RESUMED)) {
+            return false
+        }
+        pending = false
+        return true
+    }
+}
+
 private fun readPrimaryClipboardSnapshot(
     clipboard: ClipboardManager,
     legacyChangeGeneration: Long
@@ -97,7 +122,7 @@ internal fun ClipboardRjNavigationPrompt(
     val currentOnNavigate by rememberUpdatedState(onNavigate)
     var prompt by remember { mutableStateOf<ClipboardRjPrompt?>(null) }
     var lastHandledEventThisSession by remember { mutableStateOf<String?>(null) }
-    var shouldInspectOnResume by remember { mutableStateOf(true) }
+    val entryInspection = remember { ClipboardEntryInspection() }
     var inspectionJob by remember { mutableStateOf<Job?>(null) }
 
     DisposableEffect(lifecycleOwner, clipboard, rootView, settingsDataStore, enabled) {
@@ -156,8 +181,7 @@ internal fun ClipboardRjNavigationPrompt(
         val clipboardListener = ClipboardManager.OnPrimaryClipChangedListener {
             inspectionJob?.cancel()
             inspectionJob = null
-            val isAppForeground = rootView.hasWindowFocus() &&
-                lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+            val isAppForeground = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
             if (isAppForeground) {
                 clipboard
                     ?.let { readPrimaryClipboardSnapshot(it, legacyExternalChangeGeneration) }
@@ -165,7 +189,6 @@ internal fun ClipboardRjNavigationPrompt(
                     ?.let(::markEventHandled)
             } else {
                 legacyExternalChangeGeneration += 1L
-                shouldInspectOnResume = true
             }
         }
         fun startObservingClipboard() {
@@ -180,42 +203,33 @@ internal fun ClipboardRjNavigationPrompt(
         }
 
         fun inspectAfterExternalEntryIfReady() {
-            if (!enabled ||
-                !shouldInspectOnResume ||
-                !rootView.hasWindowFocus() ||
-                !lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+            if (entryInspection.consumeIfReady(
+                    enabled = enabled,
+                    hasWindowFocus = rootView.hasWindowFocus(),
+                    lifecycleState = lifecycleOwner.lifecycle.currentState
+                )
             ) {
-                return
+                inspectClipboard()
             }
-            shouldInspectOnResume = false
-            inspectClipboard()
         }
 
         val windowFocusListener = ViewTreeObserver.OnWindowFocusChangeListener { hasFocus ->
-            if (hasFocus &&
-                enabled &&
-                lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
-            ) {
+            if (hasFocus) {
                 inspectAfterExternalEntryIfReady()
-                startObservingClipboard()
-            } else {
-                if (!hasFocus && enabled) {
-                    shouldInspectOnResume = true
-                    inspectionJob?.cancel()
-                    inspectionJob = null
-                }
-                if (!observeClipboardWhileBackground) {
-                    stopObservingClipboard()
-                }
             }
         }
         val viewTreeObserver = rootView.viewTreeObserver
         viewTreeObserver.addOnWindowFocusChangeListener(windowFocusListener)
 
         val observer = LifecycleEventObserver { _, event ->
+            entryInspection.onLifecycleEvent(event)
             when (event) {
                 Lifecycle.Event.ON_PAUSE -> {
-                    shouldInspectOnResume = true
+                    inspectionJob?.cancel()
+                    inspectionJob = null
+                }
+
+                Lifecycle.Event.ON_STOP -> {
                     inspectionJob?.cancel()
                     inspectionJob = null
                     if (!observeClipboardWhileBackground) {
@@ -223,16 +237,9 @@ internal fun ClipboardRjNavigationPrompt(
                     }
                 }
 
-                Lifecycle.Event.ON_STOP -> {
-                    shouldInspectOnResume = true
-                    inspectionJob?.cancel()
-                }
-
                 Lifecycle.Event.ON_RESUME -> {
                     inspectAfterExternalEntryIfReady()
-                    if (rootView.hasWindowFocus()) {
-                        startObservingClipboard()
-                    }
+                    startObservingClipboard()
                 }
 
                 else -> Unit
@@ -241,7 +248,7 @@ internal fun ClipboardRjNavigationPrompt(
         lifecycleOwner.lifecycle.addObserver(observer)
         inspectAfterExternalEntryIfReady()
         if (observeClipboardWhileBackground ||
-            (rootView.hasWindowFocus() && lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+            lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
         ) {
             startObservingClipboard()
         }
@@ -255,24 +262,21 @@ internal fun ClipboardRjNavigationPrompt(
             }
             lifecycleOwner.lifecycle.removeObserver(observer)
             inspectionJob?.cancel()
-            if (enabled && prompt == null) {
-                shouldInspectOnResume = true
-            }
         }
     }
 
     prompt?.takeIf { enabled }?.let { currentPrompt ->
         val rjCode = currentPrompt.rjCode
         FlatActionDialog(
-            message = "检测到剪贴板中的 $rjCode，是否快速跳转至该作品的专辑详情？",
+            message = appString(R.string.ui_in_the_clipboard_was_detected_quickly_jump_to, rjCode),
             onDismissRequest = { prompt = null },
             actions = listOf(
                 FlatDialogAction(
-                    text = "取消",
+                    text = appString(R.string.ui_cancel),
                     onClick = { prompt = null }
                 ),
                 FlatDialogAction(
-                    text = "立即跳转",
+                    text = appString(R.string.ui_jump_now),
                     tone = FlatDialogActionTone.Primary,
                     onClick = {
                         prompt = null

@@ -8,7 +8,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.lifecycle.ViewModelStore
 import com.asmr.player.data.local.datastore.SearchCacheStore
-import com.asmr.player.data.local.datastore.LastSearchStateV1
+import com.asmr.player.data.local.datastore.LastSearchState
 import com.asmr.player.data.remote.api.Asmr100Api
 import com.asmr.player.data.remote.api.Asmr200Api
 import com.asmr.player.data.remote.api.Asmr300Api
@@ -16,6 +16,7 @@ import com.asmr.player.data.remote.api.AsmrOneApi
 import com.asmr.player.data.remote.api.AsmrOneAvailabilityApi
 import com.asmr.player.data.remote.crawler.AsmrOneCrawler
 import com.asmr.player.data.remote.dlsite.DlsitePlayLibraryClient
+import com.asmr.player.data.remote.dlsite.DlsiteProductInfoClient
 import com.asmr.player.data.remote.scraper.DLSiteScraper
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.domain.model.Album
@@ -51,7 +52,7 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], application = Application::class)
+@Config(sdk = [28], application = com.asmr.player.LocalizedTestApplication::class)
 @LooperMode(LooperMode.Mode.PAUSED)
 class JpAsmrSearchFlowTest {
     @Test
@@ -70,7 +71,7 @@ class JpAsmrSearchFlowTest {
         val retrofit = Retrofit.Builder().baseUrl(server.url("/"))
             .addConverterFactory(GsonConverterFactory.create()).build()
         val vm = SearchViewModel(
-            DLSiteScraper(context), DlsitePlayLibraryClient(client, context),
+            DLSiteScraper(context, DlsiteProductInfoClient(client)), DlsitePlayLibraryClient(client, context),
             AsmrOneAvailabilityApi(client, gson) { server.url("/").toString() },
             AsmrOneCrawler(retrofit.create(AsmrOneApi::class.java), retrofit.create(Asmr100Api::class.java),
                 retrofit.create(Asmr200Api::class.java), retrofit.create(Asmr300Api::class.java), settings),
@@ -79,7 +80,7 @@ class JpAsmrSearchFlowTest {
         try {
             val workNos = listOf("RJ123456", "RJ654321", "UN124393", "UND124393")
             runBlocking {
-                cache.writeLast(LastSearchStateV1(
+                cache.writeLast(LastSearchState(
                     savedAtMs = 1L, keyword = "耳", orderName = "Trend", purchasedOnly = false,
                     locale = "ja_JP", page = 1, canGoNext = false,
                     results = workNos.map { Album(title = "作品", path = "", rjCode = it, workId = it, hasAsmrOne = true) }
@@ -138,7 +139,7 @@ class JpAsmrSearchFlowTest {
         val retrofit = Retrofit.Builder().baseUrl(server.url("/"))
             .addConverterFactory(GsonConverterFactory.create()).build()
         fun newViewModel(key: String): SearchViewModel = SearchViewModel(
-            DLSiteScraper(context), DlsitePlayLibraryClient(client, context),
+            DLSiteScraper(context, DlsiteProductInfoClient(client)), DlsitePlayLibraryClient(client, context),
             AsmrOneAvailabilityApi(client, gson) { server.url("/").toString() },
             AsmrOneCrawler(retrofit.create(AsmrOneApi::class.java), retrofit.create(Asmr100Api::class.java),
                 retrofit.create(Asmr200Api::class.java), retrofit.create(Asmr300Api::class.java), settings),

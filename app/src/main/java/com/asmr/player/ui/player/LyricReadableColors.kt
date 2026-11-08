@@ -6,6 +6,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import com.asmr.player.ui.theme.AsmrTheme
+import com.asmr.player.ui.theme.AsmrColorScheme
 
 @Immutable
 internal data class LyricReadableColors(
@@ -18,9 +19,9 @@ internal data class LyricReadableColors(
 @Composable
 internal fun rememberLyricReadableColors(
     accentColor: Color,
-    useReadablePageInactiveText: Boolean = false
+    useReadablePageInactiveText: Boolean = false,
+    colorScheme: AsmrColorScheme = AsmrTheme.colorScheme
 ): LyricReadableColors {
-    val colorScheme = AsmrTheme.colorScheme
     return remember(accentColor, colorScheme, useReadablePageInactiveText) {
         val emphasisAlpha = if (colorScheme.isDark) 0.82f else 0.68f
         val containerAlpha = if (colorScheme.isDark) 0.26f else 0.16f

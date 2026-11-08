@@ -1,6 +1,6 @@
 package com.asmr.player.ui.search
 
-import com.asmr.player.data.local.datastore.LastSearchStateV1
+import com.asmr.player.data.local.datastore.LastSearchState
 import com.asmr.player.data.local.datastore.restoreCollectedSource
 import com.asmr.player.data.remote.api.AsmrOneCollectedSearchItem
 import com.asmr.player.data.remote.api.buildAsmrOneCollectedSearchUrl
@@ -59,10 +59,10 @@ class JpAsmrSearchSupportTest {
 
     @Test fun oldCacheDefaultsToAsmrOneAndNewCacheKeepsSource() {
         val gson = Gson()
-        val old = gson.fromJson("""{"savedAtMs":1,"keyword":"耳","orderName":"Trend","purchasedOnly":false,"collectedOnly":true,"collectedSortName":"ReleaseNew","locale":"ja_JP","page":1,"canGoNext":false,"results":[]}""", LastSearchStateV1::class.java)
+        val old = gson.fromJson("""{"savedAtMs":1,"keyword":"耳","orderName":"Trend","purchasedOnly":false,"collectedOnly":true,"collectedSortName":"ReleaseNew","locale":"ja_JP","page":1,"canGoNext":false,"results":[]}""", LastSearchState::class.java)
         assertEquals(CollectedSearchSource.AsmrOne, CollectedSearchSource.fromName(old.collectedSourceName))
         val jp = old.copy(collectedSourceName = "JapaneseAsmr", page = 3)
-        val restored = gson.fromJson(gson.toJson(jp), LastSearchStateV1::class.java)
+        val restored = gson.fromJson(gson.toJson(jp), LastSearchState::class.java)
         assertEquals("JapaneseAsmr", restored.collectedSourceName)
         assertEquals(3, restored.page)
         val request = SearchAssistSearchRequest(collectedSourceName = "JapaneseAsmr", collectedSortName = "RatingHigh")

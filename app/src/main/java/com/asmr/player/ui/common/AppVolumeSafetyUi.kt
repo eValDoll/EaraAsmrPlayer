@@ -1,5 +1,8 @@
 package com.asmr.player.ui.common
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -92,10 +95,10 @@ fun AppVolumeHearingWarningDialog(
     val pendingChange = state.pendingChange ?: return
     FlatActionDialog(
         onDismissRequest = state::dismissPendingChange,
-        message = "当前要调整到 ${pendingChange.targetPercent}% 音量，已经超过 40%，可能造成听力损伤。确认后，本次启动内不再重复提示。",
+        message = appString(R.string.ui_the_current_volume_to_be_adjusted_to_has, pendingChange.targetPercent),
         actions = listOf(
-            FlatDialogAction("取消", state::dismissPendingChange),
-            FlatDialogAction("确认", state::confirmPendingChange, FlatDialogActionTone.Primary)
+            FlatDialogAction(appString(R.string.ui_cancel), state::dismissPendingChange),
+            FlatDialogAction(appString(R.string.ui_confirm), state::confirmPendingChange, FlatDialogActionTone.Primary)
         )
     )
 }

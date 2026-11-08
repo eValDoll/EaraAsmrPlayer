@@ -1,10 +1,11 @@
 package com.asmr.player.ui.player
 
+import com.asmr.player.i18n.appString
+
 import com.asmr.player.ui.common.parseCvNames
 import com.asmr.player.ui.common.formatArtistMetadata
 import com.asmr.player.ui.common.CvNameSeparator
 
-import android.content.res.Configuration
 import android.content.Intent
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -16,23 +17,16 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
-import androidx.compose.material3.windowsizeclass.WindowHeightSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
-import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -40,22 +34,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.key.KeyEventType
@@ -68,7 +56,6 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -82,44 +69,34 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.common.MediaItem
-import androidx.media3.common.Player
-import androidx.media3.common.VideoSize
 import com.asmr.player.R
 import com.asmr.player.HardwareVolumeOverlay
 import com.asmr.player.cache.CachePolicy
 import com.asmr.player.cache.ImageCacheEntryPoint
 import com.asmr.player.data.lyrics.lyricsTargetContextFromMediaItem
 import com.asmr.player.data.settings.CoverPreviewMode
+import com.asmr.player.data.settings.PlayerBackgroundMode
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.data.settings.NowPlayingHomeLayoutMode
 import com.asmr.player.data.settings.NowPlayingLyricsSettings
-import com.asmr.player.ui.common.AsmrAsyncImage
-import com.asmr.player.ui.common.AudioOutputRouteIcon
 import com.asmr.player.ui.common.HorizontalStereoSpectrum
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.DismissOutsideBoundsOverlay
-import com.asmr.player.ui.common.AppVolumeHearingWarningDialog
-import com.asmr.player.ui.common.AppVolumeSlider
 import com.asmr.player.ui.common.AppVolumeWarningSessionState
 import com.asmr.player.playback.AppVolume
 import com.asmr.player.playback.PlaybackSnapshot
 import com.asmr.player.ui.common.EqualizerPanel
 import com.asmr.player.ui.common.PlayerModalSheet
-import com.asmr.player.ui.common.rememberProtectedAppVolumeChangeState
-import com.asmr.player.ui.common.DiscPlaceholder
-import com.asmr.player.ui.common.smoothScrollToIndex
 import com.asmr.player.ui.library.TagAssignDialog
 import com.asmr.player.service.AudioOutputRouteKind
 import com.asmr.player.ui.theme.AsmrTheme
+import com.asmr.player.ui.theme.LocalAsmrColorScheme
 import com.asmr.player.util.Formatting
-import com.asmr.player.util.SubtitleEntry
-import com.asmr.player.util.SubtitleIndexFinder
 import com.asmr.player.listentogether.ListenTogetherStatus
 import com.asmr.player.listentogether.ListenTogetherUiState
 import dagger.hilt.android.EntryPointAccessors
 import kotlin.math.abs
 import kotlin.math.roundToInt
-import kotlin.math.roundToLong
 
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -259,6 +236,15 @@ internal fun nowPlayingLandscapeLayoutMetrics(
     }
 }
 
+internal fun shouldUseNowPlayingLandscapeLayout(availableWidth: Dp, availableHeight: Dp): Boolean {
+    if (availableWidth <= availableHeight) return false
+    val tabletLayout = availableHeight >= 480.dp
+    val metrics = nowPlayingLandscapeLayoutMetrics(availableHeight, tabletLayout)
+    val controlsWidth = (availableWidth - metrics.horizontalPadding * 2 - metrics.contentSpacing) * metrics.contentWeight
+    // 先保证完整播放控制的宽度，再启用左右双栏；窄分屏沿用上下布局。
+    return controlsWidth >= if (tabletLayout) 284.dp else 228.dp
+}
+
 internal fun landscapeSpectrumCenterY(
     artistInfoBottom: Float,
     currentLyricAnchorTop: Float,
@@ -279,8 +265,7 @@ internal fun nowPlayingPortraitLayoutMetrics(
     screenHeight: Dp,
     widthClass: WindowWidthSizeClass
 ): NowPlayingPortraitLayoutMetrics {
-    val compact = widthClass == WindowWidthSizeClass.Compact &&
-        screenHeight.isFiniteDp() &&
+    val compact = screenHeight.isFiniteDp() &&
         screenHeight <= NowPlayingCompactShortScreenHeight
     if (compact) {
         return NowPlayingPortraitLayoutMetrics(
@@ -597,7 +582,7 @@ internal fun resolveListenTogetherAudiencePresentation(
     state: ListenTogetherUiState
 ): ListenTogetherAudiencePresentation? = when {
     !state.available && state.status == ListenTogetherStatus.Unsupported ->
-        ListenTogetherAudiencePresentation.Status("当前音频无法参与一起听")
+        ListenTogetherAudiencePresentation.Status(appString(R.string.ui_the_current_audio_cannot_be_listened_to_together))
     state.listenerCount != null ->
         ListenTogetherAudiencePresentation.Audience(
             companionCount = (state.listenerCount - 1).coerceAtLeast(0)
@@ -687,7 +672,7 @@ private fun ListenTogetherAudienceCountText(
                     )
                 }
                 Text(
-                    text = " 人正在和你一起听",
+                    text = appString(R.string.ui_people_are_listening_with_you),
                     style = textStyle,
                     color = color,
                     maxLines = 1,
@@ -696,7 +681,7 @@ private fun ListenTogetherAudienceCountText(
             }
         } else {
             Text(
-                text = "孤独赏鉴中",
+                text = appString(R.string.ui_appreciating_loneliness),
                 modifier = modifier,
                 style = textStyle,
                 color = color,
@@ -712,7 +697,7 @@ private fun ListenTogetherAudienceLine(
     state: ListenTogetherUiState,
     modifier: Modifier = Modifier,
     accentColor: Color = AsmrTheme.colorScheme.primary,
-    textColor: Color = AsmrTheme.colorScheme.textTertiary,
+    textColor: Color = playerSupportingTextColor(AsmrTheme.colorScheme.isDark),
     textShadow: Shadow? = null,
     contentAlignment: Alignment = Alignment.Center,
     pageEntranceSettled: Boolean = true
@@ -799,12 +784,12 @@ private fun LandscapePlayerIdentity(
             state = listenTogetherState,
             modifier = Modifier.fillMaxWidth(),
             accentColor = accentColor,
-            textColor = colorScheme.textTertiary,
+            textColor = playerSupportingTextColor(colorScheme.isDark),
             contentAlignment = Alignment.CenterStart,
             pageEntranceSettled = pageEntranceSettled
         )
         Text(
-            text = title.ifBlank { "未播放" },
+            text = title.ifBlank { appString(R.string.ui_not_played) },
             modifier = Modifier.fillMaxWidth(),
             style = MaterialTheme.typography.titleLarge.copy(
                 fontSize = typography.titleFontSizeSp.sp,
@@ -827,7 +812,7 @@ private fun LandscapePlayerIdentity(
                 lineHeight = typography.artistInfoLineHeightSp.sp,
                 fontWeight = FontWeight.Medium
             ),
-            color = colorScheme.textSecondary,
+            color = playerSupportingTextColor(colorScheme.isDark),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -863,40 +848,6 @@ internal fun nowPlayingLandscapeIdentityTypography(
             titleLineHeightSp = 21,
             artistInfoFontSizeSp = 12,
             artistInfoLineHeightSp = 15
-        )
-    }
-}
-
-@Composable
-private fun ArtistWithListenTogetherInfo(
-    artist: String,
-    listenTogetherState: ListenTogetherUiState,
-    style: androidx.compose.ui.text.TextStyle,
-    color: Color,
-    modifier: Modifier = Modifier,
-    textAlign: TextAlign = TextAlign.Start,
-    badgeAlignment: Alignment = Alignment.TopStart,
-    textAlignment: Alignment = Alignment.CenterStart,
-    accentColor: Color = AsmrTheme.colorScheme.primary,
-    pageEntranceSettled: Boolean = true
-) {
-    Box(modifier = modifier.fillMaxWidth()) {
-        ListenTogetherAudienceLine(
-            state = listenTogetherState,
-            modifier = Modifier
-                .align(badgeAlignment)
-                .offset(y = (-18).dp),
-            accentColor = accentColor,
-            pageEntranceSettled = pageEntranceSettled
-        )
-        Text(
-            text = artist,
-            modifier = Modifier.align(textAlignment),
-            style = style,
-            color = color,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = textAlign
         )
     }
 }
@@ -956,7 +907,7 @@ private fun ClassicPlayerIdentity(
         )
     ) {
         Text(
-            text = title.ifBlank { "未播放" },
+            text = title.ifBlank { appString(R.string.ui_not_played) },
             modifier = Modifier.fillMaxWidth(),
             style = MaterialTheme.typography.titleMedium.copy(
                 fontWeight = FontWeight.SemiBold,
@@ -980,7 +931,7 @@ private fun ClassicPlayerIdentity(
                     fontWeight = FontWeight.Medium,
                     shadow = textShadow
                 ),
-                color = colorScheme.textSecondary,
+                color = playerSupportingTextColor(colorScheme.isDark),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center
@@ -1030,12 +981,12 @@ private fun ExpandedPlayerIdentityOverlay(
                 state = listenTogetherState,
                 modifier = Modifier.fillMaxWidth(),
                 accentColor = Color.White.copy(alpha = 0.68f),
-                textColor = Color.White.copy(alpha = 0.68f),
+                textColor = playerSupportingTextColor(isDark = true),
                 textShadow = overlayShadow,
                 pageEntranceSettled = pageEntranceSettled
             )
             Text(
-                text = title.ifBlank { "未播放" },
+                text = title.ifBlank { appString(R.string.ui_not_played) },
                 modifier = Modifier.fillMaxWidth(),
                 style = MaterialTheme.typography.titleSmall.copy(
                     fontWeight = FontWeight.SemiBold,
@@ -1055,7 +1006,7 @@ private fun ExpandedPlayerIdentityOverlay(
                         lineHeight = 16.sp,
                         shadow = overlayShadow
                     ),
-                    color = Color.White.copy(alpha = 0.66f),
+                    color = playerSupportingTextColor(isDark = true),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center
@@ -1144,12 +1095,12 @@ private fun NowPlayingHomeLayoutSwipeHint(
             }
         }
         Text(
-            text = "上滑切换封面排布",
+            text = appString(R.string.ui_swipe_up_to_switch_cover_layout),
             style = MaterialTheme.typography.labelMedium.copy(
                 fontWeight = FontWeight.SemiBold,
                 shadow = textShadow
             ),
-            color = Color.White.copy(alpha = 0.86f),
+            color = playerSupportingTextColor(isDark = true),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center
@@ -1161,7 +1112,6 @@ private fun NowPlayingHomeLayoutSwipeHint(
 @androidx.media3.common.util.UnstableApi
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 internal fun NowPlayingScreen(
-    windowSizeClass: WindowSizeClass,
     hardwareVolumeEventTick: Long,
     onInlineVolumeControlVisibilityChanged: (Boolean) -> Unit = {},
     onEqualizerVisibilityChanged: (Boolean) -> Unit = {},
@@ -1172,6 +1122,7 @@ internal fun NowPlayingScreen(
     onShowSleepTimer: () -> Unit,
     onOpenPlaylistPicker: (MediaItem) -> Unit,
     viewModel: PlayerViewModel,
+    playerBackgroundMode: PlayerBackgroundMode,
     coverBackgroundEnabled: Boolean,
     coverBackgroundClarity: Float,
     coverPreviewMode: CoverPreviewMode,
@@ -1184,11 +1135,14 @@ internal fun NowPlayingScreen(
     audioOutputRouteKind: AudioOutputRouteKind,
     warningSessionState: AppVolumeWarningSessionState,
     renderBackdrop: Boolean = true,
+    dynamicFlowingBackgroundEnabled: Boolean = true,
     sharedArtworkAlignment: Alignment? = null,
     sharedCoverDragPreviewState: CoverDragPreviewState? = null,
     enableStaggeredRouteEntry: Boolean = true,
     lyricsViewModel: LyricsViewModel = hiltViewModel()
-) {
+) = BoxWithConstraints(Modifier.fillMaxSize()) {
+    val availableWidth = maxWidth
+    val availableHeight = maxHeight
     val staticPlayback by remember(viewModel) {
         viewModel.playback
             .map { it.toStaticPlayback() }
@@ -1204,6 +1158,9 @@ internal fun NowPlayingScreen(
     val metadata = item?.mediaMetadata
     val canBindManualLyrics = lyricsTargetContextFromMediaItem(item) != null
     val colorScheme = AsmrTheme.colorScheme
+    val playerContentColors = remember(colorScheme, playerBackgroundMode, coverBackgroundEnabled) {
+        playerSurfaceColors(colorScheme, playerBackgroundMode, coverBackgroundEnabled)
+    }
     val uriText = item?.localConfiguration?.uri?.toString().orEmpty()
     val isOnlineMedia = remember(uriText, item?.mediaId) { item.isOnlineMedia() }
     val artworkModel = remember(metadata?.artworkUri) {
@@ -1219,24 +1176,24 @@ internal fun NowPlayingScreen(
     val tagViewModel: NowPlayingTagViewModel = hiltViewModel()
     val tagDialog by tagViewModel.dialogState.collectAsStateWithLifecycle()
     val availableTags by tagViewModel.availableTags.collectAsStateWithLifecycle()
-    val playerArtworkBackdropEnabled = coverBackgroundEnabled && !isVideo
-    val playerThemeColors = rememberPlayerThemeColors(
-        mediaItem = item,
-        colorScheme = colorScheme,
-        coverBackgroundEnabled = coverBackgroundEnabled,
-        artworkBackdropEnabled = playerArtworkBackdropEnabled
-    )
-    val accentColor = playerThemeColors.accentColor
-    val playerPageAccentColor = playerThemeColors.coverAccentColor
-    val lyricColors = rememberLyricReadableColors(
-        accentColor = accentColor
-    )
+    val playerCoverBackgroundEnabled = playerBackgroundMode == PlayerBackgroundMode.Theme && coverBackgroundEnabled
+    val playerArtworkBackdropEnabled = playerCoverBackgroundEnabled && !isVideo
+    val playerThemeColors = if (playerCoverBackgroundEnabled) {
+        rememberPlayerThemeColors(
+            mediaItem = item,
+            colorScheme = colorScheme,
+            coverBackgroundEnabled = true,
+            artworkBackdropEnabled = playerArtworkBackdropEnabled
+        )
+    } else null
+    val accentColor = playerThemeColors?.accentColor ?: colorScheme.primary
+    val playerPageAccentColor = playerContentColors.onSurface
     val lyricsPageColors = rememberLyricReadableColors(
-        accentColor = accentColor,
-        useReadablePageInactiveText = true
+        accentColor = playerContentColors.onSurface,
+        useReadablePageInactiveText = true,
+        colorScheme = playerContentColors
     )
-    val onAccentColor = playerThemeColors.onAccentColor
-    val videoBackdropColor = if (isVideo) playerThemeColors.videoBackdropColor else Color.Transparent
+    val videoBackdropColor = if (isVideo) playerContentColors.background else Color.Transparent
     val progressDurationMs = when {
         playback.durationMs > 0L && resolvedDurationMs > 0L -> maxOf(playback.durationMs, resolvedDurationMs)
         playback.durationMs > 0L -> playback.durationMs
@@ -1358,20 +1315,16 @@ internal fun NowPlayingScreen(
     val toggleSelectedSlice = { sliceId: Long ->
         viewModel.selectSlice(if (sliceUiState.selectedSliceId == sliceId) null else sliceId)
     }
-    val configuration = LocalConfiguration.current
-    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-    val widthClass = windowSizeClass.widthSizeClass
-    val heightClass = windowSizeClass.heightSizeClass
-    
-    // 手机横屏：高度为 Compact
-    val isPhoneLandscape = isLandscape && heightClass == WindowHeightSizeClass.Compact
-    // 平板横屏：高度不为 Compact 且处于横屏状态
-    val useSplitLayout = heightClass != WindowHeightSizeClass.Compact && isLandscape
-    val landscapeLayoutMetrics = remember(configuration.screenHeightDp, useSplitLayout) {
-        nowPlayingLandscapeLayoutMetrics(
-            screenHeight = configuration.screenHeightDp.dp,
-            tabletLayout = useSplitLayout
-        )
+    val widthClass = when {
+        availableWidth < 600.dp -> WindowWidthSizeClass.Compact
+        availableWidth < 840.dp -> WindowWidthSizeClass.Medium
+        else -> WindowWidthSizeClass.Expanded
+    }
+    val isLandscape = shouldUseNowPlayingLandscapeLayout(availableWidth, availableHeight)
+    val isPhoneLandscape = isLandscape && availableHeight < 480.dp
+    val useSplitLayout = isLandscape && !isPhoneLandscape
+    val landscapeLayoutMetrics = remember(availableHeight, useSplitLayout) {
+        nowPlayingLandscapeLayoutMetrics(screenHeight = availableHeight, tabletLayout = useSplitLayout)
     }
     val player = viewModel.playerOrNull()
     val videoPlayerCoordinator = remember { NowPlayingVideoPlayerCoordinator() }
@@ -1379,8 +1332,8 @@ internal fun NowPlayingScreen(
         onDispose { videoPlayerCoordinator.release() }
     }
     val videoAspectRatio = rememberPlayerVideoAspectRatio(player)
-    val useDragPreview = coverPreviewMode == CoverPreviewMode.Drag && !isVideo
-    val useMotionPreview = coverPreviewMode == CoverPreviewMode.Motion && !isVideo
+    val useDragPreview = playerCoverBackgroundEnabled && coverPreviewMode == CoverPreviewMode.Drag && !isVideo
+    val useMotionPreview = playerCoverBackgroundEnabled && coverPreviewMode == CoverPreviewMode.Motion && !isVideo
     val ownsMotionPreview = sharedArtworkAlignment == null
     val ownsDragPreview = sharedCoverDragPreviewState == null
     val localCoverMotionState = rememberCoverMotionState(
@@ -1398,6 +1351,11 @@ internal fun NowPlayingScreen(
         else -> Alignment.Center
     }
     var surfaceMode by rememberSaveable { mutableStateOf(NowPlayingSurfaceMode.PLAYER) }
+    val playerAccentColor = playerContentColors.onSurface
+    val lyricColors = rememberLyricReadableColors(
+        accentColor = playerAccentColor,
+        colorScheme = playerContentColors
+    )
     var tabletQueueExpanded by rememberSaveable { mutableStateOf(true) }
     var tabletQueueInteractionTick by remember { mutableIntStateOf(0) }
     var landscapeArtistBottom by remember { mutableFloatStateOf(Float.NaN) }
@@ -1487,14 +1445,14 @@ internal fun NowPlayingScreen(
         handleNavigateUp()
     }
     val playerHeaderTitle = metadata?.title?.toString().orEmpty().ifBlank {
-        lyricsState.title.ifBlank { "未播放" }
+        lyricsState.title.ifBlank { appString(R.string.ui_not_played) }
     }
     val playerArtistText = metadata?.artist?.toString().orEmpty()
     val playerArtistMeta = remember(playerArtistText) {
         parseNowPlayingArtistMeta(playerArtistText)
     }
     val lyricsHeaderTitle = lyricsState.title.ifBlank {
-        metadata?.title?.toString().orEmpty().ifBlank { "歌词" }
+        metadata?.title?.toString().orEmpty().ifBlank { appString(R.string.ui_lyrics) }
     }
 
     val sharedHeaderTitle = if (surfaceMode == NowPlayingSurfaceMode.LYRICS) {
@@ -1565,15 +1523,15 @@ internal fun NowPlayingScreen(
             .fillMaxSize()
             .then(tabletQueueInteractionModifier)
     ) {
-        if (renderBackdrop && !isVideo) {
-            CoverArtworkBackground(
-                artworkModel = artworkModel,
-                enabled = coverBackgroundEnabled,
+        if (renderBackdrop) {
+            PlayerSharedBackdrop(
+                mediaItem = item,
+                backgroundMode = playerBackgroundMode,
+                coverEnabled = coverBackgroundEnabled,
                 clarity = coverBackgroundClarity,
-                overlayBaseColor = colorScheme.background,
-                tintBaseColor = playerThemeColors.backdropTintColor,
                 artworkAlignment = coverPreviewAlignment,
-                isDark = colorScheme.isDark
+                isPlaying = playback.isPlaying,
+                dynamicEnabled = dynamicFlowingBackgroundEnabled
             )
         }
         if (isLandscape && surfaceMode == NowPlayingSurfaceMode.PLAYER && !isVideo) {
@@ -1584,7 +1542,7 @@ internal fun NowPlayingScreen(
             val spectrumHeight = landscapeLayoutMetrics.spectrumHeight
             val density = LocalDensity.current
             val fallbackCenterY = with(density) {
-                configuration.screenHeightDp.dp.toPx() *
+                availableHeight.toPx() *
                     if (landscapeLayoutMetrics.tabletLayout) 0.28f else 0.34f
             }
             val spectrumCenterY = landscapeSpectrumCenterY(
@@ -1608,6 +1566,10 @@ internal fun NowPlayingScreen(
                     .then(spectrumMotion)
             )
         }
+        CompositionLocalProvider(
+            LocalAsmrColorScheme provides playerContentColors,
+            androidx.compose.material3.LocalContentColor provides playerContentColors.onSurface
+        ) {
         Column(modifier = Modifier.fillMaxSize()) {
             PlayerSurfaceHeader(
                 title = sharedHeaderTitle,
@@ -1719,7 +1681,7 @@ internal fun NowPlayingScreen(
                                     onOpenVideoFullscreen = { videoFullscreen = true },
                                     onOpenLyrics = showLyricsSurface,
                                     edgeBlendEnabled = false,
-                                    edgeBlendColor = if (playerArtworkBackdropEnabled) playerThemeColors.backdropTintColor else colorScheme.background,
+                                    edgeBlendColor = playerContentColors.background,
                                     videoBackdropColor = videoBackdropColor,
                                     artworkAlignment = coverPreviewAlignment,
                                     artworkCornerRadius = landscapeLayoutMetrics.artworkCornerRadius,
@@ -1734,7 +1696,7 @@ internal fun NowPlayingScreen(
                                 viewModel = viewModel,
                                 currentMediaId = item?.mediaId.orEmpty(),
                                 isPlaying = playback.isPlaying,
-                                activeColor = playerPageAccentColor,
+                                activeColor = playerAccentColor,
                                 expanded = tabletQueueExpanded,
                                 onExpandedChange = { tabletQueueExpanded = it },
                                 modifier = Modifier
@@ -1768,8 +1730,8 @@ internal fun NowPlayingScreen(
                                         onUpdateSliceRange = { sliceId, startMs, endMs ->
                                             viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
                                         },
-                                        activeColor = accentColor,
-                                        inactiveColor = accentColor.copy(alpha = 0.2f)
+                                        activeColor = playerAccentColor,
+                                        inactiveColor = playerAccentColor.copy(alpha = 0.2f)
                                     )
                                 }
                             }
@@ -1786,7 +1748,7 @@ internal fun NowPlayingScreen(
                             title = playerHeaderTitle,
                             artistMeta = playerArtistMeta,
                             listenTogetherState = listenTogetherUiState,
-                            accentColor = accentColor,
+                            accentColor = playerAccentColor,
                             pageEntranceSettled = pageEntranceSettled,
                             compactHeight = false,
                             tabletLayout = true,
@@ -1847,13 +1809,12 @@ internal fun NowPlayingScreen(
                                 tagViewModel.openForMediaId(mediaId, fallback)
                             },
                             sliceUiState = sliceUiState,
-                            modifier = Modifier.height(landscapeLayoutMetrics.controlsHeight),
+                            modifier = Modifier.heightIn(min = landscapeLayoutMetrics.controlsHeight),
                             showActionRow = !isVideo,
                             landscapeControls = true,
                             actionRowModifier = controlsMotion,
                             coreControlsModifier = controlsMotion,
-                            primaryColor = accentColor,
-                            onPrimaryColor = onAccentColor
+                            contentColor = playerAccentColor
                         )
                     }
                 }
@@ -1911,7 +1872,9 @@ internal fun NowPlayingScreen(
                                 onOpenVideoFullscreen = { videoFullscreen = true },
                                 onOpenLyrics = showLyricsSurface,
                                 edgeBlendEnabled = false,
-                                edgeBlendColor = playerThemeColors.backdropTintColor,
+                                edgeBlendColor = if (playerCoverBackgroundEnabled) {
+                                    playerThemeColors?.backdropTintColor ?: playerContentColors.background
+                                } else playerContentColors.background,
                                 videoBackdropColor = videoBackdropColor,
                                 artworkAlignment = coverPreviewAlignment,
                                 artworkCornerRadius = landscapeLayoutMetrics.artworkCornerRadius,
@@ -1945,8 +1908,8 @@ internal fun NowPlayingScreen(
                                     onUpdateSliceRange = { sliceId, startMs, endMs ->
                                         viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
                                     },
-                                    activeColor = accentColor,
-                                    inactiveColor = accentColor.copy(alpha = 0.2f),
+                                    activeColor = playerAccentColor,
+                                    inactiveColor = playerAccentColor.copy(alpha = 0.2f),
                                     compactLayout = true
                                 )
                             }
@@ -1964,7 +1927,7 @@ internal fun NowPlayingScreen(
                         title = playerHeaderTitle,
                         artistMeta = playerArtistMeta,
                         listenTogetherState = listenTogetherUiState,
-                        accentColor = accentColor,
+                        accentColor = playerAccentColor,
                         pageEntranceSettled = pageEntranceSettled,
                         compactHeight = landscapeLayoutMetrics.compactHeight,
                         tabletLayout = false,
@@ -2025,14 +1988,13 @@ internal fun NowPlayingScreen(
                             tagViewModel.openForMediaId(mediaId, fallback)
                         },
                         sliceUiState = sliceUiState,
-                        modifier = Modifier.height(landscapeLayoutMetrics.controlsHeight),
+                        modifier = Modifier.heightIn(min = landscapeLayoutMetrics.controlsHeight),
                         showActionRow = !isVideo,
                         landscapeControls = true,
                         compactLayout = true,
                         actionRowModifier = controlsMotion,
                         coreControlsModifier = controlsMotion,
-                        primaryColor = accentColor,
-                        onPrimaryColor = onAccentColor
+                        contentColor = playerAccentColor
                     )
                 }
             }
@@ -2044,7 +2006,7 @@ internal fun NowPlayingScreen(
             val controlsMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.CONTROLS)
             val volumeMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.VOLUME)
             val expandedHomeLayout = nowPlayingHomeLayoutMode == NowPlayingHomeLayoutMode.Expanded && !isVideo
-            val portraitScreenHeight = configuration.screenHeightDp.dp
+            val portraitScreenHeight = availableHeight
             val portraitLayoutMetrics = remember(portraitScreenHeight, widthClass) {
                 nowPlayingPortraitLayoutMetrics(
                     screenHeight = portraitScreenHeight,
@@ -2230,8 +2192,8 @@ internal fun NowPlayingScreen(
                                 ListenTogetherAudienceLine(
                                     state = listenTogetherUiState,
                                     modifier = Modifier.fillMaxWidth(),
-                                    accentColor = accentColor,
-                                    textColor = colorScheme.textTertiary,
+                                    accentColor = playerAccentColor,
+                                    textColor = playerSupportingTextColor(playerContentColors.isDark),
                                     pageEntranceSettled = pageEntranceSettled
                                 )
                             }
@@ -2318,7 +2280,7 @@ internal fun NowPlayingScreen(
                                             onOpenVideoFullscreen = { videoFullscreen = true },
                                             onOpenLyrics = showLyricsSurface,
                                             edgeBlendEnabled = false,
-                                            edgeBlendColor = if (playerArtworkBackdropEnabled) playerThemeColors.backdropTintColor else colorScheme.background,
+                                            edgeBlendColor = playerContentColors.background,
                                             videoBackdropColor = videoBackdropColor,
                                             artworkAlignment = coverPreviewAlignment,
                                             artworkContentScale = ContentScale.Crop,
@@ -2377,9 +2339,7 @@ internal fun NowPlayingScreen(
                                                     playbackPositionMs = progress.positionMs,
                                                     lyrics = lyricsState.lyrics,
                                                     lyricColors = lyricColors,
-                                                    accentColor = accentColor,
                                                     spectrumColor = playerPageAccentColor,
-                                                    onAccentColor = onAccentColor,
                                                     lyricsPageSettings = expandedHomeLyricsSettings,
                                                     onSeekTo = { viewModel.seekTo(it) },
                                                     onTimelinePlay = { targetMs ->
@@ -2387,6 +2347,7 @@ internal fun NowPlayingScreen(
                                                         viewModel.play()
                                                     },
                                                     onAddLyrics = openManualLyricsAction,
+                                                    transparentTimelineControls = true,
                                                     interactionEnabled = lyricsExpandedInteractionEnabled,
                                                     stableFocusAnchor = true,
                                                     expandedHomeVisualEffects = true,
@@ -2425,7 +2386,7 @@ internal fun NowPlayingScreen(
                                                     currentMaxLinesOverride = 1,
                                                     upcomingMaxLinesOverride = 1,
                                                     marqueeCurrentLine = true,
-                                                    emptyText = "暂无歌词",
+                                                    emptyText = appString(R.string.ui_no_lyrics_yet),
                                                     modifier = Modifier.fillMaxWidth()
                                                 )
                                             }
@@ -2466,8 +2427,8 @@ internal fun NowPlayingScreen(
                                         onUpdateSliceRange = { sliceId, startMs, endMs ->
                                             viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
                                         },
-                                        activeColor = accentColor,
-                                        inactiveColor = accentColor.copy(alpha = 0.2f),
+                                        activeColor = playerAccentColor,
+                                        inactiveColor = playerAccentColor.copy(alpha = 0.2f),
                                         compactLayout = portraitLayoutMetrics.compact
                                     )
                                 }
@@ -2492,8 +2453,7 @@ internal fun NowPlayingScreen(
                             modifier = Modifier.padding(horizontal = portraitContentHorizontalPadding),
                             actionRowModifier = actionRowMotion,
                             coreControlsModifier = controlsMotion,
-                            primaryColor = accentColor,
-                            onPrimaryColor = onAccentColor,
+                            contentColor = playerAccentColor,
                             compactLayout = portraitLayoutMetrics.compact
                         )
 
@@ -2505,14 +2465,15 @@ internal fun NowPlayingScreen(
                                 .onGloballyPositioned { coordinates ->
                                     volumeControlBounds = coordinates.boundsInRoot()
                                 },
-                            accentColor = accentColor,
+                            accentColor = playerAccentColor,
                             viewModel = viewModel,
                             hardwareVolumeEventTick = hardwareVolumeEventTick,
                             audioOutputRouteKind = audioOutputRouteKind,
                             warningSessionState = warningSessionState,
                             expanded = volumeControlExpanded,
                             onExpandedChange = { volumeControlExpanded = it },
-                            compactLayout = portraitLayoutMetrics.compact
+                            compactLayout = portraitLayoutMetrics.compact,
+                            dialogColorScheme = colorScheme
                         )
                     }
                 }
@@ -2526,9 +2487,7 @@ internal fun NowPlayingScreen(
                         playbackPositionMs = progress.positionMs,
                         lyrics = lyricsState.lyrics,
                         lyricColors = lyricsPageColors,
-                        accentColor = accentColor,
                         spectrumColor = playerPageAccentColor,
-                        onAccentColor = onAccentColor,
                         lyricsPageSettings = lyricsPageSettings,
                         onSeekTo = { viewModel.seekTo(it) },
                         onTimelinePlay = { targetMs ->
@@ -2536,6 +2495,7 @@ internal fun NowPlayingScreen(
                             viewModel.play()
                         },
                         onAddLyrics = openManualLyricsAction,
+                        transparentTimelineControls = true,
                         contentKey = lyricsState.contentKey,
                         contentVisible = !lyricsState.isLoading,
                         modifier = Modifier
@@ -2546,6 +2506,8 @@ internal fun NowPlayingScreen(
             }
                 }
             }
+        }
+
         }
 
         if (videoFullscreen && isVideo) {
@@ -2583,13 +2545,13 @@ internal fun NowPlayingScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "切片管理",
+                            text = appString(R.string.ui_slice_management),
                             style = MaterialTheme.typography.titleMedium,
                             color = colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.weight(1f))
                         TextButton(onClick = { viewModel.clearSlicesForCurrentTrack() }) {
-                            Text("清空")
+                            Text(androidx.compose.ui.res.stringResource(R.string.ui_clear))
                         }
                     }
 
@@ -2623,7 +2585,7 @@ internal fun NowPlayingScreen(
 
                     if (sliceUiState.slices.isEmpty()) {
                         Text(
-                            text = "暂无切片",
+                            text = appString(R.string.ui_no_slices_yet),
                             style = MaterialTheme.typography.bodyMedium,
                             color = colorScheme.textTertiary,
                             modifier = Modifier.padding(vertical = 18.dp)
@@ -2686,7 +2648,7 @@ internal fun NowPlayingScreen(
                                         IconButton(onClick = { viewModel.playSlicePreview(slice) }) {
                                             Icon(
                                                 imageVector = Icons.Rounded.PlayArrow,
-                                                contentDescription = "播放切片",
+                                                contentDescription = appString(R.string.ui_play_slice),
                                                 tint = colorScheme.onSurface
                                             )
                                         }
@@ -2694,7 +2656,7 @@ internal fun NowPlayingScreen(
                                         IconButton(onClick = { viewModel.deleteSlice(slice.id) }) {
                                             Icon(
                                                 imageVector = Icons.Outlined.DeleteOutline,
-                                                contentDescription = "删除切片",
+                                                contentDescription = appString(R.string.ui_delete_slice),
                                                 tint = colorScheme.onSurface.copy(alpha = 0.8f)
                                             )
                                         }
@@ -2714,7 +2676,7 @@ internal fun NowPlayingScreen(
             if (slice != null) {
                 PlaybackProgressContent(viewModel, isVideo) { progress ->
                     SliceTimeEditDialog(
-                        title = if (edit.second) "修改起点" else "修改终点",
+                        title = if (edit.second) appString(R.string.ui_modify_starting_point) else appString(R.string.ui_modify_end_point),
                         durationMs = progressDurationMs,
                         currentMs = progress.positionMs,
                         initialMs = if (edit.second) slice.startMs else slice.endMs,

@@ -1,5 +1,8 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.data.remote.crawler.AlbumResourceSource
 
 import com.asmr.player.ui.common.AudioMetadataLine
@@ -9,24 +12,14 @@ import com.asmr.player.ui.common.rememberAudioMetadata
 
 import com.asmr.player.translation.translatedPageText
 
-import android.content.Intent
-import android.net.Uri
-import android.provider.DocumentsContract
-import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
@@ -34,28 +27,17 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
-import androidx.compose.material3.windowsizeclass.WindowSizeClass
-import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -65,66 +47,30 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.state.ToggleableState
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.PlayerView
-import com.asmr.player.data.local.db.AppDatabaseProvider
-import com.asmr.player.data.local.db.entities.LocalTreeCacheEntity
 import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
 import com.asmr.player.data.remote.scraper.DlsiteRecommendedWork
 import com.asmr.player.data.remote.scraper.DlsiteRecommendations
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
-import com.asmr.player.playback.MediaItemFactory
-import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.cache.CacheImageModel
-import com.asmr.player.data.remote.dlsite.DlsiteLanguageEdition
-import com.asmr.player.ui.dlsite.DlsitePlayViewModel
 import com.asmr.player.util.DlsiteAntiHotlink
 import com.asmr.player.util.SmartSortKey
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
-import android.webkit.CookieManager
-import android.webkit.URLUtil
-import android.webkit.WebChromeClient
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import androidx.compose.material.icons.automirrored.rounded.Label
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
-import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
-import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -132,31 +78,20 @@ import kotlinx.coroutines.launch
 
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.zIndex
-import com.asmr.player.ui.common.rememberDominantColor
-import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.AudioItemMenuButtonSize
-import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.NoImageLoadingIndicator
 import com.asmr.player.ui.common.AsmrShimmerPlaceholder
-import com.asmr.player.ui.common.CvChipsFlow
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.ImagePreviewItem
 import com.asmr.player.ui.common.ImagePreviewPreparedItem
 import com.asmr.player.ui.common.ImagePreviewRequest
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
-import com.asmr.player.ui.playlists.PlaylistPickerScreen
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
-import com.asmr.player.ui.theme.AsmrPlayerTheme
-import com.asmr.player.ui.theme.dynamicPageContainerColor
 import com.asmr.player.util.Formatting
-import com.asmr.player.util.MessageManager
-import com.asmr.player.util.RemoteSubtitleSource
 
 private val DlsiteGalleryThumbWidth = 140.dp
 private val DlsiteGalleryThumbHeight = 100.dp
@@ -251,15 +186,15 @@ private fun DlsiteGalleryAwaitingPreview(
             verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = "样图未加载",
+                text = appString(R.string.ui_sample_image_not_loaded),
                 style = MaterialTheme.typography.titleSmall,
                 color = colorScheme.textPrimary,
                 fontWeight = FontWeight.SemiBold
             )
             Text(
                 text = galleryCount
-                    ?.let { count -> "共 $count 张 · 点击右上角“预览”后加载到本地" }
-                    ?: "获取到样图链接后，可点击右上角“预览”加载",
+                    ?.let { count -> appString(R.string.ui_a_total_of_photos_click_preview_in_the, count) }
+                    ?: appString(R.string.ui_after_obtaining_the_sample_link_you_can_click),
                 modifier = Modifier.padding(top = 6.dp),
                 style = MaterialTheme.typography.bodySmall,
                 color = colorScheme.textSecondary,
@@ -1114,7 +1049,7 @@ internal fun shouldShowDlsitePlayDirectoryLoading(
 }
 
 @Composable
-internal fun AlbumDlsiteInfoBreadcrumbTabV2(
+internal fun AlbumDlsiteInfoBreadcrumbTab(
     album: Album,
     header: @Composable () -> Unit,
     galleryUrls: List<String>,
@@ -1248,18 +1183,19 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
         item(key = "dlsite-header") { header() }
         item(key = "dlsite-one-header") {
             AlbumDetailSectionHeading(
-                title = if (resourceSource == AlbumResourceSource.JapaneseAsmr) "JP-ASMR" else if (asmrOneTree.isNotEmpty()) "ONE（已收录）" else "ONE",
+                title = if (resourceSource == AlbumResourceSource.JapaneseAsmr) "JP-ASMR" else if (asmrOneTree.isNotEmpty()) appString(R.string.ui_one_included) else "ONE",
                 modifier = dlsiteAnimatedSectionModifier(
                     Modifier.fillMaxWidth().padding(start = AlbumDetailHorizontalPadding, end = AlbumDetailHorizontalPadding, top = 8.dp, bottom = 0.dp),
                     animateIntro = animateIntro
                 ),
                 actions = {
                     com.asmr.player.ui.settings.SettingsDropdownSelector(
-                        label = "资源站点", value = resourceSource.name,
+                        label = appString(R.string.ui_source), value = resourceSource.name,
                         options = AlbumResourceSource.entries.associate { it.name to it.label },
                         onSelect = { name -> onResourceSourceChange(AlbumResourceSource.valueOf(name)) },
                         modifier = Modifier.widthIn(min = 154.dp),
                         showLabel = false, flatTrigger = true, singleLineOptions = true,
+                        valueTextAlign = androidx.compose.ui.text.style.TextAlign.End,
                         tagPrefix = "album_resource_source"
                     )
                     IconButton(
@@ -1267,7 +1203,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                         enabled = !isLoadingAsmrOne,
                         colors = sectionActionIconColors
                     ) {
-                        Icon(Icons.Rounded.Refresh, contentDescription = "刷新")
+                        Icon(Icons.Rounded.Refresh, contentDescription = appString(R.string.ui_refresh))
                     }
                 }
             )
@@ -1290,7 +1226,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                             if (browserValue == null) {
                                 DlsiteDirectoryLoadingPanel()
                             } else {
-                                DirectoryBrowserPanelV4(
+                                DirectoryBrowserPanel(
                                     panelKey = treeStateKey,
                                     currentPath = currentPath,
                                     breadcrumbs = browserValue.breadcrumbs,
@@ -1408,7 +1344,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                         }
                         DirectoryTreePanelState.Loading -> DlsiteDirectoryLoadingPanel()
                         DirectoryTreePanelState.Empty -> DlsiteSectionEmptyState(
-                            text = "${if (resourceSource == AlbumResourceSource.JapaneseAsmr) "Japanese ASMR" else "ONE"} 暂未收录",
+                            text = appString(R.string.ui_not_available_on_yet, if (resourceSource == AlbumResourceSource.JapaneseAsmr) "Japanese ASMR" else "ONE"),
                             artworkKind = DlsiteEmptyArtworkKind.One,
                             modifier = Modifier
                         )
@@ -1442,7 +1378,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                             ),
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                         ) {
-                            Text("预览")
+                            Text(androidx.compose.ui.res.stringResource(R.string.ui_preview))
                         }
                     }
                 )
@@ -1457,7 +1393,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                         DlsiteContentKind.Loading -> DlsiteGalleryAwaitingPreview(galleryCount = null)
                         DlsiteContentKind.Empty -> {
                             DlsiteSectionEmptyState(
-                                text = "暂无样图",
+                                text = appString(R.string.ui_no_sample_picture_yet),
                                 artworkKind = DlsiteEmptyArtworkKind.Gallery,
                                 modifier = Modifier.then(dlsiteAnimatedSectionModifier(Modifier, animateIntro))
                             )
@@ -1505,7 +1441,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
         }
         item(key = "dlsite-trial-header") {
             AlbumDetailSectionHeading(
-                title = "试听 / 试看",
+                title = appString(R.string.ui_listen_preview),
                 modifier = dlsiteAnimatedSectionModifier(
                     Modifier.fillMaxWidth().padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp),
                     animateIntro = animateIntro
@@ -1516,14 +1452,14 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                         enabled = !isLoading && !isLoadingTrial,
                         colors = sectionActionIconColors
                     ) {
-                        Icon(Icons.Rounded.Refresh, contentDescription = "刷新")
+                        Icon(Icons.Rounded.Refresh, contentDescription = appString(R.string.ui_refresh))
                     }
                     IconButton(
                         onClick = onDownloadTrial,
                         enabled = trialDownloadEnabled,
                         colors = sectionActionIconColors
                     ) {
-                        Icon(Icons.Rounded.Download, contentDescription = "下载")
+                        Icon(Icons.Rounded.Download, contentDescription = appString(R.string.ui_download))
                     }
                 }
             )
@@ -1547,7 +1483,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
             DlsiteContentKind.Empty -> {
                 item(key = "dlsite-trial-content") {
                     DlsiteSectionEmptyState(
-                        text = "暂无试听 / 试看",
+                        text = appString(R.string.ui_no_audition_preview_yet),
                         artworkKind = DlsiteEmptyArtworkKind.Trial,
                         modifier = dlsiteAnimatedSectionModifier(
                             Modifier.dlsiteContentFade(trialFadeState),
@@ -1635,7 +1571,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
 
 
 @Composable
-internal fun AlbumDlsitePlayBreadcrumbTabV2(
+internal fun AlbumDlsitePlayBreadcrumbTab(
     header: @Composable () -> Unit,
     album: Album,
     rjCode: String,
@@ -1684,9 +1620,9 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
     if (!loggedIn) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("需要先登录 DLsite 才能使用已购播放/下载")
+                Text(androidx.compose.ui.res.stringResource(R.string.ui_you_need_to_log_in_to_dlsite_before))
                 Spacer(modifier = Modifier.height(12.dp))
-                Button(onClick = onOpenLogin) { Text("去登录") }
+                Button(onClick = onOpenLogin) { Text(androidx.compose.ui.res.stringResource(R.string.ui_go_to_login)) }
             }
         }
         return
@@ -1764,12 +1700,12 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "已购内容",
+                    text = appString(R.string.ui_purchased_content),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.weight(1f))
-                OutlinedButton(onClick = onOpenLogin) { Text("登录 / 切换账号") }
+                OutlinedButton(onClick = onOpenLogin) { Text(androidx.compose.ui.res.stringResource(R.string.ui_log_in_switch_account)) }
             }
         }
 
@@ -1791,13 +1727,13 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
                         modifier = Modifier.fillMaxWidth().height(220.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("缺少作品编号，无法加载")
+                        Text(androidx.compose.ui.res.stringResource(R.string.ui_missing_work_number_unable_to_load))
                     }
                     DirectoryTreePanelState.Empty -> Box(
                         modifier = Modifier.fillMaxWidth().height(220.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("暂无可播放资源")
+                        Text(androidx.compose.ui.res.stringResource(R.string.ui_no_playback_resources_available_yet))
                     }
                     DirectoryTreePanelState.Loading -> Box(
                         modifier = Modifier.fillMaxWidth().height(220.dp),
@@ -1815,7 +1751,7 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
                                 EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
                             }
                         } else {
-                            DirectoryBrowserPanelV4(
+                            DirectoryBrowserPanel(
                                 panelKey = treeStateKey,
                                 currentPath = currentPath,
                                 breadcrumbs = browserValue.breadcrumbs,

@@ -1,5 +1,8 @@
 package com.asmr.player.ui.dlsite
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -46,14 +49,14 @@ class DlsiteLoginViewModel @Inject constructor(
 
     fun clear() {
         authStore.clear()
-        _uiState.value = snapshot(message = "已退出登录")
+        _uiState.value = snapshot(message = appString(R.string.ui_logged_out))
     }
 
     fun login(loginId: String, password: String) {
         viewModelScope.launch {
             _uiState.value = snapshot(isLoading = true)
             val result = runCatching { loginClient.login(loginId, password) }.getOrElse { e ->
-                _uiState.value = snapshot(message = e.message.orEmpty().ifBlank { "登录失败" })
+                _uiState.value = snapshot(message = e.message.orEmpty().ifBlank { appString(R.string.ui_login_failed) })
                 return@launch
             }
             if (result.dlsiteCookie.isNotBlank()) {
@@ -62,7 +65,7 @@ class DlsiteLoginViewModel @Inject constructor(
             if (result.playCookie.isNotBlank()) {
                 authStore.savePlayCookie(result.playCookie, expiresAtMs = result.playExpiresAtMs)
             }
-            _uiState.value = snapshot(message = "登录成功")
+            _uiState.value = snapshot(message = appString(R.string.ui_login_successful))
         }
     }
 }

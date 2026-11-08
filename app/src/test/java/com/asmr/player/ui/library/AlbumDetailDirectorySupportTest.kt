@@ -10,7 +10,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
-class AlbumDetailDirectorySupportTest {
+class AlbumDetailDirectorySupportTest : com.asmr.player.LocalizedRobolectricTest() {
 
     @Test
     fun combineLocalTreeCacheStamp_changesWhenDatabaseTracksArrive() {
@@ -33,14 +33,6 @@ class AlbumDetailDirectorySupportTest {
         assertEquals(
             listOf("disc1", "disc1/cd2", "disc1/cd2/finale"),
             result.map { it.path }
-        )
-    }
-
-    @Test
-    fun folderPathPrefixes_returnsEachParentPrefix() {
-        assertEquals(
-            listOf("disc1", "disc1/cd2", "disc1/cd2/finale"),
-            folderPathPrefixes("disc1/cd2/finale")
         )
     }
 
@@ -232,35 +224,6 @@ class AlbumDetailDirectorySupportTest {
         assertEquals(
             null,
             subtitleGenerationTrackForFile(file.copy(path = "track.ape"), emptySet())
-        )
-    }
-
-    @Test
-    fun subtitleTranslationTrackForFile_requiresLocalSubtitles() {
-        val track = Track(
-            id = 10L,
-            albumId = 7L,
-            title = "track",
-            path = "/album/track.mp3"
-        )
-        val file = DirectoryFileItem(
-            path = "track.mp3",
-            title = "track",
-            fileType = TreeFileType.Audio,
-            isPlayable = true,
-            sizeSource = FileSizeSource.Local(track.path),
-            absolutePath = track.path,
-            track = track
-        )
-
-        assertEquals(track, subtitleTranslationTrackForFile(file, setOf(track.id)))
-        assertEquals(null, subtitleTranslationTrackForFile(file, emptySet()))
-        assertEquals(
-            null,
-            subtitleTranslationTrackForFile(
-                file.copy(isOnline = true, sizeSource = FileSizeSource.Remote("https://example.com/track.mp3")),
-                setOf(track.id)
-            )
         )
     }
 
@@ -746,9 +709,15 @@ class AlbumDetailDirectorySupportTest {
         )
 
         val index = buildLocalTreeIndexFromLeaves(leaves = leaves, tracks = tracks)
-        val flattened = flattenLocalTreeIndex(index, expanded = setOf("one", "体验版"))
-
-        val paths = flattened.entries.filterIsInstance<LocalTreeUiEntry.File>().map { it.path }.sorted()
+        val album = Album(id = 9L, title = "album", path = "/album")
+        val paths = listOf("one", "体验版").flatMap { currentPath ->
+            buildLocalDirectoryBrowser(
+                index = index,
+                currentPath = currentPath,
+                album = album,
+                shouldShowSubtitleStamp = { false }
+            ).files
+        }.map { it.path }.sorted()
         assertEquals(listOf("one/same.mp3", "体验版/same.mp3"), paths)
     }
 }

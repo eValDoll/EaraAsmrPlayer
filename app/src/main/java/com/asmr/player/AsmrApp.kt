@@ -1,5 +1,8 @@
 package com.asmr.player
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.app.Application
 import androidx.work.Configuration
 import coil.ImageLoader
@@ -42,6 +45,7 @@ class AsmrApp : Application(), ImageLoaderFactory, Configuration.Provider {
     lateinit var messageManager: MessageManager
 
     override fun onCreate() {
+        com.asmr.player.i18n.AppLanguage.initialize(this)
         super.onCreate()
         appCacheManager.start()
         runCatching { PDFBoxResourceLoader.init(applicationContext) }
@@ -60,28 +64,33 @@ class AsmrApp : Application(), ImageLoaderFactory, Configuration.Provider {
                 ?.let { summary ->
                     when {
                         summary.unavailableCount > 0 -> messageManager.showWarning(
-                            "已为旧版字幕补导出 ${summary.exportedCount} 个 LRC，" +
-                                "另有 ${summary.unavailableCount} 个因目录不可写未导出" +
+                            appString(R.string.ui_lrcs_have_been_exported_for_legacy_subtitles, summary.exportedCount) +
+                                appString(R.string.ui_another_were_not_exported_because_the_directory_was, summary.unavailableCount) +
                                 if (summary.preservedCount > 0) {
-                                    "，并保留 ${summary.preservedCount} 个已有同名文件"
+                                    appString(R.string.ui_and_keep_existing_files_with_the_same_name, summary.preservedCount)
                                 } else {
                                     ""
                                 }
                         )
                         summary.exportedCount > 0 -> messageManager.showSuccess(
-                            "已为旧版生成字幕补导出 ${summary.exportedCount} 个 LRC 文件" +
+                            appString(R.string.ui_lrc_files_have_been_exported_to_generate_subtitles, summary.exportedCount) +
                                 if (summary.preservedCount > 0) {
-                                    "，并保留 ${summary.preservedCount} 个已有同名文件"
+                                    appString(R.string.ui_and_keep_existing_files_with_the_same_name, summary.preservedCount)
                                 } else {
                                     ""
                                 }
                         )
                         summary.preservedCount > 0 -> messageManager.showInfo(
-                            "检测到 ${summary.preservedCount} 个已有同名 LRC，补导出时未覆盖"
+                            appString(R.string.ui_existing_lrcs_with_the_same_name_were_detected, summary.preservedCount)
                         )
                     }
                 }
         }
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        com.asmr.player.i18n.AppLanguage.refresh()
     }
 
     override fun onTrimMemory(level: Int) {

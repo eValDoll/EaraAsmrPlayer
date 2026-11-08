@@ -1,9 +1,15 @@
 package com.asmr.player.ui.common
 
+import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.gestures.FlingBehavior
 import androidx.compose.foundation.gestures.ScrollScope
+import androidx.compose.foundation.gestures.ScrollableState
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitEachGesture
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
@@ -18,7 +24,6 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.min
-import kotlinx.coroutines.CancellationException
 
 private const val VerticalFlingDampingStartDpPerSecond = 850f
 private const val MaxVerticalFlingVelocityDpPerSecond = 3200f
@@ -56,6 +61,14 @@ fun Modifier.calmVerticalFling(): Modifier {
         }
     }
     return nestedScroll(nestedScrollConnection)
+}
+
+internal fun ScrollableState.interruptOngoingScroll(
+    scope: CoroutineScope,
+    priority: MutatePriority = MutatePriority.UserInput,
+) {
+    // 未布局的 Lazy 状态会在 stopScroll 内等待首次布局；静止时也不应进入滚动事务。
+    if (isScrollInProgress) scope.launch(start = CoroutineStart.UNDISPATCHED) { stopScroll(priority) }
 }
 
 fun Modifier.interruptScrollableFlingOnPointerDown(onPointerDown: () -> Unit): Modifier {
@@ -143,7 +156,7 @@ internal fun calmFlingDecayRateForVelocity(
     }
 }
 
-private class CalmScrollableFlingBehavior(
+internal class CalmScrollableFlingBehavior(
     private val startVelocityPxPerSecond: Float,
     private val stopVelocityPxPerSecond: Float,
     private val fastVelocityPxPerSecond: Float,
@@ -156,18 +169,18 @@ private class CalmScrollableFlingBehavior(
         if (!shouldStartCalmFling(velocity, startVelocityPxPerSecond)) return 0f
         if (abs(velocity) <= stopVelocity) return velocity
 
-        try {
-            var previousFrameTime = withFrameNanos { it }
-            while (abs(velocity) > stopVelocity) {
-                val frameTime = withFrameNanos { it }
+        var previousFrameTime = withFrameNanos { it }
+        while (abs(velocity) > stopVelocity) {
+            // 帧回调之后的协程续体可能在本帧布局完成后恢复，滚动更新必须留在回调内。
+            val reachedBoundary = withFrameNanos { frameTime ->
                 val frameSeconds = ((frameTime - previousFrameTime) / 1_000_000_000f)
                     .coerceIn(0f, MaxFlingFrameSeconds)
                 previousFrameTime = frameTime
-                if (frameSeconds == 0f) continue
+                if (frameSeconds == 0f) return@withFrameNanos false
 
                 val delta = velocity * frameSeconds
                 val consumed = scrollBy(delta)
-                if (abs(delta - consumed) > 0.5f) return velocity
+                if (abs(delta - consumed) > 0.5f) return@withFrameNanos true
 
                 velocity = decayedCalmFlingVelocity(
                     velocity = velocity,
@@ -178,9 +191,9 @@ private class CalmScrollableFlingBehavior(
                         lowMidVelocityPxPerSecond = lowMidVelocityPxPerSecond
                     )
                 )
+                false
             }
-        } catch (cancelled: CancellationException) {
-            throw cancelled
+            if (reachedBoundary) return velocity
         }
         return 0f
     }

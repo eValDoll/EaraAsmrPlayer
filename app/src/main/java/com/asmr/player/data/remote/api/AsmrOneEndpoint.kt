@@ -1,5 +1,8 @@
 package com.asmr.player.data.remote.api
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 object AsmrOneEndpoint {
     const val BACKUP = -1
     const val MAIN = 0
@@ -12,7 +15,7 @@ object AsmrOneEndpoint {
     fun normalize(value: Int): Int = if (value in options) value else MIRROR_200
 
     fun displayName(value: Int): String = when (normalize(value)) {
-        BACKUP -> "备用"
+        BACKUP -> appString(R.string.ui_fallback)
         MAIN -> "asmr.one"
         MIRROR_100 -> "asmr-100"
         MIRROR_300 -> "asmr-300"

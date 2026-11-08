@@ -38,7 +38,7 @@ class AppExitPlaybackAndroidTest {
         PlaybackConnectionLifecycle.markAppOpened()
         kotlinx.coroutines.runBlocking {
             stateStore.save(
-                PersistedPlaybackStateV2(
+                PersistedPlaybackState(
                     queue = listOf(
                         PersistedPlaybackQueueItem(
                             mediaId = mediaId,

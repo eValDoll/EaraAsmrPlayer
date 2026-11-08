@@ -1,5 +1,8 @@
 package com.asmr.player.ui.groups
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -10,10 +13,16 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+data class AlbumGroupDetailState(
+    val groupId: Long,
+    val tracks: List<AlbumGroupTrackRow> = emptyList(),
+)
 
 @HiltViewModel
 class AlbumGroupDetailViewModel @Inject constructor(
@@ -27,12 +36,12 @@ class AlbumGroupDetailViewModel @Inject constructor(
     private val groupIdFlow = MutableStateFlow(groupId)
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    val tracks: StateFlow<List<AlbumGroupTrackRow>> = groupIdFlow
+    val content: StateFlow<AlbumGroupDetailState> = groupIdFlow
         .flatMapLatest { id ->
-            if (id <= 0L) kotlinx.coroutines.flow.flowOf(emptyList())
-            else groupRepository.observeGroupTracks(id)
+            if (id <= 0L) kotlinx.coroutines.flow.flowOf(AlbumGroupDetailState(id))
+            else groupRepository.observeGroupTracks(id).map { AlbumGroupDetailState(id, it) }
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AlbumGroupDetailState(groupId))
 
     fun setGroupId(id: Long) {
         if (groupIdFlow.value != id) {
@@ -45,7 +54,7 @@ class AlbumGroupDetailViewModel @Inject constructor(
         if (id <= 0L || mediaId.isBlank()) return
         viewModelScope.launch {
             groupRepository.removeTrackFromGroup(id, mediaId)
-            messageManager.showInfo("已从分组移除")
+            messageManager.showInfo(appString(R.string.ui_removed_from_group))
         }
     }
 
@@ -54,7 +63,7 @@ class AlbumGroupDetailViewModel @Inject constructor(
         if (id <= 0L || albumId <= 0L) return
         viewModelScope.launch {
             groupRepository.removeAlbumFromGroup(id, albumId)
-            messageManager.showInfo("已从分组移除")
+            messageManager.showInfo(appString(R.string.ui_removed_from_group))
         }
     }
 
@@ -63,7 +72,7 @@ class AlbumGroupDetailViewModel @Inject constructor(
         if (id <= 0L || albumId <= 0L || mediaId.isBlank()) return
         viewModelScope.launch {
             if (groupRepository.moveTrackToTop(id, albumId, mediaId)) {
-                messageManager.showInfo("已移至顶部")
+                messageManager.showInfo(appString(R.string.ui_moved_to_top))
             }
         }
     }
@@ -73,7 +82,7 @@ class AlbumGroupDetailViewModel @Inject constructor(
         if (id <= 0L || albumId <= 0L || mediaId.isBlank()) return
         viewModelScope.launch {
             if (groupRepository.moveTrackToBottom(id, albumId, mediaId)) {
-                messageManager.showInfo("已移至末尾")
+                messageManager.showInfo(appString(R.string.ui_moved_to_end))
             }
         }
     }

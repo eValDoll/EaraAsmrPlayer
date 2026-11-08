@@ -18,7 +18,6 @@ import com.asmr.player.data.settings.DeepSeekTranslationSettings
 import com.asmr.player.subtitle.DeepSeekAccountState
 import com.asmr.player.subtitle.DeepSeekBalance
 import com.asmr.player.ui.theme.AsmrPlayerTheme
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test

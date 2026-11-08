@@ -9,6 +9,16 @@ import org.junit.Test
 class NowPlayingLandscapeLayoutTest {
 
     @Test
+    fun splitLayoutKeepsEnoughWidthForEveryPlaybackButton() {
+        assertTrue(shouldUseNowPlayingLandscapeLayout(1024.dp, 640.dp))
+        assertTrue(shouldUseNowPlayingLandscapeLayout(670.dp, 600.dp))
+        assertFalse(shouldUseNowPlayingLandscapeLayout(600.dp, 550.dp))
+        assertFalse(shouldUseNowPlayingLandscapeLayout(512.dp, 600.dp))
+        assertFalse(shouldUseNowPlayingLandscapeLayout(346.dp, 600.dp))
+        assertTrue(shouldUseNowPlayingLandscapeLayout(800.dp, 360.dp))
+    }
+
+    @Test
     fun lyricTypographyKeepsPhoneHighlightConsistentAndScalesTabletCandidates() {
         val phonePortrait = nowPlayingLyricTypographyMetrics(largeTypography = false)
         val phoneLandscape = nowPlayingLyricTypographyMetrics(largeTypography = false)

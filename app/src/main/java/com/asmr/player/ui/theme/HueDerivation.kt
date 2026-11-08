@@ -4,7 +4,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.graphics.ColorUtils
 import com.google.android.material.color.utilities.DislikeAnalyzer
-import com.google.android.material.color.utilities.DynamicScheme
 import com.google.android.material.color.utilities.Hct
 import com.google.android.material.color.utilities.MaterialDynamicColors
 import com.google.android.material.color.utilities.SchemeMonochrome
@@ -26,16 +25,30 @@ internal fun deriveHuePalette(
         return deriveMonochromeHuePalette(mode, neutral, fallbackOnPrimary)
     }
 
-    val sourceHct = sanitizedSourceHct(primary, forceMonochrome)
-    val scheme = dynamicSchemeFor(sourceHct, mode, forceMonochrome)
+    val sourceHct = sanitizedSourceHct(primary)
+    val monochrome = sourceHct.chroma < MONOCHROME_CHROMA_THRESHOLD
+    val scheme = if (monochrome) {
+        SchemeMonochrome(sourceHct, mode.isDark, 0.0)
+    } else {
+        SchemeTonalSpot(sourceHct, mode.isDark, 0.0)
+    }
     val dynamicColors = MaterialDynamicColors()
 
+    // 单色色板默认使用黑色主色和深灰容器；导航图标使用主色，需要常规明暗层级。
     val primarySoft = softenDynamicAccentColor(
-        Color(dynamicColors.primaryContainer().getArgb(scheme)),
+        Color(if (monochrome) {
+            scheme.primaryPalette.tone(if (mode.isDark) 30 else 90)
+        } else {
+            dynamicColors.primaryContainer().getArgb(scheme)
+        }),
         chromaScale = MONET_PRIMARY_SOFT_CHROMA_SCALE
     )
     val primaryStrong = softenDynamicAccentColor(
-        Color(dynamicColors.primary().getArgb(scheme)),
+        Color(if (monochrome) {
+            scheme.primaryPalette.tone(if (mode.isDark) 80 else 40)
+        } else {
+            dynamicColors.primary().getArgb(scheme)
+        }),
         chromaScale = MONET_PRIMARY_STRONG_CHROMA_SCALE
     )
     val secondary = softenDynamicAccentColor(
@@ -263,15 +276,8 @@ private fun deriveMonochromeHuePalette(
     )
 }
 
-private fun sanitizedSourceHct(primary: Color, forceMonochrome: Boolean): Hct {
-    val source = Hct.fromInt(primary.toArgb())
-    val fixed = DislikeAnalyzer.fixIfDisliked(source)
-    return if (forceMonochrome || fixed.chroma < MONOCHROME_CHROMA_THRESHOLD) {
-        Hct.from(fixed.hue, 0.0, fixed.tone)
-    } else {
-        fixed
-    }
-}
+private fun sanitizedSourceHct(primary: Color): Hct =
+    DislikeAnalyzer.fixIfDisliked(Hct.fromInt(primary.toArgb()))
 
 private fun softenDynamicAccentColor(color: Color, chromaScale: Double): Color {
     if (chromaScale >= 0.999) return color
@@ -282,14 +288,6 @@ private fun softenDynamicAccentColor(color: Color, chromaScale: Double): Color {
         hct.tone
     )
     return Color(softened.toInt())
-}
-
-private fun dynamicSchemeFor(source: Hct, mode: ThemeMode, forceMonochrome: Boolean): DynamicScheme {
-    return if (forceMonochrome || source.chroma < MONOCHROME_CHROMA_THRESHOLD) {
-        SchemeMonochrome(source, mode.isDark, 0.0)
-    } else {
-        SchemeTonalSpot(source, mode.isDark, 0.0)
-    }
 }
 
 internal fun bestOnPrimary(primary: Color, fallback: Color): Color {
@@ -406,51 +404,4 @@ private fun textTertiaryBlendAmount(mode: ThemeMode): Float {
         ThemeMode.Dark -> 0.20f
         ThemeMode.SoftDark -> 0.18f
     }
-}
-
-internal fun clampPrimaryHslForMode(hsl: FloatArray, mode: ThemeMode) {
-    val hue = ((hsl[0] % 360f) + 360f) % 360f
-    val saturation = hsl[1].coerceIn(0f, 1f)
-    val lightnessMin = when (mode) {
-        ThemeMode.Light -> 0.18f
-        ThemeMode.Dark -> when {
-            hue in 38f..85f -> 0.58f
-            hue in 85f..170f -> 0.54f
-            hue in 170f..260f -> 0.48f
-            else -> 0.52f
-        }
-        ThemeMode.SoftDark -> when {
-            hue in 38f..85f -> 0.54f
-            hue in 85f..170f -> 0.50f
-            hue in 170f..260f -> 0.45f
-            else -> 0.48f
-        }
-    }
-    val lightnessMax = when (mode) {
-        ThemeMode.Light -> when {
-            hue in 38f..85f -> if (saturation >= 0.45f) 0.38f else 0.42f
-            hue in 85f..170f -> if (saturation >= 0.45f) 0.40f else 0.44f
-            hue in 170f..260f -> if (saturation >= 0.45f) 0.46f else 0.50f
-            else -> if (saturation >= 0.45f) 0.42f else 0.46f
-        }
-        ThemeMode.Dark -> when {
-            hue in 38f..85f -> 0.74f
-            hue in 85f..170f -> 0.70f
-            hue in 170f..260f -> 0.66f
-            else -> 0.68f
-        }
-        ThemeMode.SoftDark -> when {
-            hue in 38f..85f -> 0.70f
-            hue in 85f..170f -> 0.66f
-            hue in 170f..260f -> 0.62f
-            else -> 0.64f
-        }
-    }
-    val saturationMax = when (mode) {
-        ThemeMode.Light -> 0.76f
-        ThemeMode.Dark -> 0.78f
-        ThemeMode.SoftDark -> 0.76f
-    }
-    hsl[1] = hsl[1].coerceIn(0f, saturationMax)
-    hsl[2] = hsl[2].coerceIn(lightnessMin, lightnessMax)
 }

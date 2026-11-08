@@ -6,6 +6,7 @@ import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.data.settings.NowPlayingHomeLayoutMode
 import com.asmr.player.data.settings.NowPlayingLyricsSettings
+import com.asmr.player.data.settings.PlayerBackgroundMode
 import com.asmr.player.data.settings.settingsDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -30,14 +31,14 @@ class SettingsDataStore @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private val themeKey = stringPreferencesKey("theme")
-    private val sfwModeKey = booleanPreferencesKey("sfw_mode")
-    private val libraryRootsKey = stringSetPreferencesKey("library_roots")
     private val dynamicPlayerHueEnabledKey = booleanPreferencesKey("dynamic_player_hue_enabled")
     private val staticHueArgbLightKey = intPreferencesKey("static_hue_argb_light")
     private val staticHueArgbDarkKey = intPreferencesKey("static_hue_argb_dark")
     private val lastDynamicHueSourceKeyKey = stringPreferencesKey("last_dynamic_hue_source_key")
     private val lastDynamicHueSeedArgbKey = intPreferencesKey("last_dynamic_hue_seed_argb")
+    private val playerBackgroundModeKey = stringPreferencesKey("player_background_mode")
     private val coverBackgroundEnabledKey = booleanPreferencesKey("cover_background_enabled")
+    private val dynamicFlowingBackgroundEnabledKey = booleanPreferencesKey("dynamic_flowing_background_enabled")
     private val coverBackgroundClarityKey = floatPreferencesKey("cover_background_clarity")
     private val coverPreviewModeKey = stringPreferencesKey("cover_preview_mode")
     private val nowPlayingHomeLayoutModeKey = stringPreferencesKey("now_playing_home_layout_mode")
@@ -49,15 +50,11 @@ class SettingsDataStore @Inject constructor(
     private val lyricsPageLineHeightMultiplierKey = floatPreferencesKey("lyrics_page_line_height_multiplier")
     private val lyricsPageAlignKey = intPreferencesKey("lyrics_page_align")
     private val lyricsPageDisplayAreaModeKey = intPreferencesKey("lyrics_page_display_area_mode")
-    private val recentAlbumsPanelExpandedKey = booleanPreferencesKey("recent_albums_panel_expanded")
     private val miniPlayerDisplayModeKey = stringPreferencesKey("mini_player_display_mode")
-    private val bottomChromePinnedRouteKey = stringPreferencesKey("bottom_chrome_pinned_route")
     private val autoUpdateCheckEnabledKey = booleanPreferencesKey("auto_update_check_enabled")
     private val lastHandledClipboardEventKey = stringPreferencesKey("last_handled_clipboard_event")
 
     val theme: Flow<String> = context.settingsDataStore.data.map { it[themeKey] ?: "system" }
-    val sfwMode: Flow<Boolean> = context.settingsDataStore.data.map { it[sfwModeKey] ?: false }
-    val libraryRoots: Flow<Set<String>> = context.settingsDataStore.data.map { it[libraryRootsKey] ?: emptySet() }
     val dynamicPlayerHueEnabled: Flow<Boolean> = context.settingsDataStore.data.map { it[dynamicPlayerHueEnabledKey] ?: false }
     val staticHueArgbLight: Flow<Int?> = context.settingsDataStore.data.map { prefs ->
         if (prefs.contains(staticHueArgbLightKey)) prefs[staticHueArgbLightKey] else null
@@ -87,7 +84,13 @@ class SettingsDataStore @Inject constructor(
             lastDynamicHueSeedArgb = if (prefs.contains(lastDynamicHueSeedArgbKey)) prefs[lastDynamicHueSeedArgbKey] else null
         )
     }
+    val playerBackgroundMode: Flow<PlayerBackgroundMode> = context.settingsDataStore.data.map {
+        PlayerBackgroundMode.fromStorageValue(it[playerBackgroundModeKey])
+    }
     val coverBackgroundEnabled: Flow<Boolean> = context.settingsDataStore.data.map { it[coverBackgroundEnabledKey] ?: true }
+    val dynamicFlowingBackgroundEnabled: Flow<Boolean> = context.settingsDataStore.data.map {
+        it[dynamicFlowingBackgroundEnabledKey] ?: true
+    }
     val coverBackgroundClarity: Flow<Float> = context.settingsDataStore.data.map { it[coverBackgroundClarityKey] ?: 0.35f }
     val coverPreviewMode: Flow<CoverPreviewMode> = context.settingsDataStore.data.map {
         CoverPreviewMode.fromStorageValue(it[coverPreviewModeKey])
@@ -113,12 +116,8 @@ class SettingsDataStore @Inject constructor(
             displayAreaMode = prefs[lyricsPageDisplayAreaModeKey] ?: 0
         )
     }
-    val recentAlbumsPanelExpanded: Flow<Boolean> = context.settingsDataStore.data.map { it[recentAlbumsPanelExpandedKey] ?: true }
     val miniPlayerDisplayMode: Flow<String> = context.settingsDataStore.data.map { prefs ->
         prefs[miniPlayerDisplayModeKey] ?: "CoverOnly"
-    }
-    val bottomChromePinnedRoute: Flow<String?> = context.settingsDataStore.data.map { prefs ->
-        prefs[bottomChromePinnedRouteKey]
     }
     val autoUpdateCheckEnabled: Flow<Boolean> = context.settingsDataStore.data.map { prefs ->
         prefs[autoUpdateCheckEnabledKey] ?: true
@@ -129,10 +128,6 @@ class SettingsDataStore @Inject constructor(
 
     suspend fun setTheme(theme: String) {
         context.settingsDataStore.edit { it[themeKey] = theme }
-    }
-
-    suspend fun setSfwMode(enabled: Boolean) {
-        context.settingsDataStore.edit { it[sfwModeKey] = enabled }
     }
 
     suspend fun setDynamicPlayerHueEnabled(enabled: Boolean) {
@@ -174,8 +169,16 @@ class SettingsDataStore @Inject constructor(
         }
     }
 
+    suspend fun setPlayerBackgroundMode(mode: PlayerBackgroundMode) {
+        context.settingsDataStore.edit { it[playerBackgroundModeKey] = mode.storageValue }
+    }
+
     suspend fun setCoverBackgroundEnabled(enabled: Boolean) {
         context.settingsDataStore.edit { it[coverBackgroundEnabledKey] = enabled }
+    }
+
+    suspend fun setDynamicFlowingBackgroundEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[dynamicFlowingBackgroundEnabledKey] = enabled }
     }
 
     suspend fun setCoverBackgroundClarity(clarity: Float) {
@@ -219,22 +222,8 @@ class SettingsDataStore @Inject constructor(
         }
     }
 
-    suspend fun setRecentAlbumsPanelExpanded(expanded: Boolean) {
-        context.settingsDataStore.edit { it[recentAlbumsPanelExpandedKey] = expanded }
-    }
-
     suspend fun setMiniPlayerDisplayMode(mode: String) {
         context.settingsDataStore.edit { it[miniPlayerDisplayModeKey] = mode }
-    }
-
-    suspend fun setBottomChromePinnedRoute(route: String?) {
-        context.settingsDataStore.edit { prefs ->
-            if (route.isNullOrBlank()) {
-                prefs.remove(bottomChromePinnedRouteKey)
-            } else {
-                prefs[bottomChromePinnedRouteKey] = route
-            }
-        }
     }
 
     suspend fun setAutoUpdateCheckEnabled(enabled: Boolean) {
@@ -251,17 +240,4 @@ class SettingsDataStore @Inject constructor(
         }
     }
 
-    suspend fun addLibraryRoot(path: String) {
-        context.settingsDataStore.edit {
-            val current = it[libraryRootsKey] ?: emptySet()
-            it[libraryRootsKey] = current + path
-        }
-    }
-
-    suspend fun removeLibraryRoot(path: String) {
-        context.settingsDataStore.edit {
-            val current = it[libraryRootsKey] ?: emptySet()
-            it[libraryRootsKey] = current - path
-        }
-    }
 }

@@ -1,5 +1,13 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
+import com.asmr.player.data.repository.AlbumTagRepository
+import com.asmr.player.util.isLikelyPlaceholderCover
+
+import com.asmr.player.data.repository.parseAlbumTags
+
 import com.asmr.player.util.LocalFileScopes
 import com.asmr.player.data.remote.download.DownloadStorageGateway
 import com.asmr.player.util.LocalFileOperation
@@ -30,12 +38,10 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.asmr.player.data.local.db.AppDatabase
 import com.asmr.player.data.local.db.dao.AlbumDao
-import com.asmr.player.data.local.db.dao.LibraryTrackAlbumHeaderRow
 import com.asmr.player.data.local.db.dao.LibraryTrackRow
 import com.asmr.player.data.local.db.dao.TagWithCount
 import com.asmr.player.data.local.db.dao.TrackDao
 import com.asmr.player.data.local.db.entities.AlbumEntity
-import com.asmr.player.data.local.db.entities.AlbumFtsEntity
 import com.asmr.player.data.local.db.entities.AlbumTagEntity
 import com.asmr.player.data.local.db.entities.LocalTreeCacheEntity
 import com.asmr.player.data.local.db.entities.SubtitleEntity
@@ -47,11 +53,11 @@ import com.asmr.player.data.local.db.entities.titleForDisplay
 import com.asmr.player.data.local.library.LocalAlbumMergeService
 import com.asmr.player.data.local.library.deleteLibraryAlbum
 import com.asmr.player.data.local.library.deleteLibraryTracks
+import com.asmr.player.data.local.library.isLocalWorkNumberAvailable
 import com.asmr.player.data.remote.api.AsmrOneApi
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncCandidate
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncResolveResult
-import com.asmr.player.data.remote.dlsite.DlsiteProductInfoClient
-import com.asmr.player.data.remote.dlsite.resolveCloudSyncWorkId
+import com.asmr.player.data.remote.dlsite.resolveCloudSyncRjCode
 import com.asmr.player.data.remote.dlsite.resolveDlsiteCloudSync
 import com.asmr.player.data.remote.dlsite.resolveSelectedDlsiteCloudSync
 import com.asmr.player.data.remote.scraper.DLSiteScraper
@@ -59,11 +65,11 @@ import com.asmr.player.data.remote.download.DownloadDestination
 import com.asmr.player.data.remote.download.DownloadDestinationStore
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.domain.model.Album
-import com.asmr.player.domain.model.Track
 import com.asmr.player.playback.PlayerConnection
 import com.asmr.player.ui.common.queryTrackFileSize
 import com.asmr.player.util.GlobalSyncState
 import com.asmr.player.util.AlbumWorkNo
+import com.asmr.player.util.DlsiteWorkNo
 import com.asmr.player.util.ScanRootsStore
 import com.asmr.player.util.SubtitleEntry
 import com.asmr.player.util.SubtitleMatchSupport
@@ -71,11 +77,10 @@ import com.asmr.player.util.SubtitleParser
 import com.asmr.player.util.MessageManager
 import com.asmr.player.util.SyncCoordinator
 import com.asmr.player.util.TagNormalizer
-import com.asmr.player.util.TrackKeyNormalizer
 import com.asmr.player.util.isOnlineTrackPath
 import com.asmr.player.util.isScannableLocalDirectoryName
 import com.asmr.player.util.isVirtualAlbumPath
-import com.asmr.player.util.EmbeddedMediaExtractor
+import com.asmr.player.data.local.library.refreshScannedAlbumCover
 import com.asmr.player.work.AlbumCoverThumbWorker
 import com.asmr.player.work.TrackDurationWorker
 import com.google.gson.Gson
@@ -96,7 +101,6 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
@@ -138,10 +142,11 @@ data class BulkProgress(
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     private val database: AppDatabase,
+    private val albumTagRepository: AlbumTagRepository,
+    private val cloudSyncTags: com.asmr.player.data.repository.CloudSyncTagRepository,
     private val albumDao: AlbumDao,
     private val trackDao: TrackDao,
     private val dlsiteScraper: DLSiteScraper,
-    private val dlsiteProductInfoClient: DlsiteProductInfoClient,
     private val asmrOneApi: AsmrOneApi,
     private val settingsRepository: SettingsRepository,
     private val downloadDestinationStore: DownloadDestinationStore,
@@ -255,7 +260,7 @@ class LibraryViewModel @Inject constructor(
     init {
         viewModelScope.launch(Dispatchers.IO) {
             _scanRoots.value = runCatching { scanRootsStore.getRoots() }.getOrDefault(emptySet())
-            ensureTagTablesInitialized()
+            albumTagRepository.ensureTagTablesInitialized()
             restoreLibraryPreferences()
             backfillLegacyOnlineSavedAlbumRoots()
         }
@@ -338,8 +343,10 @@ class LibraryViewModel @Inject constructor(
             circle = circle,
             cv = cv,
             tags = baseTags,
+            tagDetails = com.asmr.player.domain.model.AlbumTagCodec.decode(tagDetailsJson),
             coverUrl = coverUrl,
-            coverPath = coverPath,
+            coverPath = manualCoverPath.ifBlank { coverPath },
+            manualCoverPath = manualCoverPath,
             coverThumbPath = coverThumbPath,
             workId = workId,
             rjCode = rjCode.ifBlank { workId },
@@ -373,15 +380,13 @@ class LibraryViewModel @Inject constructor(
 
     private suspend fun refreshAlbumAudioAggregate(albumId: Long) {
         if (albumId <= 0L) return
-        val entity = albumDao.getAlbumById(albumId) ?: return
         val tracks = trackDao.getTracksForAlbumOnce(albumId)
         val aggregate = computeAlbumAudioAggregate(tracks)
-        albumDao.updateAlbum(
-            entity.copy(
-                audioTrackCount = aggregate.trackCount,
-                audioTotalDuration = aggregate.totalDuration,
-                audioTotalSizeBytes = aggregate.totalSizeBytes,
-            )
+        albumDao.updateAlbumAudioAggregate(
+            albumId = albumId,
+            trackCount = aggregate.trackCount,
+            totalDuration = aggregate.totalDuration,
+            totalSizeBytes = aggregate.totalSizeBytes,
         )
     }
 
@@ -448,10 +453,6 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
-    fun setSourceFilter(filter: LibrarySourceFilter?) {
-        updateFilters { current -> current.copy(source = filter.takeUnless { it == LibrarySourceFilter.Both }) }
-    }
-
     fun applyFilters(spec: LibraryQuerySpec) {
         applyFilters(PersistedLibraryFilters.fromSpec(spec))
     }
@@ -496,10 +497,6 @@ class LibraryViewModel @Inject constructor(
 
     fun clearFilters() {
         applyFilters(PersistedLibraryFilters.Empty)
-    }
-
-    fun applyPreset(preset: LibraryFilterPreset) {
-        applyFilters(preset.spec)
     }
 
     fun savePreset(name: String, spec: LibraryQuerySpec = _querySpec.value) {
@@ -570,7 +567,7 @@ class LibraryViewModel @Inject constructor(
                     if (refs.isNotEmpty()) tagDao.insertAlbumTags(refs)
                 }
             }
-            upsertAlbumFtsIndex(albumId, entity)
+            albumTagRepository.upsertAlbumFtsIndex(albumId, entity)
         }
     }
 
@@ -623,7 +620,7 @@ class LibraryViewModel @Inject constructor(
             }
             albumIds.forEach { albumId ->
                 val entity = albumDao.getAlbumById(albumId) ?: return@forEach
-                upsertAlbumFtsIndex(albumId, entity)
+                albumTagRepository.upsertAlbumFtsIndex(albumId, entity)
             }
         }
     }
@@ -648,7 +645,7 @@ class LibraryViewModel @Inject constructor(
             }
             albumIds.forEach { albumId ->
                 val entity = albumDao.getAlbumById(albumId) ?: return@forEach
-                upsertAlbumFtsIndex(albumId, entity)
+                albumTagRepository.upsertAlbumFtsIndex(albumId, entity)
             }
         }
     }
@@ -667,36 +664,23 @@ class LibraryViewModel @Inject constructor(
         _bulkProgress.value = null
     }
 
-    private suspend fun cancelBulkTaskAndJoinLocked(timeoutMs: Long = 1_500L) {
-        val job = bulkJob ?: run {
-            _bulkProgress.value = null
-            return
-        }
-        job.cancel()
-        withTimeoutOrNull(timeoutMs) { job.join() }
-        if (bulkJob == job) {
-            bulkJob = null
-        }
-        _bulkProgress.value = null
-    }
-
     private fun isBulkTaskRunning(): Boolean {
         return bulkJob?.isActive == true
     }
 
     private fun showSyncBusy(nextAction: String) {
-        messageManager.showInfo("请先完成或取消本地文件任务，再$nextAction")
+        messageManager.showInfo(appString(R.string.ui_finish_or_cancel_the_local_file_task_before_8d9564, nextAction))
     }
 
     private fun tryRegisterAlbumJob(albumId: Long, taskName: String): Boolean {
         if (albumId <= 0L) return false
         if (isBulkTaskRunning()) {
-            messageManager.showInfo("正在执行批量任务，请先取消后再$taskName")
+            messageManager.showInfo(appString(R.string.ui_batch_tasks_are_being_executed_please_cancel_first, taskName))
             return false
         }
         val existing = albumJobs[albumId]
         if (existing?.isActive == true) {
-            messageManager.showInfo("该专辑正在执行${taskName}")
+            messageManager.showInfo(appString(R.string.ui_the_album_is_executing, taskName))
             return false
         }
         return true
@@ -705,13 +689,13 @@ class LibraryViewModel @Inject constructor(
     fun cancelAlbumTask(albumId: Long) {
         val job = albumJobs.remove(albumId)
         if (job == null) {
-            messageManager.showInfo("没有可取消的任务")
+            messageManager.showInfo(appString(R.string.ui_there_are_no_tasks_to_cancel))
             return
         }
         job.cancel()
         cloudSyncSelectionQueue.cancelForAlbum(albumId)
         _syncStatus.value -= albumId
-        messageManager.showInfo("已取消任务")
+        messageManager.showInfo(appString(R.string.ui_task_canceled))
     }
 
     fun confirmCloudSyncSelection(workno: String) {
@@ -724,7 +708,7 @@ class LibraryViewModel @Inject constructor(
 
     fun ignoreAllCloudSyncSelections() {
         cloudSyncSelectionQueue.ignoreAllRemainingInBatch()
-        messageManager.showInfo("已忽略本轮剩余待确认项")
+        messageManager.showInfo(appString(R.string.ui_the_remaining_items_to_be_confirmed_in_this))
     }
 
     private fun startBulkProgress(phase: BulkPhase, total: Int, current: Int = 0, currentAlbumTitle: String = "") {
@@ -911,7 +895,7 @@ class LibraryViewModel @Inject constructor(
 
             // 检查重复
             if (existingRoots.contains(uriString)) {
-                messageManager.showInfo("扫描目录已存在")
+                messageManager.showInfo(appString(R.string.ui_scan_directory_already_exists))
                 return false
             }
 
@@ -923,13 +907,13 @@ class LibraryViewModel @Inject constructor(
 
                     // 检查新目录是否是现有目录的子目录
                     if (isSubdirectory(newUri, existingUri)) {
-                        messageManager.showInfo("该目录已被包含在现有扫描目录中")
+                        messageManager.showInfo(appString(R.string.ui_this_directory_is_already_included_in_an_existing))
                         return false
                     }
 
                     // 检查现有目录是否是新目录的子目录
                     if (isSubdirectory(existingUri, newUri)) {
-                        messageManager.showInfo("该目录包含了现有的扫描目录，请先移除子目录")
+                        messageManager.showInfo(appString(R.string.ui_this_directory_contains_an_existing_scan_directory_please))
                         return false
                     }
                 }
@@ -938,7 +922,7 @@ class LibraryViewModel @Inject constructor(
             val added = scanRootsStore.addRoot(uriString)
             _scanRoots.value = runCatching { scanRootsStore.getRoots() }.getOrDefault(emptySet())
             if (added) {
-                messageManager.showSuccess("已添加扫描目录")
+                messageManager.showSuccess(appString(R.string.ui_scan_directory_added))
             }
             return added
         } finally {
@@ -965,20 +949,6 @@ class LibraryViewModel @Inject constructor(
         return childTreeId.startsWith(parentTreeId.trimEnd('/') + "/")
     }
 
-    fun removeScanRoot(uriString: String) {
-        val fileLease = LocalFileOperationCoordinator.shared.tryAcquire(LocalFileOperation.LIBRARY) ?: run {
-            messageManager.showInfo(LocalFileOperationCoordinator.BUSY_MESSAGE)
-            return
-        }
-        try {
-            scanRootsStore.removeRoot(uriString)
-            _scanRoots.value = runCatching { scanRootsStore.getRoots() }.getOrDefault(emptySet())
-            messageManager.showInfo("已移除扫描目录")
-        } finally {
-            fileLease.close()
-        }
-    }
-
     fun removeScanRootAndDeleteAlbums(uriString: String) {
         viewModelScope.launch(Dispatchers.IO) {
             val fileLease = database.tryBeginFileMutation(fileScopes) ?: run {
@@ -993,7 +963,8 @@ class LibraryViewModel @Inject constructor(
                 val affected = allAlbums.filter { entity ->
                     entity.path.startsWith(uriString) ||
                         (entity.localPath?.startsWith(uriString) == true) ||
-                        entity.coverPath.startsWith(uriString)
+                        entity.coverPath.startsWith(uriString) ||
+                        entity.manualCoverPath.startsWith(uriString)
                 }
 
                 affected.forEach { entity ->
@@ -1017,10 +988,12 @@ class LibraryViewModel @Inject constructor(
                             val updated = entity.copy(
                                 path = updatedPath,
                                 localPath = entity.localPath?.takeIf { !it.startsWith(uriString) },
-                                coverPath = if (entity.coverPath.startsWith(uriString)) "" else entity.coverPath
+                                coverPath = if (entity.coverPath.startsWith(uriString)) "" else entity.coverPath,
+                                manualCoverPath = if (entity.manualCoverPath.startsWith(uriString)) "" else entity.manualCoverPath,
+                                coverThumbPath = if (entity.coverPath.startsWith(uriString) || entity.manualCoverPath.startsWith(uriString)) "" else entity.coverThumbPath
                             )
                             albumDao.updateAlbum(updated)
-                            upsertAlbumFtsIndex(updated.id, updated)
+                            albumTagRepository.upsertAlbumFtsIndex(updated.id, updated)
                         }
                     } else {
                         val tracks = trackDao.getTracksForAlbumOnce(entity.id)
@@ -1032,10 +1005,12 @@ class LibraryViewModel @Inject constructor(
                         val updated = entity.copy(
                             path = if (entity.path.startsWith(uriString)) downloadPath!! else entity.path,
                             localPath = entity.localPath?.takeIf { !it.startsWith(uriString) },
-                            coverPath = if (entity.coverPath.startsWith(uriString)) "" else entity.coverPath
+                            coverPath = if (entity.coverPath.startsWith(uriString)) "" else entity.coverPath,
+                            manualCoverPath = if (entity.manualCoverPath.startsWith(uriString)) "" else entity.manualCoverPath,
+                            coverThumbPath = if (entity.coverPath.startsWith(uriString) || entity.manualCoverPath.startsWith(uriString)) "" else entity.coverThumbPath
                         )
                         albumDao.updateAlbum(updated)
-                        upsertAlbumFtsIndex(updated.id, updated)
+                        albumTagRepository.upsertAlbumFtsIndex(updated.id, updated)
                     }
                 }
             } finally {
@@ -1047,7 +1022,7 @@ class LibraryViewModel @Inject constructor(
     fun scanAllRoots(userInitiated: Boolean = true) {
         viewModelScope.launch {
             val token = syncCoordinator.tryBegin() ?: run {
-                showSyncBusy("刷新本地")
+                showSyncBusy(appString(R.string.ui_refresh_local))
                 return@launch
             }
             try {
@@ -1107,12 +1082,12 @@ class LibraryViewModel @Inject constructor(
                                 pruneOrphanedAlbumsByFilesystem()
                             }
                         }
-                        messageManager.showSuccess("扫描完成")
+                        messageManager.showSuccess(appString(R.string.ui_scan_completed))
                     } catch (e: CancellationException) {
-                        messageManager.showInfo("已取消扫描")
+                        messageManager.showInfo(appString(R.string.ui_scan_canceled))
                     } catch (e: Exception) {
                         Log.e("LibraryViewModel", "scanAllRoots failed", e)
-                        messageManager.showError("扫描失败：${e.message}")
+                        messageManager.showError(appString(R.string.ui_scan_failed, e.message))
                     } finally {
                         finishBulkProgress()
                         if (bulkJob == currentCoroutineContext()[Job]) {
@@ -1129,7 +1104,7 @@ class LibraryViewModel @Inject constructor(
     fun scanCurrentDownloadDestinationAsImport() {
         viewModelScope.launch {
             val token = syncCoordinator.tryBegin() ?: run {
-                showSyncBusy("扫描目标下载目录")
+                showSyncBusy(appString(R.string.ui_scan_target_download_directory))
                 return@launch
             }
             try {
@@ -1166,12 +1141,12 @@ class LibraryViewModel @Inject constructor(
                                 )
                             }
                         }
-                        messageManager.showSuccess("目标下载目录扫描完成")
+                        messageManager.showSuccess(appString(R.string.ui_target_download_directory_scan_completed))
                     } catch (error: CancellationException) {
-                        messageManager.showInfo("已取消目标目录扫描")
+                        messageManager.showInfo(appString(R.string.ui_target_directory_scan_canceled))
                     } catch (error: Exception) {
                         Log.e(TAG, "scanCurrentDownloadDestinationAsImport failed", error)
-                        messageManager.showError("目标目录扫描失败：${error.message}")
+                        messageManager.showError(appString(R.string.ui_target_directory_scan_failed, error.message))
                     } finally {
                         finishBulkProgress()
                         if (bulkJob == currentCoroutineContext()[Job]) bulkJob = null
@@ -1187,7 +1162,7 @@ class LibraryViewModel @Inject constructor(
         if (uriString.isBlank()) return
         viewModelScope.launch {
             val token = syncCoordinator.tryBegin() ?: run {
-                showSyncBusy("刷新目录")
+                showSyncBusy(appString(R.string.ui_refresh_directory))
                 return@launch
             }
             try {
@@ -1215,12 +1190,12 @@ class LibraryViewModel @Inject constructor(
                                 }
                             }
                         }
-                        messageManager.showSuccess("目录刷新完成")
+                        messageManager.showSuccess(appString(R.string.ui_directory_refresh_completed))
                     } catch (e: CancellationException) {
-                        messageManager.showInfo("已取消刷新")
+                        messageManager.showInfo(appString(R.string.ui_refresh_canceled))
                     } catch (e: Exception) {
                         Log.e("LibraryViewModel", "scanSingleRoot failed", e)
-                        messageManager.showError("刷新失败：${e.message}")
+                        messageManager.showError(appString(R.string.ui_refresh_failed, e.message))
                     } finally {
                         finishBulkProgress()
                         if (bulkJob == currentCoroutineContext()[Job]) {
@@ -1237,7 +1212,7 @@ class LibraryViewModel @Inject constructor(
     fun syncMetadata() {
         viewModelScope.launch {
             val token = syncCoordinator.tryBegin() ?: run {
-                showSyncBusy("云同步")
+                showSyncBusy(appString(R.string.ui_cloud_sync))
                 return@launch
             }
             try {
@@ -1246,12 +1221,12 @@ class LibraryViewModel @Inject constructor(
                     try {
                         val albums = withContext(Dispatchers.IO) { albumDao.getAllAlbumsOnce() }
                         runBatchCloudSync(albums)
-                        messageManager.showSuccess("全量同步完成")
+                        messageManager.showSuccess(appString(R.string.ui_fully_synchronized))
                     } catch (e: CancellationException) {
-                        messageManager.showInfo("已取消云同步")
+                        messageManager.showInfo(appString(R.string.ui_cloud_sync_canceled))
                     } catch (e: Exception) {
                         Log.e("LibraryViewModel", "syncMetadata failed", e)
-                        messageManager.showError("云同步失败：${e.message}")
+                        messageManager.showError(appString(R.string.ui_cloud_sync_failed, e.message))
                     } finally {
                         finishBulkProgress()
                         if (bulkJob == currentCoroutineContext()[Job]) {
@@ -1269,7 +1244,7 @@ class LibraryViewModel @Inject constructor(
         if (uriString.isBlank()) return
         viewModelScope.launch {
             val token = syncCoordinator.tryBegin() ?: run {
-                showSyncBusy("云同步")
+                showSyncBusy(appString(R.string.ui_cloud_sync))
                 return@launch
             }
             try {
@@ -1283,12 +1258,12 @@ class LibraryViewModel @Inject constructor(
                                 }
                         }
                         runBatchCloudSync(albums)
-                        messageManager.showSuccess("云同步完成")
+                        messageManager.showSuccess(appString(R.string.ui_cloud_synchronization_completed))
                     } catch (e: CancellationException) {
-                        messageManager.showInfo("已取消云同步")
+                        messageManager.showInfo(appString(R.string.ui_cloud_sync_canceled))
                     } catch (e: Exception) {
                         Log.e("LibraryViewModel", "syncMetadataForRoot failed", e)
-                        messageManager.showError("云同步失败：${e.message}")
+                        messageManager.showError(appString(R.string.ui_cloud_sync_failed, e.message))
                     } finally {
                         finishBulkProgress()
                         if (bulkJob == currentCoroutineContext()[Job]) {
@@ -1303,11 +1278,11 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun syncAlbumMetadata(album: Album) {
-        if (!tryRegisterAlbumJob(album.id, "云同步")) return
+        if (!tryRegisterAlbumJob(album.id, appString(R.string.ui_cloud_sync))) return
         val job = viewModelScope.launch {
             val ownerJob = currentCoroutineContext()[Job]
             val token = syncCoordinator.tryBegin(fileScopes.album(album.id)) ?: run {
-                showSyncBusy("云同步")
+                showSyncBusy(appString(R.string.ui_cloud_sync))
                 albumJobs.remove(album.id, ownerJob)
                 return@launch
             }
@@ -1315,7 +1290,7 @@ class LibraryViewModel @Inject constructor(
                 val entity = withContext(Dispatchers.IO) { albumDao.getAlbumById(album.id) } ?: return@launch
                 withContext(Dispatchers.IO) { syncAlbumMetadataInternal(entity) }
             } catch (e: CancellationException) {
-                messageManager.showInfo("已取消云同步")
+                messageManager.showInfo(appString(R.string.ui_cloud_sync_canceled))
             } finally {
                 albumJobs.remove(album.id, ownerJob)
                 syncCoordinator.end(token)
@@ -1352,7 +1327,7 @@ class LibraryViewModel @Inject constructor(
         }
         val pendingCount = cloudSyncSelectionQueue.pendingCount()
         if (pendingCount > 0) {
-            messageManager.showInfo("主流程已完成，剩余${pendingCount}项待确认")
+            messageManager.showInfo(appString(R.string.ui_the_main_process_has_been_completed_and_items, pendingCount))
         }
         pendingSelections.awaitAll()
         } finally {
@@ -1360,31 +1335,28 @@ class LibraryViewModel @Inject constructor(
         }
     }
     private suspend fun resolveAlbumCloudSync(entity: AlbumEntity): DlsiteCloudSyncResolveResult {
-        return resolveDlsiteCloudSync(
+        val result = resolveDlsiteCloudSync(
             keyword = entity.title.trim(),
-            baseWorkno = entity.rjCode.ifBlank { entity.workId }.trim().uppercase(),
+            baseWorkno = DlsiteWorkNo.normalizeWorkNo(entity.rjCode)
+                .ifBlank { DlsiteWorkNo.normalizeWorkNo(entity.workId) },
             search = { searchKeyword, locale ->
                 dlsiteScraper.search(searchKeyword, page = 1, order = "trend", locale = locale).items
-            },
-            fetchLanguageEditions = { productId ->
-                dlsiteProductInfoClient.fetchLanguageEditions(productId)
             },
             fetchDetails = { workno, locale ->
                 dlsiteScraper.getDetails(workno, locale = locale)
             }
         )
+        return cloudSyncTags.enrich(result, entity.toAlbum())
     }
 
-    private suspend fun resolveSelectedAlbumCloudSync(workno: String): DlsiteCloudSyncResolveResult {
-        return resolveSelectedDlsiteCloudSync(
+    private suspend fun resolveSelectedAlbumCloudSync(workno: String, entity: AlbumEntity): DlsiteCloudSyncResolveResult {
+        val result = resolveSelectedDlsiteCloudSync(
             workno = workno,
-            fetchLanguageEditions = { productId ->
-                dlsiteProductInfoClient.fetchLanguageEditions(productId)
-            },
             fetchDetails = { selectedWorkno, locale ->
                 dlsiteScraper.getDetails(selectedWorkno, locale = locale)
             }
         )
+        return cloudSyncTags.enrich(result, entity.toAlbum().copy(rjCode = workno, workId = workno))
     }
 
     private suspend fun applyResolvedCloudSync(
@@ -1393,19 +1365,25 @@ class LibraryViewModel @Inject constructor(
     ) {
         val resolvedWorkno = result.workno
         val details = result.details
-        val updated = entity.copy(
-            title = details.title.ifBlank { entity.title },
-            circle = details.circle.ifBlank { entity.circle },
-            cv = details.cv.ifBlank { entity.cv },
-            tags = if (details.tags.isNotEmpty()) details.tags.joinToString(",") else entity.tags,
-            coverUrl = details.coverUrl.ifBlank { entity.coverUrl },
-            description = details.description.ifBlank { entity.description },
-            workId = resolveCloudSyncWorkId(entity.workId, resolvedWorkno),
-            rjCode = resolvedWorkno
-        )
-        albumDao.updateAlbum(updated)
-        upsertAlbumFtsIndex(updated.id, updated)
-        upsertAlbumTagsFromCsv(updated.id, updated.tags, TagSource.AUTO)
+        val updated = database.withTransaction {
+            val current = albumDao.getAlbumById(entity.id) ?: return@withTransaction null
+            require(albumDao.isLocalWorkNumberAvailable(current.id, resolvedWorkno)) {
+                appString(R.string.ui_is_already_in_your_library, resolvedWorkno)
+            }
+            current.copy(
+                title = details.title.ifBlank { current.title },
+                circle = details.circle.ifBlank { current.circle },
+                cv = details.cv.ifBlank { current.cv },
+                tags = if (details.tags.isNotEmpty()) details.tags.joinToString(",") else current.tags,
+                    tagDetailsJson = com.asmr.player.domain.model.AlbumTagCodec.encode(com.asmr.player.domain.model.mergeAlbumTags(com.asmr.player.domain.model.AlbumTagCodec.decode(current.tagDetailsJson), details.tagDetails)),
+                coverUrl = details.coverUrl.ifBlank { current.coverUrl },
+                description = details.description.ifBlank { current.description },
+                workId = current.workId.ifBlank { resolvedWorkno },
+                rjCode = resolveCloudSyncRjCode(current.rjCode, current.workId, resolvedWorkno)
+            ).also { albumDao.updateAlbum(it) }
+        } ?: return
+        albumTagRepository.upsertAlbumFtsIndex(updated.id, updated)
+        albumTagRepository.upsertAlbumTagsFromCsv(updated.id, updated.tags, TagSource.AUTO)
         if (updated.coverPath.trim().isBlank() && updated.coverThumbPath.trim().isBlank()) {
             runCatching {
                 ensureAlbumCoverSaved(updated.id, updated.coverPath, updated.coverUrl)
@@ -1426,23 +1404,23 @@ class LibraryViewModel @Inject constructor(
             ).await()
             currentCoroutineContext().ensureActive()
             if (selectedWorkno != null) {
-                when (val selectedResult = resolveSelectedAlbumCloudSync(selectedWorkno)) {
+                when (val selectedResult = resolveSelectedAlbumCloudSync(selectedWorkno, entity)) {
                     is DlsiteCloudSyncResolveResult.Success -> {
                         applyResolvedCloudSync(entity, selectedResult)
                         if (!silent) {
-                            messageManager.showSuccess("元数据同步成功")
+                            messageManager.showSuccess(appString(R.string.ui_metadata_synchronization_successful))
                         }
                     }
 
                     is DlsiteCloudSyncResolveResult.Ambiguous -> {
                         if (!silent) {
-                            messageManager.showError("同步失败：搜索结果不唯一")
+                            messageManager.showError(appString(R.string.ui_synchronization_failed_search_results_are_not_unique))
                         }
                     }
 
                     DlsiteCloudSyncResolveResult.NotFound -> {
                         if (!silent) {
-                            messageManager.showError("同步失败：未找到专辑信息")
+                            messageManager.showError(appString(R.string.ui_sync_failed_album_information_not_found))
                         }
                     }
                 }
@@ -1459,9 +1437,9 @@ class LibraryViewModel @Inject constructor(
 
     private suspend fun reportSyncAlbumMetadataFailure(entityId: Long, error: Exception, silent: Boolean) {
         Log.e("LibraryViewModel", "syncAlbumMetadataInternal failed: $entityId", error)
-        _syncStatus.value += (entityId to SyncStatus.Error(error.message ?: "同步失败"))
+        _syncStatus.value += (entityId to SyncStatus.Error(error.message ?: appString(R.string.ui_sync_failed)))
         if (!silent) {
-            messageManager.showError("同步异常：${error.message}")
+            messageManager.showError(appString(R.string.ui_synchronization_exception, error.message))
             delay(3000)
         }
         _syncStatus.value -= entityId
@@ -1484,7 +1462,7 @@ class LibraryViewModel @Inject constructor(
             when (result) {
                 is DlsiteCloudSyncResolveResult.Success -> {
                     applyResolvedCloudSync(entity, result)
-                    if (!silent) messageManager.showSuccess("元数据同步成功")
+                    if (!silent) messageManager.showSuccess(appString(R.string.ui_metadata_synchronization_successful))
                 }
 
                 is DlsiteCloudSyncResolveResult.Ambiguous -> {
@@ -1498,7 +1476,7 @@ class LibraryViewModel @Inject constructor(
                 }
 
                 DlsiteCloudSyncResolveResult.NotFound -> {
-                    if (!silent) messageManager.showError("同步失败：未找到专辑信息")
+                    if (!silent) messageManager.showError(appString(R.string.ui_sync_failed_album_information_not_found))
                 }
             }
             if (clearSyncStatus) {
@@ -1511,23 +1489,13 @@ class LibraryViewModel @Inject constructor(
             throw e
         } catch (e: Exception) {
             Log.e("LibraryViewModel", "syncAlbumMetadataInternal failed: ${entity.id}", e)
-            _syncStatus.value += (entity.id to SyncStatus.Error(e.message ?: "同步失败"))
-            if (!silent) messageManager.showError("同步异常：${e.message}")
+            _syncStatus.value += (entity.id to SyncStatus.Error(e.message ?: appString(R.string.ui_sync_failed)))
+            if (!silent) messageManager.showError(appString(R.string.ui_synchronization_exception, e.message))
             if (!silent) delay(3000)
             _syncStatus.value -= entity.id
         }
     }
 
-    private fun isLikelyPlaceholderCover(url: String): Boolean {
-        val s = url.trim().lowercase()
-        if (!s.startsWith("http")) return true
-        return s.contains("noimage") ||
-            s.contains("no_image") ||
-            s.contains("no-image") ||
-            s.contains("placeholder") ||
-            s.endsWith("/0.jpg") ||
-            s.endsWith("/0.png")
-    }
 
     private suspend fun ensureAlbumCoverSaved(
         albumId: Long,
@@ -1567,7 +1535,15 @@ class LibraryViewModel @Inject constructor(
         if (coverFile.exists() && coverFile.length() > 0L && thumbFile.exists() && thumbFile.length() > 0L) {
             val entity = runCatching { albumDao.getAlbumById(albumId) }.getOrNull()
             if (entity != null && (entity.coverPath != coverFile.absolutePath || entity.coverThumbPath != thumbFile.absolutePath)) {
-                runCatching { albumDao.updateAlbum(entity.copy(coverPath = coverFile.absolutePath, coverThumbPath = thumbFile.absolutePath)) }
+                runCatching {
+                    albumDao.updateAutomaticCoverIfSourceMatches(
+                        albumId = albumId,
+                        expectedCoverPath = coverPath,
+                        expectedCoverUrl = coverUrl,
+                        coverPath = coverFile.absolutePath,
+                        coverThumbPath = thumbFile.absolutePath,
+                    )
+                }
             }
             return true
         }
@@ -1623,8 +1599,13 @@ class LibraryViewModel @Inject constructor(
         }
 
         return runCatching {
-            val entity = albumDao.getAlbumById(albumId) ?: return true
-            albumDao.updateAlbum(entity.copy(coverPath = coverFile.absolutePath, coverThumbPath = thumbFile.absolutePath))
+            albumDao.updateAutomaticCoverIfSourceMatches(
+                albumId = albumId,
+                expectedCoverPath = coverPath,
+                expectedCoverUrl = coverUrl,
+                coverPath = coverFile.absolutePath,
+                coverThumbPath = thumbFile.absolutePath,
+            )
             debugLog("ensureAlbumCoverSaved ok albumId=$albumId cover=${coverFile.length()} thumb=${thumbFile.length()}")
             true
         }.getOrElse { e ->
@@ -1654,11 +1635,11 @@ class LibraryViewModel @Inject constructor(
     fun rescanAlbum(album: Album) {
         val localPaths = album.getAllLocalPaths()
         if (localPaths.isEmpty()) return
-        if (!tryRegisterAlbumJob(album.id, "本地同步")) return
+        if (!tryRegisterAlbumJob(album.id, appString(R.string.ui_local_sync))) return
         val job = viewModelScope.launch {
             val ownerJob = currentCoroutineContext()[Job]
             val token = syncCoordinator.tryBegin(fileScopes.album(album.id)) ?: run {
-                showSyncBusy("本地同步")
+                showSyncBusy(appString(R.string.ui_local_sync))
                 albumJobs.remove(album.id, ownerJob)
                 return@launch
             }
@@ -1725,26 +1706,30 @@ class LibraryViewModel @Inject constructor(
                                 path = updatedPath,
                                 localPath = entity.localPath?.takeIf { lp -> prefixes.none { pfx -> lp.startsWith(pfx) } },
                                 downloadPath = entity.downloadPath?.takeIf { dp -> prefixes.none { pfx -> dp.startsWith(pfx) } },
-                                coverPath = entity.coverPath.takeIf { cp -> prefixes.none { pfx -> cp.startsWith(pfx) } }.orEmpty()
+                                coverPath = entity.coverPath.takeIf { cp -> prefixes.none { pfx -> cp.startsWith(pfx) } }.orEmpty(),
+                                manualCoverPath = entity.manualCoverPath.takeIf { cp -> prefixes.none { pfx -> cp.startsWith(pfx) } }.orEmpty(),
+                                coverThumbPath = entity.coverThumbPath.takeUnless {
+                                    prefixes.any { entity.coverPath.startsWith(it) || entity.manualCoverPath.startsWith(it) }
+                                }.orEmpty()
                             )
                             albumDao.updateAlbum(updated)
-                            upsertAlbumFtsIndex(updated.id, updated)
+                            albumTagRepository.upsertAlbumFtsIndex(updated.id, updated)
                         }
                     }
                 }
                 _syncStatus.value -= album.id
                 if (removed) {
-                    messageManager.showInfo("目录不存在，已从本地库移除")
+                    messageManager.showInfo(appString(R.string.ui_the_directory_does_not_exist_and_has_been))
                 } else {
-                    messageManager.showSuccess("重扫完成")
+                    messageManager.showSuccess(appString(R.string.ui_rescan_completed))
                 }
             } catch (e: CancellationException) {
                 _syncStatus.value -= album.id
-                messageManager.showInfo("已取消重扫")
+                messageManager.showInfo(appString(R.string.ui_rescan_canceled))
             } catch (e: Exception) {
                 Log.e(TAG, "rescanAlbum failed: ${album.id}", e)
-                _syncStatus.value += (album.id to SyncStatus.Error(e.message ?: "重扫失败"))
-                messageManager.showError("重扫失败：${e.message}")
+                _syncStatus.value += (album.id to SyncStatus.Error(e.message ?: appString(R.string.ui_rescan_failed)))
+                messageManager.showError(appString(R.string.ui_rescan_failed_d1fca6, e.message))
                 delay(3000)
                 _syncStatus.value -= album.id
             } finally {
@@ -1763,7 +1748,7 @@ class LibraryViewModel @Inject constructor(
             try {
                 if (album.id <= 0L) return@launch
                 if (isBulkTaskRunning()) {
-                    messageManager.showInfo("正在执行批量任务，请先取消后再删除")
+                    messageManager.showInfo(appString(R.string.ui_a_batch_task_is_being_executed_please_cancel))
                     return@launch
                 }
 
@@ -1792,12 +1777,12 @@ class LibraryViewModel @Inject constructor(
                         deletePathSafely(downloadRoot)
                     }
 
-                    messageManager.showSuccess("已删除专辑")
+                    messageManager.showSuccess(appString(R.string.ui_album_deleted))
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
                     Log.e("LibraryViewModel", "deleteAlbum failed: ${album.id}", e)
-                    messageManager.showError("删除失败：${e.message ?: "未知错误"}")
+                    messageManager.showError(appString(R.string.ui_delete_failed, e.message ?: appString(R.string.ui_unknown_error)))
                 }
             } finally {
                 fileLease.close()
@@ -1819,7 +1804,7 @@ class LibraryViewModel @Inject constructor(
             try {
                 val relativePath = normalizeLocalTreeRelativePath(target.relativePath)
                 if (album.id <= 0L || relativePath == null) {
-                    messageManager.showError("删除失败：目录项路径无效")
+                    messageManager.showError(appString(R.string.ui_delete_failed_invalid_directory_entry_path))
                     withContext(Dispatchers.Main.immediate) { onComplete(false) }
                     return@launch
                 }
@@ -1832,7 +1817,7 @@ class LibraryViewModel @Inject constructor(
                         else -> deleteLocalTreeFile(albumRoots, target.absolutePath.orEmpty())
                     }
                     check(physicalDeletionSucceeded) {
-                        if (target.isDirectory) "无法删除目录，请检查存储权限" else "无法删除文件，请检查存储权限"
+                        if (target.isDirectory) appString(R.string.ui_unable_to_delete_directory_please_check_storage_permissions) else appString(R.string.ui_unable_to_delete_file_please_check_storage_permissions)
                     }
 
                     val verifiedTrackIds = target.trackIds
@@ -1874,13 +1859,13 @@ class LibraryViewModel @Inject constructor(
                         refreshAlbumAudioAggregate(album.id)
                     }
 
-                    messageManager.showSuccess(if (target.isDirectory) "已删除目录" else "已删除文件")
+                    messageManager.showSuccess(if (target.isDirectory) appString(R.string.ui_directory_deleted) else appString(R.string.ui_deleted_file_918f79))
                     withContext(Dispatchers.Main.immediate) { onComplete(true) }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (error: Exception) {
                     Log.e(TAG, "deleteAlbumTreeEntry failed: ${target.relativePath}", error)
-                    messageManager.showError("删除失败：${error.message ?: "未知错误"}")
+                    messageManager.showError(appString(R.string.ui_delete_failed, error.message ?: appString(R.string.ui_unknown_error)))
                     withContext(Dispatchers.Main.immediate) { onComplete(false) }
                 }
             } finally {
@@ -1925,9 +1910,9 @@ class LibraryViewModel @Inject constructor(
                 refreshAlbumAudioAggregate(track.albumId)
 
                 if (deletedFile) {
-                    messageManager.showSuccess("已删除文件并移除")
+                    messageManager.showSuccess(appString(R.string.ui_file_deleted_and_removed))
                 } else {
-                    messageManager.showSuccess("已从专辑移除")
+                    messageManager.showSuccess(appString(R.string.ui_removed_from_album))
                 }
             } finally {
                 fileLease.close()
@@ -2034,12 +2019,12 @@ class LibraryViewModel @Inject constructor(
 
     private fun resolveTreeDocumentUri(rootUriString: String, relativePath: String): Result<Uri?> = runCatching {
         val rootUri = Uri.parse(rootUriString)
-        val authority = requireNotNull(rootUri.authority) { "目录授权地址无效" }
+        val authority = requireNotNull(rootUri.authority) { appString(R.string.ui_directory_authorization_address_is_invalid) }
         val treeId = runCatching { DocumentsContract.getTreeDocumentId(rootUri) }.getOrDefault("")
         var documentId = runCatching { DocumentsContract.getDocumentId(rootUri) }
             .getOrDefault(treeId)
             .ifBlank { treeId }
-        check(documentId.isNotBlank()) { "无法读取目录授权" }
+        check(documentId.isNotBlank()) { appString(R.string.ui_unable_to_read_directory_authorization) }
         val treeUri = if (treeId.isNotBlank()) {
             DocumentsContract.buildTreeDocumentUri(authority, treeId)
         } else {
@@ -2058,7 +2043,7 @@ class LibraryViewModel @Inject constructor(
                 null,
                 null,
                 null,
-            ) ?: throw IllegalStateException("无法访问目录，请重新授权存储权限")
+            ) ?: throw IllegalStateException(appString(R.string.ui_unable_to_access_directory_please_re_authorize_storage))
             val childId = cursor.use {
                 val idIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
                 val nameIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
@@ -2120,111 +2105,15 @@ class LibraryViewModel @Inject constructor(
                 val updated = entity.copy(localPath = albumDir.absolutePath)
                 albumDao.updateAlbum(updated)
                 runCatching { database.localTreeCacheDao().deleteByAlbum(entity.id) }
-                upsertAlbumFtsIndex(updated.id, updated)
+                albumTagRepository.upsertAlbumFtsIndex(updated.id, updated)
             }
         }
     }
 
-    private fun buildTagsToken(tagsCsv: String): String {
-        return tagsCsv.split(",")
-            .map { TagNormalizer.normalize(it) }
-            .filter { it.isNotBlank() }
-            .distinct()
-            .joinToString(" ")
-    }
 
-    private suspend fun upsertAlbumFtsIndex(albumId: Long, entity: AlbumEntity) {
-        val userTagsCsv = database.tagDao().getAlbumTagsCsvOnce(albumId, TagSource.USER).orEmpty()
-        val combinedTagsCsv = buildString {
-            append(entity.tags)
-            if (userTagsCsv.isNotBlank()) {
-                if (isNotEmpty() && last() != ',') append(',')
-                append(userTagsCsv)
-            }
-        }
-        val tagsToken = buildTagsToken(combinedTagsCsv)
-        database.albumFtsDao().upsert(
-            listOf(
-                AlbumFtsEntity(
-                    albumId = albumId,
-                    title = entity.title,
-                    circle = entity.circle,
-                    cv = entity.cv,
-                    rjCode = entity.rjCode,
-                    workId = entity.workId,
-                    tagsToken = tagsToken
-                )
-            )
-        )
-    }
 
-    private fun parseAlbumTags(tagsCsv: String): List<Pair<String, String>> {
-        return tagsCsv.split(",")
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .map { it to TagNormalizer.normalize(it) }
-            .filter { it.second.isNotBlank() }
-            .distinctBy { it.second }
-    }
 
-    private suspend fun upsertAlbumTagsFromCsv(albumId: Long, tagsCsv: String, source: Int) {
-        val tags = parseAlbumTags(tagsCsv)
-        if (tags.isEmpty()) return
 
-        val tagEntities = tags.map { (name, normalized) ->
-            TagEntity(name = name, nameNormalized = normalized)
-        }
-        val tagDao = database.tagDao()
-        tagDao.insertTags(tagEntities)
-
-        val normalizedList = tags.map { it.second }
-        val persisted = tagDao.getTagsByNormalized(normalizedList)
-        val idByNormalized = persisted.associateBy({ it.nameNormalized }, { it.id })
-
-        tagDao.deleteAlbumTagsByAlbumIdExceptSource(albumId, TagSource.USER)
-        val refs = normalizedList.mapNotNull { normalized ->
-            val tagId = idByNormalized[normalized] ?: return@mapNotNull null
-            AlbumTagEntity(albumId = albumId, tagId = tagId, source = source)
-        }
-        if (refs.isNotEmpty()) tagDao.insertAlbumTags(refs)
-    }
-
-    private suspend fun ensureTagTablesInitialized() {
-        val tagDao = database.tagDao()
-        val tagCount = runCatching { tagDao.countTags() }.getOrDefault(0L)
-        if (tagCount > 0L) return
-
-        val albums = runCatching { albumDao.getAllAlbumsOnce() }.getOrDefault(emptyList())
-        val allPairs = albums.flatMap { parseAlbumTags(it.tags) }
-        if (allPairs.isEmpty()) return
-
-        val firstNameByNormalized = LinkedHashMap<String, String>()
-        allPairs.forEach { (name, normalized) ->
-            if (!firstNameByNormalized.containsKey(normalized)) firstNameByNormalized[normalized] = name
-        }
-
-        val tagEntities = firstNameByNormalized.map { (normalized, name) ->
-            TagEntity(name = name, nameNormalized = normalized)
-        }
-        tagDao.insertTags(tagEntities)
-        val persisted = tagDao.getTagsByNormalized(firstNameByNormalized.keys.toList())
-        val idByNormalized = persisted.associateBy({ it.nameNormalized }, { it.id })
-
-        database.withTransaction {
-            albums.forEach { album ->
-                val pairs = parseAlbumTags(album.tags)
-                if (pairs.isEmpty()) return@forEach
-                val refs = pairs.mapNotNull { (_, normalized) ->
-                    val tagId = idByNormalized[normalized] ?: return@mapNotNull null
-                    AlbumTagEntity(albumId = album.id, tagId = tagId, source = TagSource.AUTO)
-                }
-                if (refs.isNotEmpty()) {
-                    tagDao.deleteAlbumTagsByAlbumIdExceptSource(album.id, TagSource.USER)
-                    tagDao.insertAlbumTags(refs)
-                }
-            }
-        }
-    }
 
     private suspend fun scanFromDownloadedDir(
         importAll: Boolean = false,
@@ -2245,7 +2134,7 @@ class LibraryViewModel @Inject constructor(
         val baseDir = File(destination.root)
         if (!baseDir.exists() || !baseDir.isDirectory) return
         val foundDownloadPaths = LinkedHashSet<String>()
-        val children = checkNotNull(baseDir.listFiles()) { "无法读取下载目录" }
+        val children = checkNotNull(baseDir.listFiles()) { appString(R.string.ui_unable_to_read_download_folder) }
         children
             .filter { albumDir ->
                 albumDir.isDirectory && isScannableLocalDirectoryName(albumDir.name) &&
@@ -2281,8 +2170,10 @@ class LibraryViewModel @Inject constructor(
                 circle = existing?.circle ?: "",
                 cv = existing?.cv ?: "",
                 tags = existing?.tags ?: "",
+                tagDetailsJson = existing?.tagDetailsJson ?: "[]",
                 coverUrl = existing?.coverUrl ?: "",
-                coverPath = coverFile?.absolutePath ?: (existing?.coverPath ?: ""),
+                coverPath = existing?.coverPath.orEmpty().ifBlank { coverFile?.absolutePath.orEmpty() },
+                manualCoverPath = existing?.manualCoverPath.orEmpty(),
                 coverThumbPath = existing?.coverThumbPath ?: "",
                 workId = existing?.workId?.takeIf { it.isNotBlank() } ?: rj,
                 rjCode = existing?.rjCode?.takeIf { it.isNotBlank() } ?: rj,
@@ -2291,25 +2182,9 @@ class LibraryViewModel @Inject constructor(
                 audioTotalDuration = aggregate.totalDuration,
                 audioTotalSizeBytes = aggregate.totalSizeBytes,
             )
-            val albumId = albumDao.insertAlbum(entity)
-            upsertAlbumFtsIndex(albumId, entity.copy(id = albumId))
-            upsertAlbumTagsFromCsv(albumId, entity.tags, TagSource.SCAN)
-            if (entity.coverPath.isBlank()) {
-                val audio = albumDir.walkTopDown()
-                    .onEnter { directory -> directory == albumDir || isScannableLocalDirectoryName(directory.name) }
-                    .firstOrNull { it.isFile && setOf("mp3","flac","wav","m4a","ogg","aac","opus").contains(it.extension.lowercase()) }
-                if (audio != null) {
-                    val bmp = EmbeddedMediaExtractor.extractArtwork(context, audio.absolutePath)
-                    if (bmp != null) {
-                        val saved = EmbeddedMediaExtractor.saveArtworkToCache(context, albumId, bmp)
-                        if (!saved.isNullOrBlank()) {
-                            val updated = entity.copy(coverPath = saved)
-                            albumDao.updateAlbum(updated)
-                        }
-                    }
-                }
-            }
-            enqueueAlbumCoverThumbWork(albumId)
+            val albumId = albumDao.upsertImportedAlbum(entity)
+            albumTagRepository.upsertAlbumFtsIndex(albumId, entity.copy(id = albumId))
+            albumTagRepository.upsertAlbumTagsFromCsv(albumId, entity.tags, TagSource.SCAN)
             scanTracksAndSubtitlesFromFileAlbum(albumId, albumDir, restoreDeletedSubtitles)
         }
         if (!importAll) {
@@ -2348,10 +2223,12 @@ class LibraryViewModel @Inject constructor(
                     val updated = entity.copy(
                         path = if (entity.path.startsWith(dl)) (entity.localPath ?: entity.path) else entity.path,
                         downloadPath = null,
-                        coverPath = if (entity.coverPath.startsWith(dl)) "" else entity.coverPath
+                        coverPath = if (entity.coverPath.startsWith(dl)) "" else entity.coverPath,
+                        manualCoverPath = if (entity.manualCoverPath.startsWith(dl)) "" else entity.manualCoverPath,
+                        coverThumbPath = if (entity.coverPath.startsWith(dl) || entity.manualCoverPath.startsWith(dl)) "" else entity.coverThumbPath
                     )
                     albumDao.updateAlbum(updated)
-                    upsertAlbumFtsIndex(updated.id, updated)
+                    albumTagRepository.upsertAlbumFtsIndex(updated.id, updated)
                 }
             }
         }
@@ -2382,7 +2259,7 @@ class LibraryViewModel @Inject constructor(
         albumDir: File,
         restoreDeletedSubtitles: Boolean,
     ) {
-        check(albumDir.isDirectory && albumDir.canRead()) { "扫描目录不可用" }
+        check(albumDir.isDirectory && albumDir.canRead()) { appString(R.string.ui_scan_folder_unavailable) }
         val sourceSnapshots = linkedMapOf<String, LocalFileSnapshot>()
         sourceSnapshots[albumDir.absolutePath] = LocalFileSnapshot.read(context, albumDir.absolutePath)
         val prefix = albumDir.absolutePath.trimEnd('\\', '/') + File.separator
@@ -2534,6 +2411,14 @@ class LibraryViewModel @Inject constructor(
             albumPaths = listOf(albumDir.absolutePath),
             leaves = cacheLeaves.distinctBy { it.relativePath }
         )
+        refreshScannedAlbumCover(
+            context = context,
+            albumDao = albumDao,
+            albumId = albumId,
+            firstAudioPath = audioFiles.firstOrNull()?.absolutePath,
+            directoryCoverPath = pickCoverFileFromAlbumDir(albumDir)?.absolutePath.orEmpty(),
+        )
+        enqueueAlbumCoverThumbWork(albumId)
         enqueueTrackDurationWork(albumId)
     }
 
@@ -2619,7 +2504,7 @@ class LibraryViewModel @Inject constructor(
 
             var insertedAlbumId = 0L
             check(all.toSet() == walkTree(uri, albumDir.documentId).filter { it.mimeType != DocumentsContract.Document.MIME_TYPE_DIR }.toSet()) {
-                "扫描期间文件已变化，请重新扫描"
+                appString(R.string.ui_files_changed_during_the_scan_scan_again)
             }
             database.withTransaction {
                 val entity = AlbumEntity(
@@ -2631,16 +2516,18 @@ class LibraryViewModel @Inject constructor(
                     circle = existing?.circle ?: "",
                     cv = existing?.cv ?: "",
                     tags = existing?.tags ?: "",
+                tagDetailsJson = existing?.tagDetailsJson ?: "[]",
                     coverUrl = existing?.coverUrl ?: "",
-                    coverPath = coverPath.ifBlank { existing?.coverPath.orEmpty() },
+                    coverPath = existing?.coverPath.orEmpty().ifBlank { coverPath },
+                    manualCoverPath = existing?.manualCoverPath.orEmpty(),
                     coverThumbPath = existing?.coverThumbPath.orEmpty(),
                     workId = existing?.workId?.takeIf { it.isNotBlank() } ?: rj,
                     rjCode = existing?.rjCode?.takeIf { it.isNotBlank() } ?: rj,
                     description = existing?.description ?: ""
                 )
-                insertedAlbumId = albumDao.insertAlbum(entity)
-                upsertAlbumFtsIndex(insertedAlbumId, entity.copy(id = insertedAlbumId))
-                upsertAlbumTagsFromCsv(insertedAlbumId, entity.tags, TagSource.SCAN)
+                insertedAlbumId = albumDao.upsertImportedAlbum(entity)
+                albumTagRepository.upsertAlbumFtsIndex(insertedAlbumId, entity.copy(id = insertedAlbumId))
+                albumTagRepository.upsertAlbumTagsFromCsv(insertedAlbumId, entity.tags, TagSource.SCAN)
 
                 val allExistingTracks = trackDao.getTracksForAlbumOnce(insertedAlbumId)
                 val existingUnderRoot = allExistingTracks
@@ -2761,23 +2648,13 @@ class LibraryViewModel @Inject constructor(
             if (wroteAnySubtitles) {
                 playerConnection.requestLyricsReload()
             }
-            runCatching {
-                val persisted = albumDao.getAlbumById(insertedAlbumId)
-                val needCover = persisted?.coverPath?.trim().orEmpty().isBlank()
-                if (needCover) {
-                    val firstAudio = trackSpecs.firstOrNull()?.path
-                    if (!firstAudio.isNullOrBlank()) {
-                        val bmp = EmbeddedMediaExtractor.extractArtwork(context, firstAudio)
-                        if (bmp != null) {
-                            val saved = EmbeddedMediaExtractor.saveArtworkToCache(context, insertedAlbumId, bmp)
-                            if (!saved.isNullOrBlank()) {
-                                val updated = persisted!!.copy(coverPath = saved)
-                                albumDao.updateAlbum(updated)
-                            }
-                        }
-                    }
-                }
-            }
+            refreshScannedAlbumCover(
+                context = context,
+                albumDao = albumDao,
+                albumId = insertedAlbumId,
+                firstAudioPath = trackSpecs.firstOrNull()?.path,
+                directoryCoverPath = coverPath,
+            )
             enqueueAlbumCoverThumbWork(insertedAlbumId)
             enqueueTrackDurationWork(insertedAlbumId)
         }
@@ -2841,10 +2718,12 @@ class LibraryViewModel @Inject constructor(
                         val updated = entity.copy(
                             path = updatedPath,
                             localPath = entity.localPath?.takeIf { !it.startsWith(root) },
-                            coverPath = if (entity.coverPath.startsWith(root)) "" else entity.coverPath
+                            coverPath = if (entity.coverPath.startsWith(root)) "" else entity.coverPath,
+                            manualCoverPath = if (entity.manualCoverPath.startsWith(root)) "" else entity.manualCoverPath,
+                            coverThumbPath = if (entity.coverPath.startsWith(root) || entity.manualCoverPath.startsWith(root)) "" else entity.coverThumbPath
                         )
                         albumDao.updateAlbum(updated)
-                        upsertAlbumFtsIndex(updated.id, updated)
+                        albumTagRepository.upsertAlbumFtsIndex(updated.id, updated)
                     }
                 } else {
                     val root = rootUriString.trim()
@@ -2857,10 +2736,12 @@ class LibraryViewModel @Inject constructor(
                     val updated = entity.copy(
                         path = if (entity.path.startsWith(root)) entity.downloadPath else entity.path,
                         localPath = entity.localPath?.takeIf { !it.startsWith(root) },
-                        coverPath = if (entity.coverPath.startsWith(root)) "" else entity.coverPath
+                        coverPath = if (entity.coverPath.startsWith(root)) "" else entity.coverPath,
+                        manualCoverPath = if (entity.manualCoverPath.startsWith(root)) "" else entity.manualCoverPath,
+                        coverThumbPath = if (entity.coverPath.startsWith(root) || entity.manualCoverPath.startsWith(root)) "" else entity.coverThumbPath
                     )
                     albumDao.updateAlbum(updated)
-                    upsertAlbumFtsIndex(updated.id, updated)
+                    albumTagRepository.upsertAlbumFtsIndex(updated.id, updated)
                 }
             }
         }
@@ -2929,7 +2810,9 @@ class LibraryViewModel @Inject constructor(
                     updated = updated.copy(
                         path = if (updated.path.startsWith(local)) (download.ifBlank { updated.path }) else updated.path,
                         localPath = null,
-                        coverPath = if (updated.coverPath.startsWith(local)) "" else updated.coverPath
+                        coverPath = if (updated.coverPath.startsWith(local)) "" else updated.coverPath,
+                        manualCoverPath = if (updated.manualCoverPath.startsWith(local)) "" else updated.manualCoverPath,
+                        coverThumbPath = if (updated.coverPath.startsWith(local) || updated.manualCoverPath.startsWith(local)) "" else updated.coverThumbPath
                     )
                 }
 
@@ -2942,7 +2825,9 @@ class LibraryViewModel @Inject constructor(
                     updated = updated.copy(
                         path = if (updated.path.startsWith(download)) (local.ifBlank { updated.path }) else updated.path,
                         downloadPath = null,
-                        coverPath = if (updated.coverPath.startsWith(download)) "" else updated.coverPath
+                        coverPath = if (updated.coverPath.startsWith(download)) "" else updated.coverPath,
+                        manualCoverPath = if (updated.manualCoverPath.startsWith(download)) "" else updated.manualCoverPath,
+                        coverThumbPath = if (updated.coverPath.startsWith(download) || updated.manualCoverPath.startsWith(download)) "" else updated.coverThumbPath
                     )
                 }
 
@@ -2988,7 +2873,7 @@ class LibraryViewModel @Inject constructor(
 
                 if (updated != entity) {
                     albumDao.updateAlbum(updated)
-                    upsertAlbumFtsIndex(updated.id, updated)
+                    albumTagRepository.upsertAlbumFtsIndex(updated.id, updated)
                 }
             }
         }
@@ -3060,14 +2945,10 @@ class LibraryViewModel @Inject constructor(
         var persistedPaths: List<String> = emptyList()
 
         check(all.toSet() == walkTree(treeUri, albumDocId).filter { it.mimeType != DocumentsContract.Document.MIME_TYPE_DIR }.toSet()) {
-            "扫描期间文件已变化，请重新扫描"
+            appString(R.string.ui_files_changed_during_the_scan_scan_again)
         }
         database.withTransaction {
             val entity = albumDao.getAlbumById(albumId) ?: return@withTransaction
-            if (coverPath.isNotBlank()) {
-                albumDao.updateAlbum(entity.copy(coverPath = coverPath))
-            }
-
             persistedPaths = listOfNotNull(entity.path, entity.localPath, entity.downloadPath)
                 .map { it.trim() }
                 .filter { it.isNotBlank() }
@@ -3121,6 +3002,13 @@ class LibraryViewModel @Inject constructor(
                 leaves = cacheLeaves.distinctBy { it.relativePath }
             )
         }
+        refreshScannedAlbumCover(
+            context = context,
+            albumDao = albumDao,
+            albumId = albumId,
+            firstAudioPath = trackSpecs.firstOrNull()?.path,
+            directoryCoverPath = coverPath,
+        )
         enqueueAlbumCoverThumbWork(albumId)
         enqueueTrackDurationWork(albumId)
     }
@@ -3164,9 +3052,9 @@ class LibraryViewModel @Inject constructor(
         )
         val result = mutableListOf<DocNode>()
         val resolver = context.contentResolver
-        check(documentExists(treeUri, parentDocumentId)) { "扫描目录已移动、删除或无法访问" }
+        check(documentExists(treeUri, parentDocumentId)) { appString(R.string.ui_the_scan_folder_was_moved_deleted_or_is) }
         val cursor = resolver.query(childrenUri, projection, null, null, null)
-            ?: error("无法读取扫描目录")
+            ?: error(appString(R.string.ui_unable_to_read_scan_folder))
         cursor.use {
             val idIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
             val nameIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
@@ -3194,10 +3082,10 @@ class LibraryViewModel @Inject constructor(
         check(resolver.persistedUriPermissions.any { permission ->
             permission.isReadPermission && permission.uri.authority == treeUri.authority &&
                 runCatching { DocumentsContract.getTreeDocumentId(permission.uri) }.getOrNull() == treeId
-        }) { "扫描目录权限已失效" }
+        }) { appString(R.string.ui_scan_folder_permission_expired) }
         return resolver.query(docUri, projection, null, null, null)?.use { cursor ->
             cursor.moveToFirst()
-        } ?: error("无法读取扫描目录状态")
+        } ?: error(appString(R.string.ui_unable_to_check_scan_folder))
     }
 
     private fun walkTree(treeUri: Uri, rootDocumentId: String): List<DocNode> {
@@ -3241,86 +3129,8 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
-    private data class SubtitleCandidate(val fileName: String, val language: String)
-    private class SubtitleCandidateIndex(private val byBase: Map<String, List<SubtitleCandidate>>) {
-        fun match(baseName: String): List<SubtitleCandidate> = byBase[baseName.trim().lowercase()].orEmpty()
-    }
-    private fun buildSubtitleCandidateIndex(subtitles: List<String>, isSubtitle: (String) -> Boolean): SubtitleCandidateIndex {
-        val audioExts = setOf("mp3", "flac", "wav", "m4a", "ogg", "aac", "opus")
-        val out = linkedMapOf<String, MutableList<SubtitleCandidate>>()
-        subtitles.forEach { fileName ->
-            val name = fileName.trim()
-            if (name.isBlank() || !isSubtitle(name)) return@forEach
-
-            val extRemovedBase = name.substringBeforeLast('.').trim()
-            if (extRemovedBase.isBlank()) return@forEach
-
-            val parts = extRemovedBase.split('.').map { it.trim() }.filter { it.isNotBlank() }
-            val lastPart = parts.lastOrNull().orEmpty().lowercase()
-            val langPart = lastPart.takeIf { p ->
-                p.length in 2..4 && p.all { it in 'a'..'z' } && !audioExts.contains(p)
-            }
-            val lang = langPart ?: "default"
-
-            val keys = linkedSetOf<String>()
-            fun addKey(key: String) {
-                val k = key.trim()
-                if (k.isNotBlank()) keys.add(k)
-            }
-            addKey(extRemovedBase)
-
-            if (langPart != null && extRemovedBase.contains('.')) {
-                val withoutLang = extRemovedBase.substringBeforeLast('.').trim()
-                if (withoutLang.isNotBlank()) {
-                    addKey(withoutLang)
-                    val audioPart = withoutLang.substringAfterLast('.', "").lowercase()
-                    if (audioExts.contains(audioPart) && withoutLang.contains('.')) {
-                        addKey(withoutLang.substringBeforeLast('.').trim())
-                    }
-                }
-            }
-
-            val audioPart = extRemovedBase.substringAfterLast('.', "").lowercase()
-            if (audioExts.contains(audioPart) && extRemovedBase.contains('.')) {
-                addKey(extRemovedBase.substringBeforeLast('.').trim())
-            }
-
-            val candidate = SubtitleCandidate(fileName = name, language = lang)
-            keys.forEach { k ->
-                out.getOrPut(k.lowercase()) { mutableListOf() }.add(candidate)
-            }
-        }
-        return SubtitleCandidateIndex(out)
-    }
-
-    private data class ParsedSubtitleCandidate(
-        val fileName: String,
-        val language: String,
-        val entries: List<com.asmr.player.util.SubtitleEntry>
-    )
-
-    private fun mergeSubtitleCandidates(parsed: List<ParsedSubtitleCandidate>): List<com.asmr.player.util.SubtitleEntry> {
-        val nonEmpty = parsed.filter { it.entries.isNotEmpty() }
-        if (nonEmpty.isEmpty()) return emptyList()
-        if (nonEmpty.size == 1) return nonEmpty[0].entries
-
-        val langPriority = listOf("default", "zh", "cn", "chs", "ja", "jp", "jpn", "en")
-        fun langScore(lang: String): Int {
-            val l = lang.trim().lowercase()
-            val idx = langPriority.indexOf(l)
-            return if (idx >= 0) idx else Int.MAX_VALUE
-        }
-
-        val sorted = nonEmpty.sortedWith(
-            compareBy<ParsedSubtitleCandidate> { langScore(it.language) }
-                .thenBy { it.fileName.lowercase() }
-        )
-        return sorted.first().entries
-    }
-
     override fun onCleared() {
         cloudSyncSelectionQueue.cancelAll()
         super.onCleared()
     }
 }
-

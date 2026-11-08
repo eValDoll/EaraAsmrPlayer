@@ -21,7 +21,7 @@ class SubtitleTranslationPolicyTest {
             text = longText
         )
 
-        val result = validateGeneratedSubtitleCaptions(
+        val result = validateSubtitleCaptionBatch(
             captions = listOf(
                 GeneratedSubtitleCaption(
                     sourceIndices = listOf(0),
@@ -31,7 +31,8 @@ class SubtitleTranslationPolicyTest {
                     chineseText = "这是一条较长的单段字幕"
                 )
             ),
-            expectedSources = listOf(source)
+            expectedRemainingSources = listOf(source),
+            allowMerging = true
         )
 
         assertEquals(7_000L, result.single().endMs)

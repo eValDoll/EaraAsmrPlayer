@@ -1,88 +1,24 @@
 package com.asmr.player.ui.library
 
-import android.content.Intent
-import android.net.Uri
-import android.provider.DocumentsContract
-import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
-import androidx.compose.material3.windowsizeclass.WindowSizeClass
-import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.state.ToggleableState
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.PlayerView
 import com.asmr.player.data.local.db.AppDatabaseProvider
-import com.asmr.player.data.local.db.entities.LocalTreeCacheEntity
-import com.asmr.player.data.remote.auth.DlsiteAuthStore
-import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
-import com.asmr.player.data.remote.scraper.DlsiteRecommendedWork
-import com.asmr.player.data.remote.scraper.DlsiteRecommendations
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
 import com.asmr.player.playback.MediaItemFactory
@@ -92,55 +28,18 @@ import com.asmr.player.subtitle.SubtitleGenerationTarget
 import com.asmr.player.subtitle.SubtitleTaskRepository
 import com.asmr.player.subtitle.SubtitleModelRepository
 import com.asmr.player.subtitle.SubtitleModelInstallationState
-import com.asmr.player.data.remote.NetworkHeaders
-import com.asmr.player.cache.CacheImageModel
-import com.asmr.player.data.remote.dlsite.DlsiteLanguageEdition
-import com.asmr.player.ui.dlsite.DlsitePlayViewModel
-import com.asmr.player.util.DlsiteAntiHotlink
-import com.asmr.player.util.SmartSortKey
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
-import android.webkit.CookieManager
-import android.webkit.URLUtil
-import android.webkit.WebChromeClient
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import androidx.compose.material.icons.automirrored.rounded.Label
-import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
-import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
-import androidx.compose.material.icons.automirrored.rounded.QueueMusic
-import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.zIndex
-import com.asmr.player.ui.common.rememberDominantColor
-import com.asmr.player.ui.common.SubtitleStamp
-import com.asmr.player.ui.common.DiscPlaceholder
-import com.asmr.player.ui.common.AsmrAsyncImage
-import com.asmr.player.ui.common.AsmrShimmerPlaceholder
-import com.asmr.player.ui.common.CvChipsFlow
-import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.ImagePreviewItem
 import com.asmr.player.ui.common.ImagePreviewRequest
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
-import com.asmr.player.ui.playlists.PlaylistPickerScreen
-import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
-import com.asmr.player.ui.theme.AsmrPlayerTheme
-import com.asmr.player.ui.theme.dynamicPageContainerColor
-import com.asmr.player.util.Formatting
-import com.asmr.player.util.MessageManager
-import com.asmr.player.util.RemoteSubtitleSource
 import com.asmr.player.util.isOnlineTrackPath
 
 @Composable
-internal fun AlbumLocalBreadcrumbTabV2(
+internal fun AlbumLocalBreadcrumbTab(
     stateKey: String,
     initialCurrentPath: String,
     onPersistCurrentPath: (String) -> Unit,
@@ -162,9 +61,9 @@ internal fun AlbumLocalBreadcrumbTabV2(
     onManageTrackTags: (Track) -> Unit,
     onRemoveTrack: (Track) -> Unit,
     onDeleteTreeEntry: (LocalTreeDeletionTarget, (Boolean) -> Unit) -> Unit,
-    onSetCoverFromImage: (String) -> Unit,
+    onToggleCoverFromImage: (String) -> Unit,
     onPreviewImages: (ImagePreviewRequest) -> Unit,
-    onPreviewFile: (LocalTreeUiEntry.File) -> Unit,
+    onPreviewFile: (DirectoryFileItem) -> Unit,
     onSubtitleGenerationError: (String) -> Unit,
     onSubtitleGenerationUnavailable: (String) -> Unit,
     onSubtitleGenerationQueued: (String) -> Unit,
@@ -300,15 +199,15 @@ internal fun AlbumLocalBreadcrumbTabV2(
                         SubtitleTaskRepository.get(context).enqueueGeneration(targets)
                     }
                     if (tracks.any { it.id in subtitleTrackIds }) {
-                        onSubtitleGenerationQueued("已有字幕，将覆盖后重新生成并翻译")
+                        onSubtitleGenerationQueued(appString(R.string.ui_subtitles_already_exist_they_will_be_overwritten_and))
                     }
                     onSubtitleGenerationQueued(
-                        if (handle.reusedExisting) "所选音频已有可继续的字幕任务" else "已加入字幕任务队列"
+                        if (handle.reusedExisting) appString(R.string.ui_the_selected_audio_already_has_a_subtitle_task) else appString(R.string.ui_already_added_to_subtitle_task_queue)
                     )
                 } catch (cancelled: kotlinx.coroutines.CancellationException) {
                     throw cancelled
                 } catch (error: Throwable) {
-                    val message = error.message?.takeIf { it.isNotBlank() } ?: "无法开始生成并翻译字幕"
+                    val message = error.message?.takeIf { it.isNotBlank() } ?: appString(R.string.ui_unable_to_start_generating_and_translating_subtitles)
                     if (SubtitleFailureMessages.isUserActionWarning(message)) {
                         onSubtitleGenerationUnavailable(message)
                     } else {
@@ -335,12 +234,12 @@ internal fun AlbumLocalBreadcrumbTabV2(
                         .height(220.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("当前目录暂无文件")
+                    Text(androidx.compose.ui.res.stringResource(R.string.ui_there_are_no_files_in_the_current_directory))
                 }
             }
         } else {
             item {
-                DirectoryBrowserPanelV4(
+                DirectoryBrowserPanel(
                     panelKey = stateKey,
                     currentPath = currentPath,
                     breadcrumbs = browserValue.breadcrumbs,
@@ -475,27 +374,9 @@ internal fun AlbumLocalBreadcrumbTabV2(
                                                         )
                                                     }
                                                 }
-                                            )?.let(onPreviewImages) ?: onPreviewFile(
-                                                LocalTreeUiEntry.File(
-                                                    path = file.path,
-                                                    title = file.title,
-                                                    depth = 0,
-                                                    absolutePath = file.absolutePath,
-                                                    fileType = file.fileType,
-                                                    track = file.track
-                                                )
-                                            )
+                                            )?.let(onPreviewImages) ?: onPreviewFile(file)
                                         } else {
-                                            onPreviewFile(
-                                                LocalTreeUiEntry.File(
-                                                    path = file.path,
-                                                    title = file.title,
-                                                    depth = 0,
-                                                    absolutePath = file.absolutePath,
-                                                    fileType = file.fileType,
-                                                    track = file.track
-                                                )
-                                            )
+                                            onPreviewFile(file)
                                         }
                                     }
                                 }
@@ -505,8 +386,9 @@ internal fun AlbumLocalBreadcrumbTabV2(
                             selectedPosition = selectedPosition,
                             onEnterSelectionMode = enterSelectionMode,
                             onSelectedChange = onSelectedChange,
-                            onSetAsCover = if (canSetDirectoryImageAsLocalCover(file)) {
-                                { onSetCoverFromImage(file.absolutePath) }
+                            isCoverSelected = album.manualCoverPath.isNotBlank() && album.manualCoverPath == file.absolutePath,
+                            onToggleCover = if (canSetDirectoryImageAsLocalCover(file)) {
+                                { onToggleCoverFromImage(file.absolutePath) }
                             } else {
                                 null
                             },
@@ -556,17 +438,17 @@ internal fun AlbumLocalBreadcrumbTabV2(
     pendingDeletion?.let { target ->
         AlertDialog(
             onDismissRequest = { pendingDeletion = null },
-            title = { Text(if (target.isDirectory) "删除目录？" else "删除文件？") },
+            title = { Text(if (target.isDirectory) appString(R.string.ui_delete_directory_9295d5) else appString(R.string.ui_delete_files)) },
             text = {
                 val message = when {
                     target.isDirectory && target.hasLocalContent ->
-                        "将永久删除目录“${target.title}”及其全部内容，同时移除关联的本地库记录。此操作不可恢复。"
+                        appString(R.string.ui_directory_and_its_entire_contents_will_be_permanently, target.title)
                     target.isDirectory ->
-                        "将从本地库目录树移除“${target.title}”及其包含的在线资源。"
+                        appString(R.string.ui_and_the_online_resources_it_contains_will_be, target.title)
                     target.hasLocalContent ->
-                        "将永久删除文件“${target.title}”。此操作不可恢复。"
+                        appString(R.string.ui_file_will_be_permanently_deleted_this_operation_is, target.title)
                     else ->
-                        "将从本地库目录树移除资源“${target.title}”。"
+                        appString(R.string.ui_resource_will_be_removed_from_the_local_library, target.title)
                 }
                 Text(message)
             },
@@ -585,12 +467,12 @@ internal fun AlbumLocalBreadcrumbTabV2(
                         contentColor = MaterialTheme.colorScheme.error
                     )
                 ) {
-                    Text("删除")
+                    Text(androidx.compose.ui.res.stringResource(R.string.ui_delete))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { pendingDeletion = null }) {
-                    Text("取消")
+                    Text(androidx.compose.ui.res.stringResource(R.string.ui_cancel))
                 }
             }
         )

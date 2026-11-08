@@ -5,7 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class MessageManagerTest {
+class MessageManagerTest : com.asmr.player.LocalizedRobolectricTest() {
 
     @Test
     fun errorFormatter_preservesActionableSubtitleFailureDetails() {

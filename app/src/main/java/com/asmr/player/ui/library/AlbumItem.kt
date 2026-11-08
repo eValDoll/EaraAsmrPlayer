@@ -1,9 +1,21 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
+import com.asmr.player.domain.model.localizedTags
+import com.asmr.player.domain.model.originalTagForDisplay
+import com.asmr.player.ui.common.LocalPageAnimationsActive
+import com.asmr.player.ui.common.LocalAlbumRowRasterCacheAllowed
+import com.asmr.player.ui.common.LocalAlbumCoverShadowCache
+import com.asmr.player.ui.common.sharedAlbumCoverShadow
+
 import android.os.Build
 import com.asmr.player.translation.translatedPageText
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -36,6 +48,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.GraphicsLayerScope
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
@@ -202,12 +215,34 @@ fun AlbumItem(
     coverFadeInState: State<Boolean>? = null,
     coverReloadKey: Any? = null,
     coverRetainPainterDuringReload: Boolean = false,
-    cacheRenderLayer: Boolean = false,
+    preparedItemKey: Any? = null,
     coverOverlay: @Composable BoxScope.() -> Unit = {},
     showCollectedIndicator: Boolean = true,
     showStatsPlaceholders: Boolean = false,
 ) {
     val colorScheme = AsmrTheme.colorScheme
+    val rowRasterCacheAllowed = LocalAlbumRowRasterCacheAllowed.current
+    val rowRasterLayer = if (rowRasterCacheAllowed == null) {
+        Modifier
+    } else {
+        val shadowRadius = if (colorScheme.isDark) {
+            AlbumListCoverShadowBlurRadius * 1.35f
+        } else {
+            AlbumListCoverShadowBlurRadius
+        }
+        val outset = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            shadowRadius * 3f + 6.dp
+        } else {
+            6.dp
+        }
+        Modifier.outsetAlbumLayer(outset) {
+            compositingStrategy = if (rowRasterCacheAllowed.value) {
+                CompositingStrategy.Offscreen
+            } else {
+                CompositingStrategy.Auto
+            }
+        }
+    }
     val coverShape = remember { RoundedCornerShape(AlbumListItemCornerRadius) }
     val imageModel = remember(album.coverThumbPath, album.coverPath, album.coverUrl) {
         albumCoverImageModel(album)
@@ -253,16 +288,7 @@ fun AlbumItem(
                 )
             }
             .testTag(ALBUM_ITEM_CARD_TAG)
-            .then(
-                if (cacheRenderLayer) {
-                    Modifier.graphicsLayer {
-                        clip = false
-                        compositingStrategy = CompositingStrategy.Auto
-                    }
-                } else {
-                    Modifier
-                }
-            )
+            .then(rowRasterLayer)
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
@@ -352,9 +378,10 @@ fun AlbumItem(
                         usePlaceholders = showStatsPlaceholders,
                     )
                 }
-                val tagsStateContent = remember(album.tags) {
-                    album.tags.joinToString(separator = "\n")
+                val displayTags = remember(album.tags, album.tagDetails, album.metadataLocale, androidx.compose.ui.platform.LocalConfiguration.current) {
+                    album.localizedTags()
                 }
+                val tagsStateContent = remember(displayTags) { displayTags.joinToString(separator = "\n") }
 
                 BalancedColumn(
                     modifier = Modifier
@@ -395,6 +422,7 @@ fun AlbumItem(
                     ) {
                         AlbumItemCvLightweight(
                             cvText = album.cv,
+                            preparedItemKey = preparedItemKey,
                             modifier = Modifier.fillMaxWidth(),
                             onClick = onClick,
                             onCvLongClick = onCvLongClick,
@@ -409,12 +437,13 @@ fun AlbumItem(
                         }
                     ) {
                         AlbumItemTagsLightweight(
-                            tags = album.tags,
+                            tags = displayTags,
+                            preparedItemKey = preparedItemKey,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag(ALBUM_ITEM_TAGS_TAG),
                             onClick = onClick,
-                            onTagLongClick = onTagLongClick,
+                            onTagLongClick = onTagLongClick?.let { callback -> { label -> callback(album.originalTagForDisplay(label)) } },
                         )
                     }
 
@@ -498,6 +527,7 @@ internal fun BalancedColumn(
 @OptIn(ExperimentalFoundationApi::class)
 fun AlbumGridItem(
     album: Album,
+    horizontal: Boolean = false,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
@@ -519,6 +549,32 @@ fun AlbumGridItem(
     showCollectedIndicator: Boolean = true,
     showStatsPlaceholders: Boolean = false,
 ) {
+    if (horizontal) {
+        AlbumItem(
+            album = album,
+            onClick = onClick,
+            onLongClick = onLongClick,
+            modifier = modifier,
+            onRjLongClick = onRjLongClick,
+            onCircleLongClick = onCircleLongClick,
+            onCvLongClick = onCvLongClick,
+            onTagLongClick = onTagLongClick,
+            coverBadge = coverBadge,
+            onlineDetailLoading = onlineDetailLoading,
+            onlineTitleLoading = onlineTitleLoading,
+            onlineCvLoading = onlineCvLoading,
+            onlineTagsLoading = onlineTagsLoading,
+            animateOnlineDetails = animateOnlineDetails,
+            coverFadeIn = coverFadeIn,
+            coverFadeInState = coverFadeInState,
+            coverReloadKey = coverReloadKey,
+            coverRetainPainterDuringReload = coverRetainPainterDuringReload,
+            coverOverlay = coverOverlay,
+            showCollectedIndicator = showCollectedIndicator,
+            showStatsPlaceholders = showStatsPlaceholders,
+        )
+        return
+    }
     val colorScheme = AsmrTheme.colorScheme
     val coverShape = remember { RoundedCornerShape(AlbumGridItemCornerRadius) }
     val imageModel = remember(album.coverThumbPath, album.coverPath, album.coverUrl) {
@@ -664,9 +720,10 @@ fun AlbumGridItem(
                     usePlaceholders = showStatsPlaceholders,
                 )
             }
-            val tagsStateContent = remember(album.tags) {
-                album.tags.joinToString(separator = "\n")
+            val displayTags = remember(album.tags, album.tagDetails, album.metadataLocale, androidx.compose.ui.platform.LocalConfiguration.current) {
+                album.localizedTags()
             }
+            val tagsStateContent = remember(displayTags) { displayTags.joinToString(separator = "\n") }
 
             AlbumOnlineDetailAnimatedLine(
                 content = if (onlineTagsLoading) "" else tagsStateContent,
@@ -677,11 +734,11 @@ fun AlbumGridItem(
                 }
             ) {
                 AlbumItemTagsLightweight(
-                    tags = album.tags,
+                    tags = displayTags,
                     modifier = Modifier.fillMaxWidth(),
                     layout = AlbumInlineValuesLayout.Flow,
                     onClick = onClick,
-                    onTagLongClick = onTagLongClick,
+                    onTagLongClick = onTagLongClick?.let { callback -> { label -> callback(album.originalTagForDisplay(label)) } },
                 )
             }
 
@@ -769,31 +826,36 @@ private fun AlbumOnlineDetailAnimatedLine(
     modifier: Modifier = Modifier,
     content: @Composable (String) -> Unit,
 ) {
+    val animationsActive = LocalPageAnimationsActive.current
     AnimatedContent(
         targetState = stateKey,
         modifier = modifier
             .fillMaxWidth(),
         transitionSpec = {
-            (
-                fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
-                    slideInVertically(
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioNoBouncy,
-                            stiffness = Spring.StiffnessMediumLow
-                        )
-                    ) { height -> height / 3 }
-                ) togetherWith (
-                fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMedium)) +
-                    slideOutVertically(
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioNoBouncy,
-                            stiffness = Spring.StiffnessMedium
-                        )
-                    ) { height -> -height / 4 }
-                ) using SizeTransform(
-                clip = false,
-                sizeAnimationSpec = { _, _ -> AlbumOnlineDetailResizeSpring }
-            )
+            if (animationsActive) {
+                (
+                    fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
+                        slideInVertically(
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                stiffness = Spring.StiffnessMediumLow
+                            )
+                        ) { height -> height / 3 }
+                    ) togetherWith (
+                    fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMedium)) +
+                        slideOutVertically(
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                stiffness = Spring.StiffnessMedium
+                            )
+                        ) { height -> -height / 4 }
+                    ) using SizeTransform(
+                    clip = false,
+                    sizeAnimationSpec = { _, _ -> AlbumOnlineDetailResizeSpring }
+                )
+            } else {
+                (EnterTransition.None togetherWith ExitTransition.None).using(null)
+            }
         },
         label = "albumOnlineDetailLine"
     ) { targetState ->
@@ -906,7 +968,7 @@ private fun AlbumStatsLine(
 }
 
 @Composable
-private fun AlbumCoverDepthShadow(
+internal fun AlbumCoverDepthShadow(
     progress: () -> Float,
     isDark: Boolean,
     shape: Shape,
@@ -917,6 +979,12 @@ private fun AlbumCoverDepthShadow(
     if (!isVisible) return
     val layerColor = if (isDark) Color.White else Color.Black
     val resolvedBlurRadius = if (isDark) blurRadius * 1.35f else blurRadius
+    val cache = LocalAlbumCoverShadowCache.current
+    val isSettled by remember(progress) { derivedStateOf { progress() == 1f } }
+    if (cache != null && isSettled) {
+        Box(modifier.sharedAlbumCoverShadow(cache, isDark, shape, resolvedBlurRadius))
+        return
+    }
     Box(
         modifier = modifier
             .cacheAlbumCoverShadow(outset = resolvedBlurRadius * 3f + 6.dp)
@@ -941,18 +1009,28 @@ private fun AlbumCoverDepthShadow(
 internal fun Modifier.cacheAlbumCoverShadow(outset: Dp): Modifier {
     // 旧系统的 blur 不会创建 RenderEffect，无需为实色阴影额外分配纹理。
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return this
+    return outsetAlbumLayer(outset) {
+        compositingStrategy = CompositingStrategy.Offscreen
+    }
+}
+
+private fun Modifier.outsetAlbumLayer(
+    outset: Dp,
+    configure: GraphicsLayerScope.() -> Unit,
+): Modifier {
     return layout { measurable, constraints ->
-        val paddingPx = outset.roundToPx()
-        val extra = paddingPx * 2
+        val padding = outset.roundToPx()
+        val extra = padding * 2
         val placeable = measurable.measure(constraints.offset(extra, extra))
         layout(placeable.width - extra, placeable.height - extra) {
-            placeable.place(-paddingPx, -paddingPx)
+            placeable.place(-padding, -padding)
         }
     }
         .graphicsLayer {
-            compositingStrategy = CompositingStrategy.Offscreen
+            clip = false
+            configure()
         }
-        // 离屏纹理会裁剪到自身边界，向外留出模糊及位移空间，但不改变卡片布局尺寸。
+        // 离屏纹理会裁剪到自身边界，留出绘制溢出空间，但不改变卡片布局尺寸。
         .padding(outset)
 }
 
@@ -1005,7 +1083,7 @@ internal fun CollectedCoverRibbon(label: String, modifier: Modifier = Modifier) 
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = if (label == "收录") 11.sp else 9.sp,
+                fontSize = if (label == appString(R.string.ui_included)) 11.sp else 9.sp,
                 fontWeight = FontWeight.Bold,
             ),
             color = colorScheme.onPrimary,
@@ -1039,4 +1117,4 @@ private fun BoxScope.AnimatedCollectedCoverRibbon(visible: Boolean, label: Strin
 }
 
 internal val Album.collectedRibbonLabel: String?
-    get() = if (collectionAvailability != null) collectionAvailability.label else "收录".takeIf { hasAsmrOne }
+    get() = if (collectionAvailability != null) collectionAvailability.label else appString(R.string.ui_included).takeIf { hasAsmrOne }

@@ -1,5 +1,8 @@
 package com.asmr.player.subtitle
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.util.Log
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.settings.DeepSeekTranslationSettings
@@ -157,7 +160,7 @@ internal class SubtitleTranslationClient(
     private val onTokenUsage: (Long) -> Unit = {}
 ) {
     private val normalizedApiKey = apiKey.trim().also {
-        require(it.isNotEmpty()) { "请先在设置中配置 ${apiConfig.serviceName} API Key" }
+        require(it.isNotEmpty()) { appString(R.string.ui_configure_your_api_key_in_settings_first, apiConfig.serviceName) }
     }
     private val authorization = "Bearer $normalizedApiKey"
     private val useMaxCompletionTokens = AtomicBoolean(false)
@@ -178,9 +181,9 @@ internal class SubtitleTranslationClient(
         scriptContext: SubtitleScriptContext? = null,
         onCaptionsConfirmed: suspend (List<GeneratedSubtitleCaption>) -> Unit
     ): List<GeneratedSubtitleCaption> {
-        require(sources.isNotEmpty()) { "完整字幕不能为空" }
+        require(sources.isNotEmpty()) { appString(R.string.ui_full_subtitles_cannot_be_empty) }
         require(sources.map(GeneratedSubtitleSource::index).distinct().size == sources.size) {
-            "字幕源索引不能重复"
+            appString(R.string.ui_subtitle_source_index_cannot_be_repeated)
         }
         val confirmed = confirmedCaptions.toMutableList()
         if (confirmed.isNotEmpty()) {
@@ -228,7 +231,7 @@ internal class SubtitleTranslationClient(
                     val toolCallId = toolCall.id.trim()
                     if (toolCallId.isEmpty()) {
                         throw SubtitleTranslationException(
-                            message = "字幕翻译模型返回的工具调用缺少 id",
+                            message = appString(R.string.ui_tool_call_returned_by_subtitle_translation_model_is),
                             retryable = true
                         )
                     }
@@ -274,7 +277,7 @@ internal class SubtitleTranslationClient(
                                     buildSubtitleToolErrorMessage(
                                         gson = gson,
                                         toolCallId = toolCallId,
-                                        message = error.message.orEmpty().ifBlank { "字幕参数无效" }
+                                        message = error.message.orEmpty().ifBlank { appString(R.string.ui_invalid_subtitle_parameter) }
                                     )
                                 }
                             )
@@ -285,7 +288,7 @@ internal class SubtitleTranslationClient(
                         } ?: buildSubtitleToolErrorMessage(
                             gson = gson,
                             toolCallId = toolCallId,
-                            message = "台本检索不可用"
+                            message = appString(R.string.ui_transcript_search_is_not_available)
                         )
 
                         SCRIPT_READ_TOOL_NAME -> scriptContext?.let { context ->
@@ -310,20 +313,20 @@ internal class SubtitleTranslationClient(
                                     buildSubtitleToolErrorMessage(
                                         gson = gson,
                                         toolCallId = toolCallId,
-                                        message = error.message.orEmpty().ifBlank { "台本读取参数无效" }
+                                        message = error.message.orEmpty().ifBlank { appString(R.string.ui_the_script_reading_parameter_is_invalid) }
                                     )
                                 }
                             )
                         } ?: buildSubtitleToolErrorMessage(
                             gson = gson,
                             toolCallId = toolCallId,
-                            message = "台本检索不可用"
+                            message = appString(R.string.ui_transcript_search_is_not_available)
                         )
 
                         else -> buildSubtitleToolErrorMessage(
                             gson = gson,
                             toolCallId = toolCallId,
-                            message = "未知工具：${toolCall.function.name.orEmpty()}"
+                            message = appString(R.string.ui_unknown_tool, toolCall.function.name.orEmpty())
                         )
                     }
                     messages += toolResult
@@ -332,7 +335,7 @@ internal class SubtitleTranslationClient(
             }
             if (stalledTurnCount >= maxStalledTurns) {
                 throw SubtitleTranslationException(
-                    message = "字幕翻译连续多轮没有写入字幕，已停止，请手动重试",
+                    message = appString(R.string.ui_translation_stopped_after_repeated_attempts_without_new_subtitles),
                     retryable = false
                 )
             }
@@ -351,26 +354,34 @@ internal class SubtitleTranslationClient(
         trackTitles: List<Pair<Long, String>>,
         maxAttempts: Int = 2
     ): DisplayNameTranslationResult {
-        require(albumTitle.isNotBlank()) { "作品标题不能为空" }
-        require(trackTitles.isNotEmpty()) { "音轨列表不能为空" }
+        require(albumTitle.isNotBlank()) { appString(R.string.ui_work_title_cannot_be_empty) }
+        require(trackTitles.isNotEmpty()) { appString(R.string.ui_track_list_cannot_be_empty) }
         require(trackTitles.map(Pair<Long, String>::first).distinct().size == trackTitles.size) {
-            "音轨 id 不能重复"
+            appString(R.string.ui_audio_track_id_cannot_be_repeated)
         }
-        val requestBody = buildDeepSeekTitleTranslationRequest(
-            gson = gson,
-            albumTitle = albumTitle,
-            circle = circle,
-            cv = cv,
-            trackTitles = trackTitles,
-            settings = settings,
-            apiConfig = apiConfig
-        )
         val expectedTrackIds = trackTitles.map(Pair<Long, String>::first)
-        return retrySubtitleTranslation(maxAttempts = maxAttempts, onAttempt = { _, _ -> }, onRetry = { _, _, _ -> }) {
+        return retrySubtitleTranslation(maxAttempts = maxAttempts, onAttempt = { _, _ -> }, onRetry = { _, _, _ -> }) { previousError ->
+            val validationError = (previousError?.cause as? IllegalArgumentException)?.message
+            val requestBody = buildDeepSeekTitleTranslationRequest(
+                gson = gson,
+                albumTitle = albumTitle,
+                circle = circle,
+                cv = cv,
+                trackTitles = trackTitles,
+                settings = settings,
+                apiConfig = apiConfig,
+                validationError = validationError
+            )
             executeTranslationRequest(requestBody, emptyList()) { message, finishReason ->
-                require(finishReason != "length") { "作品显示名翻译输出达到长度限制" }
-                val content = message.content.orEmpty()
-                require(content.isNotBlank()) { "作品显示名翻译模型返回了空内容" }
+                require(finishReason != "length") { appString(R.string.ui_the_work_display_name_translation_output_reaches_the) }
+                val content = if (!apiConfig.isDeepSeek && validationError != null && !message.toolCalls.isNullOrEmpty()) {
+                    val call = message.toolCalls.singleOrNull()
+                    require(call != null && call.function.name == TITLE_WRITE_TOOL_NAME) { "作品显示名翻译工具调用不匹配" }
+                    call.function.arguments.orEmpty()
+                } else {
+                    message.content.orEmpty()
+                }
+                require(content.isNotBlank()) { appString(R.string.ui_title_display_name_translation_model_returned_empty_content) }
                 parseDisplayNameTranslationResponse(content, expectedTrackIds)
             }
         }
@@ -388,10 +399,10 @@ internal class SubtitleTranslationClient(
         workContext: SubtitleWorkContext? = null,
         onCaptionsPolished: suspend (List<PolishCaptionResult>) -> Unit
     ): List<PolishCaptionResult> {
-        require(tracks.isNotEmpty()) { "润色音轨列表不能为空" }
+        require(tracks.isNotEmpty()) { appString(R.string.ui_the_polish_track_list_cannot_be_empty) }
         val allCaptions = tracks.flatMap(PolishTrackInput::captions)
         require(allCaptions.map(PolishCaptionInput::captionId).distinct().size == allCaptions.size) {
-            "润色字幕主键不能重复"
+            appString(R.string.ui_the_primary_key_for_polished_subtitles_cannot_be)
         }
         if (allCaptions.isEmpty()) return emptyList()
         val originalChineseById = allCaptions.associate { it.captionId to it.chinese }
@@ -425,7 +436,7 @@ internal class SubtitleTranslationClient(
                     val toolCallId = toolCall.id.trim()
                     if (toolCallId.isEmpty()) {
                         throw SubtitleTranslationException(
-                            message = "润色模型返回的工具调用缺少 id",
+                            message = appString(R.string.ui_tool_call_returned_by_polish_model_is_missing),
                             retryable = true
                         )
                     }
@@ -481,7 +492,7 @@ internal class SubtitleTranslationClient(
                                     buildSubtitleToolErrorMessage(
                                         gson = gson,
                                         toolCallId = toolCallId,
-                                        message = error.message.orEmpty().ifBlank { "润色参数无效" }
+                                        message = error.message.orEmpty().ifBlank { appString(R.string.ui_invalid_polish_parameter) }
                                     )
                                 }
                             )
@@ -490,7 +501,7 @@ internal class SubtitleTranslationClient(
                         else -> buildSubtitleToolErrorMessage(
                             gson = gson,
                             toolCallId = toolCallId,
-                            message = "未知工具：${toolCall.function.name.orEmpty()}"
+                            message = appString(R.string.ui_unknown_tool, toolCall.function.name.orEmpty())
                         )
                     }
                     messages += toolResult
@@ -499,7 +510,7 @@ internal class SubtitleTranslationClient(
             }
             if (!readCompleted && stalledTurnCount >= MAX_POLISH_AGENT_STALLED_TURNS) {
                 throw SubtitleTranslationException(
-                    message = "字幕润色连续多轮没有处理新字幕，已停止，请手动重试",
+                    message = appString(R.string.ui_polishing_stopped_after_repeated_attempts_without_new_subtitles),
                     retryable = false
                 )
             }
@@ -616,7 +627,7 @@ internal class SubtitleTranslationClient(
                 try {
                     parseMessage(message, choice?.finishReason)
                 } catch (error: IllegalArgumentException) {
-                    val reason = error.message?.takeIf { it.isNotBlank() } ?: "未知格式错误"
+                    val reason = error.message?.takeIf { it.isNotBlank() } ?: appString(R.string.ui_unknown_format_error)
                     logRejectedTranslation(
                         reason = reason,
                         targetIndices = targetIndices,
@@ -628,7 +639,7 @@ internal class SubtitleTranslationClient(
                         error = error
                     )
                     throw SubtitleTranslationException(
-                        message = "字幕翻译模型返回格式错误：$reason",
+                        message = appString(R.string.ui_subtitle_translation_model_returns_format_error, reason),
                         retryable = true,
                         cause = error
                     )
@@ -646,7 +657,7 @@ internal class SubtitleTranslationClient(
                 override fun onFailure(call: Call, e: IOException) {
                     if (!continuation.isActive) return
                     if (call.isCanceled()) {
-                        continuation.resumeWithException(CancellationException("字幕翻译请求已取消", e))
+                        continuation.resumeWithException(CancellationException(appString(R.string.ui_subtitle_translation_request_canceled), e))
                     } else {
                         continuation.resumeWithException(e)
                     }
@@ -725,6 +736,7 @@ internal fun parseRetryAfterMillis(
 }
 
 internal const val DEEPSEEK_SUBTITLE_MODEL = "deepseek-flash"
+internal const val TITLE_WRITE_TOOL_NAME = "write_translated_display_names"
 internal const val SUBTITLE_READ_TOOL_NAME = "read_subtitle_translation_state"
 internal const val SUBTITLE_WRITE_TOOL_NAME = "write_timed_chinese_subtitles"
 internal const val POLISH_READ_TOOL_NAME = "read_subtitle_polish_state"
@@ -799,7 +811,8 @@ internal fun buildDeepSeekTitleTranslationRequest(
     cv: String,
     trackTitles: List<Pair<Long, String>>,
     settings: DeepSeekTranslationSettings = DeepSeekTranslationSettings(),
-    apiConfig: TranslationApiConfig = TranslationApiConfig(apiKey = "")
+    apiConfig: TranslationApiConfig = TranslationApiConfig(apiKey = ""),
+    validationError: String? = null
 ): String {
     require(albumTitle.isNotBlank())
     require(trackTitles.isNotEmpty())
@@ -807,18 +820,26 @@ internal fun buildDeepSeekTitleTranslationRequest(
         put("work_title", albumTitle)
         put("circle", circle)
         put("cv", cv)
+        validationError?.let { put("validation_error", it) }
         put("tracks", trackTitles.mapIndexed { index, (trackId, title) ->
             mapOf("track_id" to trackId, "index" to index, "title" to title)
         })
     }
+    val useTitleTool = !apiConfig.isDeepSeek && validationError != null
+    val systemPrompt = if (useTitleTool) {
+        displayNameTranslationSystemPrompt() + "\n\n" + TranslationPrompts.displayNameToolInstruction()
+    } else {
+        displayNameTranslationSystemPrompt()
+    }
     return gson.toJson(
         DeepSeekChatRequest(
             messages = listOf(
-                DeepSeekChatMessage(role = "system", content = displayNameTranslationSystemPrompt()),
+                DeepSeekChatMessage(role = "system", content = systemPrompt),
                 DeepSeekChatMessage(role = "user", content = gson.toJson(userPayload))
             ),
             thinking = DeepSeekThinking(type = if (settings.thinkingEnabled) "enabled" else "disabled"),
-            reasoningEffort = settings.reasoningEffort.wireValue.takeIf { settings.thinkingEnabled }
+            reasoningEffort = settings.reasoningEffort.wireValue.takeIf { settings.thinkingEnabled },
+            tools = if (useTitleTool) displayNameTranslationTools() else null
         ).forApi(apiConfig)
     )
 }
@@ -830,26 +851,26 @@ internal fun parseDisplayNameTranslationResponse(
     require(expectedTrackIds.isNotEmpty())
     val root = parseTranslationContentJsonObject(content)
     val workTitle = runCatching { root.get("work_title").asString.trim() }
-        .getOrElse { throw IllegalArgumentException("缺少 work_title", it) }
-    require(workTitle.isNotEmpty()) { "作品标题不能为空" }
+        .getOrElse { throw IllegalArgumentException(appString(R.string.ui_work_title_is_missing), it) }
+    require(workTitle.isNotEmpty()) { appString(R.string.ui_work_title_cannot_be_empty) }
     val tracks = runCatching { root.getAsJsonArray("tracks") }
-        .getOrElse { throw IllegalArgumentException("缺少 tracks 数组", it) }
-        ?: throw IllegalArgumentException("缺少 tracks 数组")
+        .getOrElse { throw IllegalArgumentException(appString(R.string.ui_missing_tracks_array), it) }
+        ?: throw IllegalArgumentException(appString(R.string.ui_missing_tracks_array))
     val expectedSet = expectedTrackIds.toSet()
     val parsed = LinkedHashMap<Long, String>(tracks.size())
     tracks.forEach { element ->
         val item = element.takeIf { it.isJsonObject }?.asJsonObject
-            ?: throw IllegalArgumentException("音轨翻译项不是对象")
+            ?: throw IllegalArgumentException(appString(R.string.ui_audio_track_translation_item_is_not_an_object))
         val trackId = runCatching { item.get("track_id").asLong }
-            .getOrElse { throw IllegalArgumentException("音轨翻译项缺少 track_id", it) }
+            .getOrElse { throw IllegalArgumentException(appString(R.string.ui_audio_track_translation_item_is_missing_track_id), it) }
         val title = runCatching { item.get("title").asString.trim() }
-            .getOrElse { throw IllegalArgumentException("音轨翻译项缺少 title", it) }
+            .getOrElse { throw IllegalArgumentException(appString(R.string.ui_audio_track_translation_item_is_missing_title), it) }
         if (trackId !in expectedSet) return@forEach
-        require(title.isNotEmpty()) { "音轨标题不能为空：track_id=$trackId" }
-        require(parsed.put(trackId, title) == null) { "音轨翻译索引重复：track_id=$trackId" }
+        require(title.isNotEmpty()) { appString(R.string.ui_track_title_cannot_be_empty_track_id, trackId) }
+        require(parsed.put(trackId, title) == null) { appString(R.string.ui_duplicate_audio_track_translation_index_track_id, trackId) }
     }
     val missing = expectedTrackIds.filterNot { it in parsed }
-    require(missing.isEmpty()) { "音轨翻译索引不匹配：缺少 ${missing.joinToString(",")}" }
+    require(missing.isEmpty()) { appString(R.string.ui_audio_track_translation_index_mismatch_is_missing, missing.joinToString(",")) }
     return DisplayNameTranslationResult(
         albumTitle = workTitle,
         trackTitles = expectedTrackIds.associateWith { parsed.getValue(it) }
@@ -859,25 +880,35 @@ internal fun parseDisplayNameTranslationResponse(
 private fun displayNameTranslationSystemPrompt(): String =
     TranslationPrompts.displayNameSystemPrompt()
 
-internal fun buildDeepSeekSubtitleTranslationRequest(
-    gson: Gson,
-    sources: List<GeneratedSubtitleSource>,
-    allowMerging: Boolean,
-    confirmedCaptions: List<GeneratedSubtitleCaption> = emptyList(),
-    workContext: SubtitleWorkContext? = null,
-    scriptContext: SubtitleScriptContext? = null,
-    settings: DeepSeekTranslationSettings = DeepSeekTranslationSettings()
-): String {
-    val messages = buildSubtitleAgentInitialMessages(
-        gson = gson,
-        sources = sources,
-        allowMerging = allowMerging,
-        confirmedCaptions = confirmedCaptions,
-        workContext = workContext,
-        scriptContext = scriptContext
+private fun displayNameTranslationTools(): List<DeepSeekToolDefinition> = listOf(
+    DeepSeekToolDefinition(
+        function = DeepSeekFunctionDefinition(
+            name = TITLE_WRITE_TOOL_NAME,
+            description = TranslationPrompts.displayNameToolInstruction(),
+            parameters = mapOf(
+                "type" to "object",
+                "properties" to mapOf(
+                    "work_title" to mapOf("type" to "string", "minLength" to 1),
+                    "tracks" to mapOf(
+                        "type" to "array",
+                        "minItems" to 1,
+                        "items" to mapOf(
+                            "type" to "object",
+                            "properties" to mapOf(
+                                "track_id" to mapOf("type" to "integer"),
+                                "title" to mapOf("type" to "string", "minLength" to 1)
+                            ),
+                            "required" to listOf("track_id", "title"),
+                            "additionalProperties" to false
+                        )
+                    )
+                ),
+                "required" to listOf("work_title", "tracks"),
+                "additionalProperties" to false
+            )
+        )
     )
-    return buildDeepSeekSubtitleAgentRequest(gson, messages, settings, scriptContext)
-}
+)
 
 internal fun buildSubtitleAgentInitialMessages(
     gson: Gson,
@@ -1058,12 +1089,12 @@ internal fun parsePolishWriteToolArguments(
     arguments: String,
     expectedCaptions: List<PolishCaptionInput>
 ): List<PolishCaptionResult> {
-    require(expectedCaptions.isNotEmpty()) { "没有可润色的字幕" }
+    require(expectedCaptions.isNotEmpty()) { appString(R.string.ui_no_subtitles_to_polish) }
     val expectedById = expectedCaptions.associateBy(PolishCaptionInput::captionId)
     val root = runCatching {
         JsonParser.parseString(arguments.trim()).asJsonObject
     }.getOrElse { error ->
-        throw IllegalArgumentException("润色工具调用参数不是有效 JSON 对象", error)
+        throw IllegalArgumentException(appString(R.string.ui_the_polish_tool_call_parameter_is_not_a), error)
     }
     val captions = runCatching { root.getAsJsonArray("captions") }
         .getOrElse { throw IllegalArgumentException("captions 不是数组", it) }
@@ -1071,17 +1102,17 @@ internal fun parsePolishWriteToolArguments(
     require(captions.size() > 0) { "润色 captions 不能为空；无需修改时请读取下一页" }
     val parsed = captions.map { element ->
         val item = element.takeIf { it.isJsonObject }?.asJsonObject
-            ?: throw IllegalArgumentException("润色条目不是对象")
+            ?: throw IllegalArgumentException(appString(R.string.ui_polished_items_are_not_objects))
         val captionId = runCatching { item.get("caption_id").asLong }
-            .getOrElse { throw IllegalArgumentException("润色条目缺少 caption_id", it) }
-        require(captionId in expectedById) { "润色条目引用了未知 caption_id：$captionId" }
+            .getOrElse { throw IllegalArgumentException(appString(R.string.ui_polish_entry_is_missing_caption_id), it) }
+        require(captionId in expectedById) { appString(R.string.ui_the_polish_entry_references_unknown_caption_id, captionId) }
         val chinese = runCatching { item.get("chinese").asString.trim() }
-            .getOrElse { throw IllegalArgumentException("润色条目缺少 chinese", it) }
-        require(chinese.isNotEmpty()) { "润色 chinese 不能为空" }
+            .getOrElse { throw IllegalArgumentException(appString(R.string.ui_polished_entry_is_missing_chinese), it) }
+        require(chinese.isNotEmpty()) { appString(R.string.ui_polish_chinese_cannot_be_empty) }
         PolishCaptionResult(captionId = captionId, chinese = chinese)
     }
     require(parsed.map(PolishCaptionResult::captionId).distinct().size == parsed.size) {
-        "润色条目 caption_id 不能重复"
+        appString(R.string.ui_polish_entry_caption_id_cannot_be_repeated)
     }
     return parsed
 }
@@ -1229,15 +1260,15 @@ internal data class ScriptReadToolArgs(
 )
 
 internal fun parseScriptReadToolArguments(arguments: String, fileCount: Int): ScriptReadToolArgs {
-    require(fileCount > 0) { "作品目录没有台本文件" }
+    require(fileCount > 0) { appString(R.string.ui_there_is_no_script_file_in_the_work) }
     val root = runCatching {
         JsonParser.parseString(arguments.trim()).asJsonObject
     }.getOrElse { error ->
-        throw IllegalArgumentException("台本读取工具参数不是有效 JSON 对象", error)
+        throw IllegalArgumentException(appString(R.string.ui_the_script_reading_tool_parameter_is_not_a), error)
     }
     val fileIndex = runCatching { root.get("file_index").asInt }
-        .getOrElse { error -> throw IllegalArgumentException("台本读取工具缺少 file_index", error) }
-    require(fileIndex in 0 until fileCount) { "file_index 超出范围：$fileIndex" }
+        .getOrElse { error -> throw IllegalArgumentException(appString(R.string.ui_the_script_reading_tool_is_missing_file_index), error) }
+    require(fileIndex in 0 until fileCount) { appString(R.string.ui_file_index_out_of_range, fileIndex) }
     val offset = runCatching { root.get("offset").asInt }.getOrDefault(0).coerceAtLeast(0)
     val limit = runCatching { root.get("limit").asInt }
         .getOrDefault(SCRIPT_READ_DEFAULT_LIMIT)
@@ -1275,11 +1306,11 @@ internal suspend fun buildScriptReadToolResultMessage(
     require(toolCallId.isNotBlank())
     val file = context.files.getOrNull(fileIndex)
     if (file == null) {
-        return buildSubtitleToolErrorMessage(gson, toolCallId, "未知台本文件索引：$fileIndex")
+        return buildSubtitleToolErrorMessage(gson, toolCallId, appString(R.string.ui_unknown_script_file_index, fileIndex))
     }
     val read = context.reader.read(fileIndex, offset, limit)
     if (read == null) {
-        return buildSubtitleToolErrorMessage(gson, toolCallId, "无法读取台本文件：${file.name}")
+        return buildSubtitleToolErrorMessage(gson, toolCallId, appString(R.string.ui_unable_to_read_script_file, file.name))
     }
     val result = mapOf(
         "file_index" to read.fileIndex,
@@ -1425,7 +1456,7 @@ internal suspend fun <T> retrySubtitleTranslation(
             lastError = error
             if (!error.retryable || attempt == maxAttempts) throw error
             val exponentialDelay = BASE_RETRY_DELAY_MS * (1L shl (attempt - 1))
-            onRetry(attempt + 1, maxAttempts, error.message.orEmpty().ifBlank { "未知原因" })
+            onRetry(attempt + 1, maxAttempts, error.message.orEmpty().ifBlank { appString(R.string.ui_unknown_reason) })
             delayProvider(maxOf(exponentialDelay, error.retryAfterMs ?: 0L))
         }
     }
@@ -1437,14 +1468,14 @@ internal fun parseSubtitleWriteToolArguments(
     expectedRemainingSources: List<GeneratedSubtitleSource>,
     allowMerging: Boolean
 ): List<GeneratedSubtitleCaption> {
-    require(expectedRemainingSources.isNotEmpty()) { "全部字幕已完成，无需继续写入" }
+    require(expectedRemainingSources.isNotEmpty()) { appString(R.string.ui_all_subtitles_have_been_completed_no_need_to) }
     val root = runCatching {
         JsonParser.parseString(arguments.trim()).asJsonObject
     }.getOrElse { error ->
         val reason = if (arguments.trimStart().startsWith('{') && !arguments.trimEnd().endsWith('}')) {
-            "字幕工具调用参数被截断，未形成完整 JSON 对象"
+            appString(R.string.ui_the_subtitle_tool_call_parameters_were_truncated_and)
         } else {
-            "字幕工具调用参数不是有效 JSON 对象"
+            appString(R.string.ui_the_subtitle_tool_call_parameter_is_not_a)
         }
         throw IllegalArgumentException(reason, error)
     }
@@ -1453,19 +1484,19 @@ internal fun parseSubtitleWriteToolArguments(
         ?: throw IllegalArgumentException("缺少 captions 数组")
     val parsed = captions.map { element ->
         val item = element.takeIf { it.isJsonObject }?.asJsonObject
-            ?: throw IllegalArgumentException("字幕组不是对象")
+            ?: throw IllegalArgumentException(appString(R.string.ui_subtitle_group_is_not_an_object))
         val sourceIndices = runCatching {
             item.getAsJsonArray("source_indices").map { it.asInt }
-        }.getOrElse { throw IllegalArgumentException("字幕组缺少 source_indices", it) }
-        require(sourceIndices.isNotEmpty()) { "字幕组的 source_indices 不能为空" }
+        }.getOrElse { throw IllegalArgumentException(appString(R.string.ui_subtitle_group_is_missing_source_indices), it) }
+        require(sourceIndices.isNotEmpty()) { appString(R.string.ui_the_source_indices_of_the_subtitle_group_cannot) }
         val startMs = runCatching { item.get("start_ms").asLong }
-            .getOrElse { throw IllegalArgumentException("字幕组缺少 start_ms", it) }
+            .getOrElse { throw IllegalArgumentException(appString(R.string.ui_the_subtitle_group_is_missing_start_ms), it) }
         val endMs = runCatching { item.get("end_ms").asLong }
-            .getOrElse { throw IllegalArgumentException("字幕组缺少 end_ms", it) }
+            .getOrElse { throw IllegalArgumentException(appString(R.string.ui_the_subtitle_group_is_missing_end_ms), it) }
         val correctedJapanese = runCatching { item.get("japanese").asString.trim() }
-            .getOrElse { throw IllegalArgumentException("字幕组缺少 japanese", it) }
+            .getOrElse { throw IllegalArgumentException(appString(R.string.ui_the_subtitle_group_is_missing_japanese), it) }
         val chineseText = runCatching { item.get("chinese").asString.trim() }
-            .getOrElse { throw IllegalArgumentException("字幕组缺少 chinese", it) }
+            .getOrElse { throw IllegalArgumentException(appString(R.string.ui_the_subtitle_group_is_missing_chinese), it) }
         GeneratedSubtitleCaption(
             sourceIndices = sourceIndices,
             startMs = startMs,
@@ -1490,10 +1521,10 @@ private fun parseTranslationContentJsonObject(content: String) = content.trim()
     .let { trimmed ->
         val objectStart = trimmed.indexOf('{')
         val objectEnd = trimmed.lastIndexOf('}')
-        require(objectStart >= 0 && objectEnd > objectStart) { "响应正文中没有 JSON 对象" }
+        require(objectStart >= 0 && objectEnd > objectStart) { appString(R.string.ui_no_json_object_in_response_body) }
         runCatching {
             JsonParser.parseString(trimmed.substring(objectStart, objectEnd + 1)).asJsonObject
-        }.getOrElse { throw IllegalArgumentException("无法解析 JSON", it) }
+        }.getOrElse { throw IllegalArgumentException(appString(R.string.ui_unable_to_parse_json), it) }
     }
 
 internal fun subtitleToolTranslationSystemPrompt(

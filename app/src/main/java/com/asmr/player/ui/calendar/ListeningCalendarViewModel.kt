@@ -1,5 +1,8 @@
 package com.asmr.player.ui.calendar
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
@@ -10,6 +13,7 @@ import com.asmr.player.data.local.db.entities.ListeningSessionEntity
 import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.data.repository.ListeningRecordRepository
 import com.asmr.player.data.repository.StatisticsRepository
+import com.asmr.player.ui.common.InitialContentReadiness
 import com.asmr.player.util.ListeningDay
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -50,11 +54,13 @@ data class ListeningSummary(
     val activeDayCount: Int = 0
 )
 
-enum class ListeningComparisonGranularity(val label: String) {
-    Day("日"),
-    Week("周"),
-    Month("月"),
-    Year("年")
+enum class ListeningComparisonGranularity(private val labelProvider: () -> String) {
+    Day( { appString(R.string.ui_day) }),
+    Week( { appString(R.string.ui_week) }),
+    Month( { appString(R.string.ui_moon) }),
+    Year( { appString(R.string.ui_year) });
+
+    val label: String get() = labelProvider()
 }
 
 data class ListeningSummaryArtwork(
@@ -73,7 +79,7 @@ data class ListeningMetricDelta(
 }
 
 data class ListeningSummaryComparison(
-    val referenceLabel: String = "昨日",
+    val referenceLabel: String = appString(R.string.ui_yesterday),
     val durationMs: ListeningMetricDelta = ListeningMetricDelta(),
     val trackCount: ListeningMetricDelta = ListeningMetricDelta(),
     val activeDayCount: ListeningMetricDelta = ListeningMetricDelta(),
@@ -95,6 +101,7 @@ class ListeningCalendarViewModel @Inject constructor(
     private val currentDate = ListeningDay.currentDate()
     private val currentYear = yearOf(currentDate) ?: 0
     private val _comparisonGranularity = MutableStateFlow(ListeningComparisonGranularity.Day)
+    private val initialContentReadiness = InitialContentReadiness()
 
     init {
         authStore.registerListener(authPreferenceListener)
@@ -114,6 +121,7 @@ class ListeningCalendarViewModel @Inject constructor(
         }
             .debounce(SUMMARY_UPDATE_DEBOUNCE_MS)
             .flowOn(Dispatchers.Default)
+            .let(initialContentReadiness::track)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ListeningSummary())
 
     /** 可切换的年份列表，默认包含当前年，按新到旧排序。 */
@@ -121,6 +129,7 @@ class ListeningCalendarViewModel @Inject constructor(
         statisticsRepository.observeAllStats()
             .map { stats -> availableYearsForDates(stats.map { it.date }, currentYear) }
             .flowOn(Dispatchers.Default)
+            .let(initialContentReadiness::track)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf(currentYear))
 
     private val _selectedYear = MutableStateFlow(currentYear)
@@ -141,6 +150,7 @@ class ListeningCalendarViewModel @Inject constructor(
                     }
             }
             .flowOn(Dispatchers.Default)
+            .let(initialContentReadiness::track)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _selectedDate = MutableStateFlow<String?>(currentDate)
@@ -157,6 +167,7 @@ class ListeningCalendarViewModel @Inject constructor(
                     .map { row -> row?.toSummaryArtwork() }
             }
             .flowOn(Dispatchers.Default)
+            .let(initialContentReadiness::track)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     private val _isDlsiteLoggedIn = MutableStateFlow(authStore.isLoggedIn())
@@ -177,6 +188,7 @@ class ListeningCalendarViewModel @Inject constructor(
         }
             .debounce(SUMMARY_UPDATE_DEBOUNCE_MS)
             .flowOn(Dispatchers.Default)
+            .let(initialContentReadiness::track)
             .stateIn(
                 viewModelScope,
                 SharingStarted.WhileSubscribed(5000),
@@ -195,7 +207,12 @@ class ListeningCalendarViewModel @Inject constructor(
             }
             .map { sessions -> mergeAdjacentListeningSessions(sessions) }
             .flowOn(Dispatchers.Default)
+            .let(initialContentReadiness::track)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    suspend fun awaitInitialContent() {
+        initialContentReadiness.awaitReady()
+    }
 
     fun selectDate(date: String?) {
         _selectedDate.value = date
@@ -390,7 +407,7 @@ class ListeningCalendarViewModel @Inject constructor(
             return SummaryComparisonWindow(
                 currentRange = DateRange(currentDate, currentDate),
                 referenceRange = DateRange(referenceDate, referenceDate),
-                referenceLabel = if (referenceDate == yesterday) "昨日" else shortDateLabel(referenceDate)
+                referenceLabel = if (referenceDate == yesterday) appString(R.string.ui_yesterday) else shortDateLabel(referenceDate)
             )
         }
 
@@ -406,7 +423,7 @@ class ListeningCalendarViewModel @Inject constructor(
             return SummaryComparisonWindow(
                 currentRange = DateRange(currentStart, currentDate),
                 referenceRange = DateRange(referenceStart, referenceEnd),
-                referenceLabel = if (weeksBack == 1) "上周" else "${weeksBack}周前"
+                referenceLabel = if (weeksBack == 1) appString(R.string.ui_last_week) else appString(R.string.ui_weeks_ago, weeksBack)
             )
         }
 
@@ -425,7 +442,7 @@ class ListeningCalendarViewModel @Inject constructor(
             return SummaryComparisonWindow(
                 currentRange = DateRange(currentStart, currentEnd),
                 referenceRange = DateRange(referenceStart, referenceEnd),
-                referenceLabel = if (monthsBack == 1) "上月" else "${monthsBack}个月前"
+                referenceLabel = if (monthsBack == 1) appString(R.string.ui_last_month) else appString(R.string.ui_months_ago, monthsBack)
             )
         }
 
@@ -440,7 +457,7 @@ class ListeningCalendarViewModel @Inject constructor(
             return SummaryComparisonWindow(
                 currentRange = DateRange(currentStart, currentDate),
                 referenceRange = DateRange(referenceStart, referenceEnd),
-                referenceLabel = if (yearsBack == 1) "去年" else "${yearsBack}年前"
+                referenceLabel = if (yearsBack == 1) appString(R.string.ui_last_year) else appString(R.string.ui_years_ago, yearsBack)
             )
         }
 
@@ -577,7 +594,7 @@ class ListeningCalendarViewModel @Inject constructor(
 
         private fun shortDateLabel(date: String): String {
             val cal = calendarFor(date) ?: return date
-            return "${cal.get(Calendar.MONTH) + 1}月${cal.get(Calendar.DAY_OF_MONTH)}日"
+            return appString(R.string.ui_month_day, cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH))
         }
 
         private fun formatYearDate(year: Int, month: Int, day: Int): String {

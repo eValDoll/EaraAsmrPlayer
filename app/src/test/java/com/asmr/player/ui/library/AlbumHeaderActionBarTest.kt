@@ -31,7 +31,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [28], qualifiers = "w1280dp-h800dp-land-mdpi")
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [28], qualifiers = "w1280dp-h800dp-land-mdpi")
 class AlbumHeaderActionBarTest {
     private val compose = createAndroidComposeRule<ComponentActivity>()
 
@@ -58,7 +58,11 @@ class AlbumHeaderActionBarTest {
 
         assertActionsFit(width = 736.dp, secondaryLabel = "保存")
         compose.onNodeWithText("打开网页").assertWidthIsEqualTo(104.dp)
-        compose.onNodeWithText("日语").assertIsDisplayed()
+        val download = compose.onNodeWithText("下载").getUnclippedBoundsInRoot()
+        val save = compose.onNodeWithText("保存").getUnclippedBoundsInRoot()
+        val language = compose.onNodeWithText("日语").assertIsDisplayed().getUnclippedBoundsInRoot()
+        assertTrue("主操作按钮应充分利用剩余宽度", download.right - download.left >= 200.dp && save.right - save.left >= 200.dp)
+        assertTrue("按钮组与语言入口间不应留下大片空白", language.left - save.right <= 16.dp)
         compose.onNodeWithText("下载").performClick()
         compose.onNodeWithText("保存").performClick()
         compose.runOnIdle {
@@ -104,6 +108,15 @@ class AlbumHeaderActionBarTest {
         showActionBar(width = 400.dp, floating = false)
 
         assertActionsFit(width = 400.dp, secondaryLabel = "保存")
+    }
+
+    @Test
+    fun splitWindowUsesFullWidthActionsInsteadOfSqueezedFloatingActions() {
+        val windowWidth = 670.dp
+        val floating = shouldUseAlbumDetailLandscapeLayout(windowWidth, 600.dp, 1.3f)
+        val actionWidth = windowWidth - 32.dp
+        showActionBar(width = actionWidth, floating = floating)
+        assertActionsFit(width = actionWidth, secondaryLabel = "保存")
     }
 
     private fun showActionBar(

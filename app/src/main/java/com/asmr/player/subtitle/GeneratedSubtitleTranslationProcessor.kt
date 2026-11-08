@@ -1,5 +1,8 @@
 package com.asmr.player.subtitle
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.google.gson.annotations.SerializedName
 
 internal data class GeneratedSubtitleSource(
@@ -17,27 +20,6 @@ internal data class GeneratedSubtitleCaption(
     @SerializedName("text") val chineseText: String
 )
 
-internal fun validateGeneratedSubtitleCaptions(
-    captions: List<GeneratedSubtitleCaption>,
-    expectedSources: List<GeneratedSubtitleSource>
-): List<GeneratedSubtitleCaption> {
-    require(expectedSources.isNotEmpty())
-    val expectedIndices = expectedSources.map(GeneratedSubtitleSource::index)
-    require(expectedIndices.distinct().size == expectedIndices.size)
-    require(expectedIndices.zipWithNext().all { (left, right) -> right == left + 1 }) {
-        "目标字幕片段索引必须连续递增"
-    }
-    val normalized = validateSubtitleCaptionBatch(
-        captions = captions,
-        expectedRemainingSources = expectedSources,
-        allowMerging = true
-    )
-    require(normalized.flatMap(GeneratedSubtitleCaption::sourceIndices) == expectedIndices) {
-        "字幕重组索引未覆盖全部目标片段"
-    }
-    return normalized
-}
-
 internal fun validateSubtitleCaptionBatch(
     captions: List<GeneratedSubtitleCaption>,
     expectedRemainingSources: List<GeneratedSubtitleSource>,
@@ -45,26 +27,26 @@ internal fun validateSubtitleCaptionBatch(
 ): List<GeneratedSubtitleCaption> {
     require(expectedRemainingSources.isNotEmpty())
     val expectedIndices = expectedRemainingSources.map(GeneratedSubtitleSource::index)
-    require(expectedIndices.distinct().size == expectedIndices.size) { "目标字幕索引不能重复" }
-    require(captions.isNotEmpty()) { "缺少 captions 字幕数组" }
+    require(expectedIndices.distinct().size == expectedIndices.size) { appString(R.string.ui_the_target_subtitle_index_cannot_be_repeated) }
+    require(captions.isNotEmpty()) { appString(R.string.ui_missing_captions_subtitles_array) }
     val sourceByIndex = expectedRemainingSources.associateBy(GeneratedSubtitleSource::index)
     val sourcePositionByIndex = expectedIndices.withIndex().associate { (position, index) -> index to position }
 
     val normalizedCaptions = captions.map { caption ->
-        require(caption.sourceIndices.isNotEmpty()) { "字幕组的 source_indices 不能为空" }
+        require(caption.sourceIndices.isNotEmpty()) { appString(R.string.ui_the_source_indices_of_the_subtitle_group_cannot) }
         require(allowMerging || caption.sourceIndices.size == 1) {
-            "导入字幕必须逐条提交，不能合并 source_indices"
+            appString(R.string.ui_imported_subtitles_must_be_submitted_one_by_one)
         }
         val sourcePositions = caption.sourceIndices.map { index ->
-            sourcePositionByIndex[index] ?: throw IllegalArgumentException("字幕组包含非目标 index：$index")
+            sourcePositionByIndex[index] ?: throw IllegalArgumentException(appString(R.string.ui_subtitle_group_contains_non_target_index, index))
         }
         require(sourcePositions.zipWithNext().all { (left, right) -> right == left + 1 }) {
-            "字幕组的 source_indices 必须按源字幕顺序连续递增"
+            appString(R.string.ui_the_source_indices_of_the_subtitle_group_must)
         }
-        require(caption.correctedJapanese.isNotBlank()) { "修正后的日文不能为空" }
-        require(caption.chineseText.isNotBlank()) { "翻译文本不能为空" }
+        require(caption.correctedJapanese.isNotBlank()) { appString(R.string.ui_the_corrected_japanese_cannot_be_empty) }
+        require(caption.chineseText.isNotBlank()) { appString(R.string.ui_translation_text_cannot_be_empty) }
         val groupedSources = caption.sourceIndices.map { index ->
-            sourceByIndex[index] ?: throw IllegalArgumentException("字幕组包含非目标 index：$index")
+            sourceByIndex[index] ?: throw IllegalArgumentException(appString(R.string.ui_subtitle_group_contains_non_target_index, index))
         }
         caption.copy(
             startMs = groupedSources.first().startMs,
@@ -74,7 +56,7 @@ internal fun validateSubtitleCaptionBatch(
 
     val actualIndices = normalizedCaptions.flatMap(GeneratedSubtitleCaption::sourceIndices)
     require(actualIndices == expectedIndices.take(actualIndices.size)) {
-        "本次工具调用必须从首个未确认索引开始，按顺序提交连续前缀"
+        appString(R.string.ui_this_tool_call_must_start_from_the_first)
     }
     return normalizedCaptions
 }

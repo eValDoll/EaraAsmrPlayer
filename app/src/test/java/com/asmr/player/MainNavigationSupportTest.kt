@@ -15,10 +15,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
-class MainNavigationSupportTest {
+class MainNavigationSupportTest : com.asmr.player.LocalizedRobolectricTest() {
 
     @Test
-    fun resolveMainRequestedOrientation_locksOnlyFullscreenPlayerToLandscape() {
+    fun resolveMainRequestedOrientation_fullscreenPlayerUsesLandscape() {
         assertEquals(
             ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
             resolveMainRequestedOrientation(
@@ -60,7 +60,7 @@ class MainNavigationSupportTest {
             )
         )
         assertEquals(
-            ActivityInfo.SCREEN_ORIENTATION_USER,
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
             resolveMainRequestedOrientation(
                 isPhone = false,
                 nowPlayingVisible = false,
@@ -71,9 +71,9 @@ class MainNavigationSupportTest {
     }
 
     @Test
-    fun resolveMainRequestedOrientation_tabletPlayerRestoresSystemRotationPolicyAfterFullscreen() {
+    fun resolveMainRequestedOrientation_tabletRemainsLandscapeAfterFullscreen() {
         assertEquals(
-            ActivityInfo.SCREEN_ORIENTATION_USER,
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
             resolveMainRequestedOrientation(
                 isPhone = false,
                 nowPlayingVisible = true,
@@ -82,7 +82,7 @@ class MainNavigationSupportTest {
             )
         )
         assertEquals(
-            ActivityInfo.SCREEN_ORIENTATION_USER,
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
             resolveMainRequestedOrientation(
                 isPhone = false,
                 nowPlayingVisible = false,
@@ -104,48 +104,12 @@ class MainNavigationSupportTest {
             )
         )
         assertEquals(
-            ActivityInfo.SCREEN_ORIENTATION_USER,
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
             resolveMainRequestedOrientation(
                 isPhone = false,
                 nowPlayingVisible = true,
                 videoFullscreen = false,
                 portraitExitPending = true
-            )
-        )
-    }
-
-    @Test
-    fun shouldKeepVideoOutputEnabled_keepsDecoderWarmWhilePlaybackUiOwnsVideo() {
-        assertEquals(
-            true,
-            shouldKeepVideoOutputEnabled(
-                currentItemIsVideo = true,
-                miniPlayerEnabled = true,
-                nowPlayingVisible = false
-            )
-        )
-        assertEquals(
-            true,
-            shouldKeepVideoOutputEnabled(
-                currentItemIsVideo = true,
-                miniPlayerEnabled = false,
-                nowPlayingVisible = true
-            )
-        )
-        assertEquals(
-            false,
-            shouldKeepVideoOutputEnabled(
-                currentItemIsVideo = true,
-                miniPlayerEnabled = false,
-                nowPlayingVisible = false
-            )
-        )
-        assertEquals(
-            false,
-            shouldKeepVideoOutputEnabled(
-                currentItemIsVideo = false,
-                miniPlayerEnabled = true,
-                nowPlayingVisible = false
             )
         )
     }
@@ -198,13 +162,6 @@ class MainNavigationSupportTest {
     }
 
     @Test
-    fun resolvePrimaryPagerApproachPage_onlySkipsLongProgrammaticJumps() {
-        assertEquals(null, resolvePrimaryPagerApproachPage(currentPage = 1, targetPage = 2))
-        assertEquals(2, resolvePrimaryPagerApproachPage(currentPage = 0, targetPage = 3))
-        assertEquals(1, resolvePrimaryPagerApproachPage(currentPage = 4, targetPage = 0))
-    }
-
-    @Test
     fun shouldSyncPrimaryPagerToRoute_onlyWhenSettledPageDiffersFromTarget() {
         assertEquals(false, shouldSyncPrimaryPagerToRoute(targetPage = -1, settledPage = 0))
         assertEquals(false, shouldSyncPrimaryPagerToRoute(targetPage = 2, settledPage = 2))
@@ -246,11 +203,11 @@ class MainNavigationSupportTest {
     }
 
     @Test
-    fun resolvePrimaryPagerBeyondBoundsPageCount_keepsOnlyAdjacentPageComposed() {
+    fun resolvePrimaryPagerBeyondBoundsPageCount_canRetainEveryPrimaryPageFromEitherEnd() {
         assertEquals(0, resolvePrimaryPagerBeyondBoundsPageCount(0))
         assertEquals(0, resolvePrimaryPagerBeyondBoundsPageCount(1))
         assertEquals(1, resolvePrimaryPagerBeyondBoundsPageCount(2))
-        assertEquals(1, resolvePrimaryPagerBeyondBoundsPageCount(8))
+        assertEquals(7, resolvePrimaryPagerBeyondBoundsPageCount(8))
     }
 
     @Test

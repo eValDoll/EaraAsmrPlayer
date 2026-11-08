@@ -37,19 +37,6 @@ object ListeningDay {
     }
 
     /**
-     * 收听日字符串（"yyyy-MM-dd"）对应的 00:00（即该收听日真正开始的 05:00）的时间戳。
-     * 主要用于热度图中把日期映射到网格坐标。返回该收听日窗口的起始 epoch 毫秒。
-     */
-    fun startOfDate(date: String): Long {
-        val parsed = dateFormat.parse(date) ?: return 0L
-        // parsed 是回拨 5 小时后的 00:00；真实起点需要再加回 5 小时。
-        val cal = Calendar.getInstance(TimeZone.getDefault())
-        cal.time = parsed
-        cal.add(Calendar.MILLISECOND, RESET_OFFSET_MS.toInt())
-        return cal.timeInMillis
-    }
-
-    /**
      * 生成从 [startDate]（含）到 [endDate]（含）之间、以收听日为单位的连续日期列表，升序。
      * 若解析失败或区间非法则返回空列表。
      */
@@ -79,15 +66,4 @@ object ListeningDay {
         return cal.get(Calendar.DAY_OF_WEEK) - 1
     }
 
-    /**
-     * 返回从今天往前推 [days] 天的收听日（含今天）作为区间起点日期字符串。
-     * 例如 days = 365 表示最近一年。
-     */
-    fun dateDaysAgo(days: Int, nowMs: Long = System.currentTimeMillis()): String {
-        val todayStart = dateFormat.parse(dateOf(nowMs)) ?: return dateOf(nowMs)
-        val cal = Calendar.getInstance(TimeZone.getDefault())
-        cal.time = todayStart
-        cal.add(Calendar.DAY_OF_MONTH, -days)
-        return dateFormat.format(cal.time)
-    }
 }

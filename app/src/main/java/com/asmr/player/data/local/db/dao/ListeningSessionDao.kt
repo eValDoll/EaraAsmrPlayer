@@ -65,20 +65,6 @@ interface ListeningSessionDao {
     fun observeSessionsForDate(date: String): Flow<List<ListeningSessionEntity>>
 
     @Query(
-        "SELECT ls.id AS id, ls.albumId AS albumId, ls.rjCode AS rjCode, " +
-            "COALESCE(NULLIF(a.displayTitle, ''), a.title, ls.title) AS title, " +
-            "ls.circle AS circle, ls.cv AS cv, ls.tags AS tags, " +
-            "ls.coverUrl AS coverUrl, ls.coverPath AS coverPath, ls.coverThumbPath AS coverThumbPath, " +
-            "ls.listeningDate AS listeningDate, ls.startAtMs AS startAtMs, " +
-            "ls.lastActiveAtMs AS lastActiveAtMs, ls.durationMs AS durationMs, " +
-            "ls.trafficBytes AS trafficBytes, ls.trackCount AS trackCount " +
-            "FROM listening_sessions ls " +
-            "LEFT JOIN albums a ON ls.albumId > 0 AND a.id = ls.albumId " +
-            "WHERE ls.listeningDate = :date ORDER BY ls.startAtMs DESC"
-    )
-    suspend fun getSessionsForDate(date: String): List<ListeningSessionEntity>
-
-    @Query(
         "SELECT UPPER(TRIM(rjCode)) FROM listening_sessions " +
             "WHERE TRIM(rjCode) != '' " +
             "GROUP BY UPPER(TRIM(rjCode)) " +

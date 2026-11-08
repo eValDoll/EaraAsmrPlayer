@@ -1,7 +1,7 @@
 package com.asmr.player.ui.search
 
 import androidx.compose.ui.test.assertCountEquals
-import androidx.compose.ui.test.junit4.createComposeRule
+import com.asmr.player.ui.createEaraComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -16,7 +16,7 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class JpAsmrSearchToolbarTest {
-    @get:Rule val composeRule = createComposeRule()
+    @get:Rule val composeRule = createEaraComposeRule()
 
     @Test fun jpMenusShowSupportedOptionsInLightTheme() = verifyMenus(ThemeMode.Light)
     @Test fun jpMenusShowSupportedOptionsInDarkTheme() = verifyMenus(ThemeMode.Dark)

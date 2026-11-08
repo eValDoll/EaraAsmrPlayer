@@ -22,8 +22,8 @@ interface DownloadDao {
         """
         SELECT d.id AS taskId,
                a.coverUrl AS coverUrl,
-               a.coverPath AS coverPath,
-               a.coverThumbPath AS coverThumbPath
+               COALESCE(NULLIF(a.manualCoverPath, ''), a.coverPath) AS coverPath,
+               CASE WHEN a.manualCoverPath != '' THEN '' ELSE a.coverThumbPath END AS coverThumbPath
         FROM download_tasks d
         INNER JOIN albums a ON
             (
@@ -60,16 +60,13 @@ interface DownloadDao {
     @Query("SELECT * FROM download_tasks WHERE rootDir = :rootDir LIMIT 1")
     suspend fun getTaskByRootDir(rootDir: String): DownloadTaskEntity?
 
-    @Query("UPDATE download_tasks SET subtitle = :subtitle, updatedAt = :updatedAt WHERE id = :taskId")
-    suspend fun updateTaskSubtitle(taskId: Long, subtitle: String, updatedAt: Long)
-
     @Query(
         "UPDATE download_tasks SET " +
             "subtitle = :subtitle, " +
             "albumTitle = :albumTitle, " +
             "albumCircle = :albumCircle, " +
             "albumCv = :albumCv, " +
-            "albumTagsCsv = :albumTagsCsv, " +
+            "albumTagsCsv = :albumTagsCsv, albumTagDetailsJson = :albumTagDetailsJson, " +
             "albumCoverUrl = :albumCoverUrl, " +
             "albumDescription = :albumDescription, " +
             "albumWorkId = :albumWorkId, " +
@@ -84,6 +81,7 @@ interface DownloadDao {
         albumCircle: String,
         albumCv: String,
         albumTagsCsv: String,
+        albumTagDetailsJson: String = "[]",
         albumCoverUrl: String,
         albumDescription: String,
         albumWorkId: String,
@@ -96,9 +94,6 @@ interface DownloadDao {
 
     @Query("SELECT * FROM download_items WHERE workId = :workId LIMIT 1")
     suspend fun getItemByWorkId(workId: String): DownloadItemEntity?
-
-    @Query("SELECT * FROM download_items WHERE filePath = :filePath LIMIT 1")
-    suspend fun getItemByFilePath(filePath: String): DownloadItemEntity?
 
     @Query("SELECT * FROM download_items WHERE taskId = :taskId AND relativePath = :relativePath LIMIT 1")
     suspend fun getItemByTaskAndRelativePath(taskId: Long, relativePath: String): DownloadItemEntity?
@@ -209,9 +204,6 @@ interface DownloadDao {
 
     @Query("SELECT COUNT(*) FROM download_items WHERE state IN ('RUNNING', 'ENQUEUED', 'BLOCKED')")
     suspend fun countActiveItems(): Int
-
-    @Query("SELECT COUNT(*) FROM download_items WHERE state = 'PAUSED'")
-    suspend fun countPausedItems(): Int
 
     @Query("SELECT COUNT(*) FROM download_items WHERE state != 'SUCCEEDED'")
     suspend fun countUnfinishedItems(): Int

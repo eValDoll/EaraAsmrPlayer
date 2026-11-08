@@ -1,5 +1,8 @@
 package com.asmr.player.subtitle
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import java.io.IOException
 import java.net.ConnectException
 import java.net.NoRouteToHostException
@@ -19,12 +22,12 @@ internal object SubtitleFailureMessages {
     fun isUserActionWarning(message: String): Boolean {
         val normalized = message.trim()
         return normalized.contains("API Key") ||
-            normalized.contains("账户余额不足") ||
+            normalized.contains("账户余额不足") || normalized.contains("insufficient account balance", ignoreCase = true) ||
             normalized == SubtitleTaskRepository.ALBUM_ALREADY_POLISHING_MESSAGE ||
             normalized == SubtitleTaskRepository.ACTIVE_TASKS_BLOCK_POLISH_MESSAGE ||
             normalized == SubtitleTaskRepository.POLISHING_BLOCKS_RETRY_MESSAGE ||
             normalized.startsWith(SubtitleModelRepository.MODEL_REQUIRED_MESSAGE) ||
-            normalized.startsWith("当前设备不支持本地字幕生成")
+            normalized.startsWith("当前设备不支持本地字幕生成") || normalized.contains("does not support local subtitle", ignoreCase = true)
     }
 
     fun transcription(error: Throwable): String {
@@ -33,31 +36,31 @@ internal object SubtitleFailureMessages {
             .lowercase(Locale.ROOT)
         return when {
             causes.any { it is OutOfMemoryError } || details.containsAny(MEMORY_ERROR_MARKERS) ->
-                "本地转录失败：运行模型时内存不足（OOM）。已保留已完成的转录进度；" +
-                    "请关闭占用内存的应用后重试，若仍失败则当前设备可能无法稳定运行此模型。"
+                appString(R.string.ui_local_transcription_failed_out_of_memory_oom_while) +
+                    appString(R.string.ui_please_close_the_applications_that_occupy_memory_and)
 
             causes.any { it is UnsatisfiedLinkError || it is LinkageError } ||
                 details.containsAny(RUNTIME_ERROR_MARKERS) ->
-                "本地转录失败：字幕运行环境与当前设备不兼容。已保留已完成的转录进度；" +
-                    "本功能仅支持 arm64-v8a 设备，请确认系统兼容性，或在设置中重新下载字幕组件后重试。"
+                appString(R.string.ui_local_transcription_failed_the_subtitle_running_environment_is) +
+                    appString(R.string.ui_this_function_only_supports_arm64_v8a_devices_please)
 
             details.containsAny(COMPONENT_ERROR_MARKERS) ->
-                "本地转录失败：字幕模型或运行组件缺失、损坏。已保留已完成的转录进度；" +
-                    "请前往设置删除并重新下载字幕模型后重试。"
+                appString(R.string.ui_local_transcription_failed_the_subtitle_model_or_running) +
+                    appString(R.string.ui_please_go_to_settings_to_delete_and_re)
 
             details.containsAny(AUDIO_ERROR_MARKERS) ->
-                "本地转录失败：音频读取或解码失败。已保留已完成的转录进度；" +
-                    "请确认文件完整且音频格式受当前系统支持后重试。"
+                appString(R.string.ui_local_transcription_failed_audio_reading_or_decoding_failed) +
+                    appString(R.string.ui_please_confirm_that_the_file_is_complete_and)
 
-            details.contains("未识别到可生成字幕的日语语音") ->
-                "本地转录未识别到可生成字幕的日语语音，请确认音频包含清晰的日语语音后重试。"
+            (details.contains("未识别到可生成字幕的日语语音") || details.contains("no japanese speech")) ->
+                appString(R.string.ui_the_local_transcription_did_not_recognize_the_japanese)
 
-            details.contains("字幕在转录期间已被修改") ->
-                "字幕在转录期间已被修改，任务已停止写入，未覆盖用户版本。"
+            (details.contains("字幕在转录期间已被修改") || details.contains("modified during transcription")) ->
+                appString(R.string.ui_the_subtitles_have_been_modified_during_transcription_the)
 
             else ->
-                "本地转录失败：模型运行异常。已保留已完成的转录进度；" +
-                    "请重试，若持续失败请在设置中重新下载字幕模型。"
+                appString(R.string.ui_local_transcription_failed_the_model_is_running_abnormally) +
+                    appString(R.string.ui_please_try_again_if_it_continues_to_fail)
         }
     }
 
@@ -67,31 +70,31 @@ internal object SubtitleFailureMessages {
             .lowercase(Locale.ROOT)
         return when {
             causes.any { it is OutOfMemoryError } || details.containsAny(MEMORY_ERROR_MARKERS) ->
-                "字幕翻译失败：处理模型响应时内存不足。请关闭占用内存的应用后重试。"
+                appString(R.string.ui_subtitle_translation_failed_out_of_memory_while_processing)
 
             details.contains("deepseek api key") || details.contains("api key") ->
-                "字幕翻译失败：API Key 未配置或已被移除，请前往设置重新配置后重试。"
+                appString(R.string.ui_subtitle_translation_failed_api_key_missing_configure_it)
 
             else ->
-                "字幕翻译失败：发生未预期的运行错误。请重试；若持续失败，请更新应用后再试。"
+                appString(R.string.ui_subtitle_translation_failed_an_unexpected_runtime_error_occurred)
         }
     }
 
     fun network(error: IOException, serviceName: String = "DeepSeek"): String {
         val causes = error.causeChain()
-        val connectionService = if (serviceName.endsWith("翻译服务")) serviceName else "$serviceName 翻译服务"
+        val connectionService = if (serviceName.endsWith("翻译服务") || serviceName.endsWith("translation service")) serviceName else appString(R.string.ui_translation_service_name, serviceName)
         return when {
             causes.any { it is SocketTimeoutException } ->
-                "$serviceName 网络请求超时，请检查网络或代理设置后重试。"
+                appString(R.string.ui_request_timed_out_check_your_network_or_proxy, serviceName)
 
             causes.any { it is UnknownHostException || it is ConnectException || it is NoRouteToHostException } ->
-                "无法连接 $connectionService，请检查网络或代理设置后重试。"
+                appString(R.string.ui_unable_to_connect_to_check_your_network_or, connectionService)
 
             causes.any { it is SSLException } ->
-                "无法与 $serviceName 建立安全连接，请检查系统时间、证书或代理设置后重试。"
+                appString(R.string.ui_unable_to_connect_securely_to_check_your_system, serviceName)
 
             else ->
-                "$serviceName 网络请求失败，请检查网络或代理设置后重试。"
+                appString(R.string.ui_request_failed_check_your_network_or_proxy_settings, serviceName)
         }
     }
 
@@ -104,23 +107,23 @@ internal object SubtitleFailureMessages {
         val retryable = statusCode == 408 || statusCode == 425 || statusCode == 429 || statusCode >= 500
         val message = when (statusCode) {
             400, 422 -> buildHttpMessage(
-                prefix = "$serviceName 拒绝了翻译请求（HTTP $statusCode）",
+                prefix = appString(R.string.ui_rejected_the_translation_request_http, serviceName, statusCode),
                 serviceMessage = serviceMessage,
-                action = if (custom) "请检查 API 地址、模型及接口兼容性。" else "请更新应用或稍后重试。"
+                action = if (custom) appString(R.string.ui_check_the_api_url_model_and_api_compatibility) else appString(R.string.ui_please_update_the_app_or_try_again_later)
             )
-            401 -> "$serviceName API Key 无效或已失效，请前往设置重新配置后重试。"
-            402 -> "$serviceName 账户余额不足，请充值后重试。"
-            403 -> "$serviceName 拒绝访问，请检查 API Key 权限或有效状态后重试。"
-            404 -> if (custom) "$serviceName 地址或模型不可用，请检查翻译配置后重试。"
-                else "$serviceName 翻译模型不可用，请更新应用后重试。"
-            408 -> "$serviceName 请求超时，请检查网络后重试。"
-            425 -> "$serviceName 暂时无法处理翻译请求，请稍后重试。"
-            429 -> "$serviceName 请求过于频繁，请稍后重试。"
-            in 500..599 -> "$serviceName 服务暂时不可用（HTTP $statusCode），请稍后重试。"
+            401 -> appString(R.string.ui_the_api_key_is_invalid_or_expired_update, serviceName)
+            402 -> appString(R.string.ui_insufficient_account_balance_add_funds_and_try_again, serviceName)
+            403 -> appString(R.string.ui_denied_access_check_your_api_key_and_its, serviceName)
+            404 -> if (custom) appString(R.string.ui_the_url_or_model_is_unavailable_check_your, serviceName)
+                else appString(R.string.ui_the_translation_model_is_unavailable_update_the_app, serviceName)
+            408 -> appString(R.string.ui_request_timed_out_check_your_network_and_try, serviceName)
+            425 -> appString(R.string.ui_cannot_process_the_translation_request_right_now_try, serviceName)
+            429 -> appString(R.string.ui_too_many_requests_try_again_later, serviceName)
+            in 500..599 -> appString(R.string.ui_is_temporarily_unavailable_http_try_again_later, serviceName, statusCode)
             else -> buildHttpMessage(
-                prefix = "$serviceName 翻译请求失败（HTTP $statusCode）",
+                prefix = appString(R.string.ui_translation_request_failed_http, serviceName, statusCode),
                 serviceMessage = serviceMessage,
-                action = "请稍后重试。"
+                action = appString(R.string.ui_please_try_again_later)
             )
         }
         return DeepSeekHttpFailure(message = message, retryable = retryable)
@@ -132,7 +135,7 @@ internal object SubtitleFailureMessages {
             ?.replace(Regex("[\\r\\n\\t]+"), " ")
             ?.take(MAX_SERVICE_MESSAGE_LENGTH)
             ?.takeIf(String::isNotBlank)
-        return if (detail == null) "$prefix。$action" else "$prefix：$detail。$action"
+        return if (detail == null) appString(R.string.ui_http_message_action, prefix, action) else appString(R.string.ui_http_message_detail_action, prefix, detail, action)
     }
 
     private val MEMORY_ERROR_MARKERS = listOf(

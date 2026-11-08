@@ -83,7 +83,22 @@ data class AsmrOneOtherLanguageEditionInDb(
 
 data class Circle(val name: String)
 data class Artist(val name: String)
-data class Tag(val name: String)
+data class Tag(
+    val name: String,
+    val id: Int? = null,
+    val i18n: Map<String, com.google.gson.JsonElement>? = null
+) {
+    fun toAlbumTag(): com.asmr.player.domain.model.AlbumTag = com.asmr.player.domain.model.AlbumTag(
+        key = "asmr-one:tag:${id?.toString() ?: name.trim()}",
+        source = "asmr-one",
+        originalName = name.trim(),
+        names = i18n.orEmpty().mapNotNull { (language, value) ->
+            val label = if (value.isJsonObject) value.asJsonObject.get("name") else value
+            label?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
+                ?.asString?.trim()?.takeIf(String::isNotBlank)?.let { language to it }
+        }.toMap()
+    )
+}
 data class Pagination(val totalCount: Int, val pageSize: Int, val page: Int)
 
 data class AsmrOneTrackNodeResponse(

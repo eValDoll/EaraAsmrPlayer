@@ -1,35 +1,17 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
+import com.asmr.player.util.sanitizeFolderName
+
 import android.content.Intent
 import android.net.Uri
-import android.provider.DocumentsContract
-import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -41,102 +23,38 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
-import androidx.compose.material3.windowsizeclass.WindowSizeClass
-import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.state.ToggleableState
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
-import com.asmr.player.data.local.db.AppDatabaseProvider
-import com.asmr.player.data.local.db.entities.LocalTreeCacheEntity
-import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
-import com.asmr.player.data.remote.scraper.DlsiteRecommendedWork
-import com.asmr.player.data.remote.scraper.DlsiteRecommendations
-import com.asmr.player.domain.model.Album
-import com.asmr.player.domain.model.Track
-import com.asmr.player.playback.MediaItemFactory
-import com.asmr.player.data.remote.NetworkHeaders
-import com.asmr.player.cache.CacheImageModel
-import com.asmr.player.data.remote.dlsite.DlsiteLanguageEdition
-import com.asmr.player.ui.dlsite.DlsitePlayViewModel
-import com.asmr.player.util.DlsiteAntiHotlink
 import com.asmr.player.util.SmartSortKey
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
-import android.webkit.CookieManager
-import android.webkit.URLUtil
-import android.webkit.WebChromeClient
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import androidx.compose.material.icons.automirrored.rounded.Label
-import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
-import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
-import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.launch
 
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.zIndex
-import com.asmr.player.ui.common.rememberDominantColor
-import com.asmr.player.ui.common.SubtitleStamp
-import com.asmr.player.ui.common.DiscPlaceholder
-import com.asmr.player.ui.common.AsmrAsyncImage
-import com.asmr.player.ui.common.AsmrShimmerPlaceholder
-import com.asmr.player.ui.common.CvChipsFlow
 import com.asmr.player.ui.common.RoundedTopSheet
 import com.asmr.player.ui.common.LocalVisibleAppMessages
 import com.asmr.player.ui.common.NonTouchableAppMessageOverlay
-import com.asmr.player.ui.common.EaraLogoLoadingIndicator
-import com.asmr.player.ui.common.collapsibleHeaderUiState
-import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
-import com.asmr.player.ui.playlists.PlaylistPickerScreen
 import com.asmr.player.ui.theme.AsmrTheme
-import com.asmr.player.ui.common.LocalBottomOverlayPadding
-import com.asmr.player.ui.theme.AsmrPlayerTheme
-import com.asmr.player.ui.theme.dynamicPageContainerColor
-import com.asmr.player.util.Formatting
 import com.asmr.player.util.MessageManager
-import com.asmr.player.util.RemoteSubtitleSource
 
 @Composable
 internal fun AsmrOneDownloadDialog(
@@ -162,8 +80,8 @@ internal fun AsmrOneDownloadDialog(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             AlbumDetailSelectionSheetTopBar(
-                title = "选择要下载的文件",
-                confirmText = "开始下载",
+                title = appString(R.string.ui_select_file_to_download),
+                confirmText = appString(R.string.ui_start_downloading),
                 confirmIcon = Icons.Rounded.Download,
                 confirmEnabled = selected.isNotEmpty() && !isPreparing,
                 confirmInProgress = isPreparing,
@@ -182,7 +100,7 @@ internal fun AsmrOneDownloadDialog(
                     selectedCount = selected.size,
                     totalCount = selectableLeafPaths.size,
                     unavailableCount = leafPaths.size - selectableLeafPaths.size,
-                    unavailableLabel = "已下载",
+                    unavailableLabel = appString(R.string.ui_downloaded),
                     selectionEnabled = !isPreparing,
                     onSelectAll = {
                         selected.clear()
@@ -197,7 +115,7 @@ internal fun AsmrOneDownloadDialog(
                             .height(180.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("没有可下载文件")
+                        Text(androidx.compose.ui.res.stringResource(R.string.ui_no_files_available_for_download))
                     }
                 } else {
                     val entries = flattenAsmrOneTreeForUi(mediaTree, expanded.toSet()).entries
@@ -251,7 +169,7 @@ internal fun AsmrOneDownloadDialog(
                                         checked = isChecked,
                                         enabled = enabled,
                                         selectionEnabled = !isPreparing,
-                                        unavailableLabel = "已下载",
+                                        unavailableLabel = appString(R.string.ui_downloaded),
                                         onCheckedChange = { checked ->
                                             if (!enabled) return@AsmrTreeFileCheckboxRow
                                             if (checked) {
@@ -289,13 +207,12 @@ internal data class OnlineSaveLeafUi(
 
 internal fun flattenOnlineSaveLeaves(tree: List<AsmrOneTrackNodeResponse>): List<OnlineSaveLeafUi> {
     val out = mutableListOf<OnlineSaveLeafUi>()
-    fun sanitize(name: String): String = name.trim().ifEmpty { "item" }.replace(Regex("""[\\/:*?"<>|]"""), "_")
 
     fun walk(nodes: List<AsmrOneTrackNodeResponse>, parentPath: String) {
         nodes.forEach { node ->
             val children = node.children.orEmpty()
             val titleRaw = node.title?.trim().orEmpty().ifBlank { "item" }
-            val safeTitle = sanitize(titleRaw)
+            val safeTitle = sanitizeFolderName(titleRaw)
             val path = if (parentPath.isBlank()) safeTitle else "$parentPath/$safeTitle"
             val url = node.playbackUrl
             if (children.isEmpty()) {
@@ -322,11 +239,10 @@ internal fun flattenOnlineSaveLeaves(tree: List<AsmrOneTrackNodeResponse>): List
 
 private fun buildSaveLeafPathIndex(tree: List<AsmrOneTrackNodeResponse>): Map<String, List<String>> {
     val folderToLeaves = linkedMapOf<String, MutableList<String>>()
-    fun sanitize(name: String): String = name.trim().ifEmpty { "item" }.replace(Regex("""[\\/:*?"<>|]"""), "_")
     fun walk(nodes: List<AsmrOneTrackNodeResponse>, parentPath: String, folderStack: List<String>) {
         nodes.forEach { node ->
             val titleRaw = node.title?.trim().orEmpty().ifBlank { "item" }
-            val safeTitle = sanitize(titleRaw)
+            val safeTitle = sanitizeFolderName(titleRaw)
             val path = if (parentPath.isBlank()) safeTitle else "$parentPath/$safeTitle"
             val children = node.children.orEmpty()
             val url = node.playbackUrl
@@ -355,7 +271,6 @@ private fun flattenAsmrOneSaveTreeForUi(
     expanded: Set<String>
 ): AsmrTreeUiResult {
     val out = mutableListOf<AsmrTreeUiEntry>()
-    fun sanitize(name: String): String = name.trim().ifEmpty { "item" }.replace(Regex("""[\\/:*?"<>|]"""), "_")
 
     fun nodeHasMedia(node: AsmrOneTrackNodeResponse): Boolean {
         val children = node.children.orEmpty()
@@ -373,7 +288,7 @@ private fun flattenAsmrOneSaveTreeForUi(
     fun walk(nodes: List<AsmrOneTrackNodeResponse>, parentPath: String, depth: Int) {
         nodes.forEach { node ->
             val titleRaw = node.title?.trim().orEmpty().ifBlank { "item" }
-            val safeTitle = sanitize(titleRaw)
+            val safeTitle = sanitizeFolderName(titleRaw)
             val path = if (parentPath.isBlank()) safeTitle else "$parentPath/$safeTitle"
             val children = node.children.orEmpty()
             val url = node.playbackUrl
@@ -428,8 +343,8 @@ internal fun OnlineSaveDialog(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             AlbumDetailSelectionSheetTopBar(
-                title = "选择要保存的文件",
-                confirmText = "保存到本地库",
+                title = appString(R.string.ui_select_file_to_save),
+                confirmText = appString(R.string.ui_save_to_local_library),
                 confirmIcon = Icons.Rounded.SaveAlt,
                 confirmEnabled = selected.isNotEmpty(),
                 onDismiss = onDismiss,
@@ -447,7 +362,7 @@ internal fun OnlineSaveDialog(
                     selectedCount = selected.size,
                     totalCount = selectableLeafPaths.size,
                     unavailableCount = leaves.size - selectableLeafPaths.size,
-                    unavailableLabel = "已保存",
+                    unavailableLabel = appString(R.string.ui_saved),
                     onSelectAll = {
                         selected.clear()
                         selected.addAll(selectableLeafPaths)
@@ -461,7 +376,7 @@ internal fun OnlineSaveDialog(
                             .height(180.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("没有可保存文件")
+                        Text(androidx.compose.ui.res.stringResource(R.string.ui_no_files_to_save))
                     }
                 } else {
                     val entries = flattenAsmrOneSaveTreeForUi(trackTree, expanded.toSet()).entries
@@ -514,7 +429,7 @@ internal fun OnlineSaveDialog(
                                         fileType = entry.fileType,
                                         checked = isChecked,
                                         enabled = enabled,
-                                        unavailableLabel = "已保存",
+                                        unavailableLabel = appString(R.string.ui_saved),
                                         onCheckedChange = { checked ->
                                             if (!enabled) return@AsmrTreeFileCheckboxRow
                                             if (checked) {
@@ -577,7 +492,7 @@ private fun AlbumDetailSelectionSheetTopBar(
         ) {
             if (confirmInProgress) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(18.dp).semantics { stateDescription = "正在检查源文件" },
+                    modifier = Modifier.size(18.dp).semantics { stateDescription = appString(R.string.ui_checking_source_files) },
                     color = AsmrTheme.colorScheme.primary,
                     strokeWidth = 2.dp,
                 )
@@ -626,7 +541,7 @@ private fun AlbumDetailSelectionSummary(
             ) {
                 Text(
                     text = buildString {
-                        append("已选 $selectedCount / 可选 $totalCount")
+                        append(appString(R.string.ui_selected_optional, selectedCount, totalCount))
                         if (unavailableCount > 0) {
                             append(" · $unavailableLabel $unavailableCount")
                         }
@@ -644,7 +559,7 @@ private fun AlbumDetailSelectionSummary(
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                         modifier = Modifier.height(30.dp)
                     ) {
-                        Text("全选", style = MaterialTheme.typography.labelMedium)
+                        Text(androidx.compose.ui.res.stringResource(R.string.ui_select_all), style = MaterialTheme.typography.labelMedium)
                     }
                     OutlinedButton(
                         onClick = onClearSelection,
@@ -652,7 +567,7 @@ private fun AlbumDetailSelectionSummary(
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                         modifier = Modifier.height(30.dp)
                     ) {
-                        Text("全不选", style = MaterialTheme.typography.labelMedium)
+                        Text(androidx.compose.ui.res.stringResource(R.string.ui_select_none), style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
@@ -792,11 +707,10 @@ private fun AsmrTreeFileCheckboxRow(
 
 private fun buildLeafPathIndex(tree: List<AsmrOneTrackNodeResponse>): Map<String, List<String>> {
     val folderToLeaves = linkedMapOf<String, MutableList<String>>()
-    fun sanitize(name: String): String = name.trim().ifEmpty { "item" }.replace(Regex("""[\\/:*?"<>|]"""), "_")
     fun walk(nodes: List<AsmrOneTrackNodeResponse>, parentPath: String, folderStack: List<String>) {
         nodes.forEach { node ->
             val title = node.title?.trim().orEmpty().ifBlank { "item" }
-            val safeTitle = sanitize(title)
+            val safeTitle = sanitizeFolderName(title)
             val path = if (parentPath.isBlank()) safeTitle else "$parentPath/$safeTitle"
             val children = node.children.orEmpty()
             val url = node.playbackUrl
@@ -933,7 +847,7 @@ internal fun FilePreviewDialog(
     fun openWithOtherApp() {
         val path = currentPath.trim()
         if (path.isBlank()) {
-            messageManager.showError("无法打开：路径为空")
+            messageManager.showError(appString(R.string.ui_unable_to_open_path_is_empty))
             return
         }
 
@@ -962,12 +876,12 @@ internal fun FilePreviewDialog(
                 setDataAndType(uri, mimeType)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            context.startActivity(Intent.createChooser(intent, "打开文件"))
+            context.startActivity(Intent.createChooser(intent, appString(R.string.ui_open_file)))
         }.onFailure { t ->
             when (t) {
-                is android.content.ActivityNotFoundException -> messageManager.showInfo("未找到可打开的应用")
-                is java.io.FileNotFoundException -> messageManager.showError("文件不存在")
-                else -> messageManager.showError("无法打开该文件")
+                is android.content.ActivityNotFoundException -> messageManager.showInfo(appString(R.string.ui_no_app_found_to_open))
+                is java.io.FileNotFoundException -> messageManager.showError(appString(R.string.ui_file_does_not_exist))
+                else -> messageManager.showError(appString(R.string.ui_the_file_cannot_be_opened))
             }
         }
     }
@@ -1023,22 +937,22 @@ internal fun FilePreviewDialog(
                     )
                     if (canNavigate) {
                         IconButton(onClick = { currentIndex = (currentIndex - 1 + initialCandidates.size) % initialCandidates.size }) {
-                            Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, contentDescription = "上一项")
+                            Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, contentDescription = appString(R.string.ui_previous_item))
                         }
                         IconButton(onClick = { currentIndex = (currentIndex + 1) % initialCandidates.size }) {
-                            Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = "下一项")
+                            Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = appString(R.string.ui_next_item))
                         }
                     }
                     if (canFullscreen) {
                         TextButton(onClick = { fullscreen = !fullscreen }) {
-                            Text(if (fullscreen) "退出全屏" else "全屏")
+                            Text(if (fullscreen) appString(R.string.ui_exit_full_screen) else appString(R.string.ui_full_screen))
                         }
                     }
                     IconButton(onClick = ::openWithOtherApp) {
-                        Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = "打开")
+                        Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = appString(R.string.ui_open))
                     }
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Rounded.Close, contentDescription = "关闭")
+                        Icon(Icons.Rounded.Close, contentDescription = appString(R.string.ui_close))
                     }
                 }
                 
@@ -1058,7 +972,7 @@ internal fun FilePreviewDialog(
                             )
                         }
                         TreeFileType.Subtitle, TreeFileType.Text -> {
-                            val textContent by produceState<String?>(initialValue = "加载中...") {
+                            val textContent by produceState<String?>(initialValue = appString(R.string.ui_loading)) {
                                 value = withContext(Dispatchers.IO) {
                                     runCatching {
                                         if (currentPath.startsWith("content://")) {
@@ -1068,14 +982,14 @@ internal fun FilePreviewDialog(
                                         } else if (currentPath.startsWith("http")) {
                                             val loader = loadOnlineText
                                             if (loader != null) {
-                                                loader(currentPath)?.takeIf { it.isNotBlank() } ?: "内容为空"
+                                                loader(currentPath)?.takeIf { it.isNotBlank() } ?: appString(R.string.ui_content_is_empty)
                                             } else {
-                                                "在线文件暂不支持内容预览，请使用外部应用打开"
+                                                appString(R.string.ui_online_files_do_not_currently_support_content_preview)
                                             }
                                         } else {
                                             java.io.File(currentPath).readText()
                                         }
-                                    }.getOrNull() ?: "读取失败"
+                                    }.getOrNull() ?: appString(R.string.ui_read_failed)
                                 }
                             }
                             Column(
@@ -1102,12 +1016,12 @@ internal fun FilePreviewDialog(
                                     tint = colorScheme.danger
                                 )
                                 Spacer(modifier = Modifier.height(16.dp))
-                                Text("PDF 文件暂不支持直接预览", color = colorScheme.textSecondary)
-                                Text("请使用外部应用打开", color = colorScheme.textTertiary, style = MaterialTheme.typography.labelSmall)
+                                Text(androidx.compose.ui.res.stringResource(R.string.ui_pdf_files_do_not_currently_support_direct_preview), color = colorScheme.textSecondary)
+                                Text(androidx.compose.ui.res.stringResource(R.string.ui_please_use_an_external_application_to_open), color = colorScheme.textTertiary, style = MaterialTheme.typography.labelSmall)
                             }
                         }
                         else -> {
-                            Text("暂不支持预览该文件类型", color = colorScheme.textTertiary)
+                            Text(androidx.compose.ui.res.stringResource(R.string.ui_preview_of_this_file_type_is_not_currently), color = colorScheme.textTertiary)
                         }
                     }
                 }

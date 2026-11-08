@@ -1,5 +1,8 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -61,7 +64,7 @@ internal fun AlbumMetaActionDialog(
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
-                text = "将「$normalizedKeyword」：",
+                text = appString(R.string.ui_change_to, normalizedKeyword),
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                 color = colorScheme.textPrimary,
                 maxLines = 2,
@@ -73,28 +76,28 @@ internal fun AlbumMetaActionDialog(
             onCopy?.let { copy ->
                 AlbumMetaActionRow(
                     icon = Icons.Rounded.ContentCopy,
-                    text = "复制到粘贴板",
+                    text = appString(R.string.ui_copy_to_pasteboard),
                     onClick = { runAction(copy) },
                 )
             }
             AlbumMetaActionRow(
                 icon = Icons.Rounded.Search,
-                text = "作为关键词进行搜索",
+                text = appString(R.string.ui_search_as_keyword),
                 onClick = { runAction(onSearch) },
             )
             AlbumMetaActionRow(
                 icon = Icons.AutoMirrored.Rounded.PlaylistAdd,
-                text = "作为名称创建列表",
+                text = appString(R.string.ui_create_list_as_name),
                 onClick = { runAction(onCreatePlaylist) },
             )
             AlbumMetaActionRow(
                 icon = Icons.Rounded.CreateNewFolder,
-                text = "作为名称创建分组",
+                text = appString(R.string.ui_create_group_as_name),
                 onClick = { runAction(onCreateGroup) },
             )
             AlbumMetaActionRow(
                 icon = Icons.Rounded.Block,
-                text = "作为屏蔽词屏蔽",
+                text = appString(R.string.ui_block_as_a_block_word),
                 onClick = { runAction(onAddBlockedKeyword) },
             )
         }

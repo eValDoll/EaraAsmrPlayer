@@ -1,5 +1,8 @@
 package com.asmr.player.ui.dlsite
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.asmr.player.data.remote.download.DownloadBatchRequest
@@ -35,10 +38,10 @@ class DlsitePlayViewModel @Inject constructor(
             ) {
                 is EnqueueDownloadBatchResult.Accepted -> Unit
                 EnqueueDownloadBatchResult.DirectoryUnavailable -> {
-                    messageManager.showError("下载目录不可用，请重新选择或重置为默认目录")
+                    messageManager.showError(appString(R.string.ui_the_download_directory_is_unavailable_please_select_again))
                 }
                 EnqueueDownloadBatchResult.TaskBlocked -> {
-                    messageManager.showInfo("相同作品已有下载任务正在处理")
+                    messageManager.showInfo(appString(R.string.ui_there_is_already_a_download_task_for_the))
                 }
             }
         }

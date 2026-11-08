@@ -1,5 +1,8 @@
 package com.asmr.player.subtitle
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.data.remote.NetworkHeaders
 import com.google.gson.JsonParser
 import java.io.IOException
@@ -29,8 +32,8 @@ internal class TranslationModelsClient(client: OkHttpClient) {
 
     suspend fun loadModels(baseUrl: String, apiKey: String): List<String> = withContext(Dispatchers.IO) {
         val key = apiKey.trim()
-        require(key.isNotBlank()) { "请先输入 API Key" }
-        require(key.all { it.code in 33..126 }) { "API Key 包含无效字符" }
+        require(key.isNotBlank()) { appString(R.string.ui_enter_an_api_key_first) }
+        require(key.all { it.code in 33..126 }) { appString(R.string.ui_the_api_key_contains_invalid_characters) }
         val request = Request.Builder()
             .url(translationModelsUrl(baseUrl))
             .header("Authorization", "Bearer $key")
@@ -38,9 +41,9 @@ internal class TranslationModelsClient(client: OkHttpClient) {
             .get().build()
         execute(calls.newCall(request)).use { response ->
             if (!response.isSuccessful) throw IOException(when (response.code) {
-                401, 403 -> "模型列表认证失败，请检查 API Key"
-                404, 405, 501 -> "此服务不支持模型列表，可手动输入模型"
-                else -> "模型列表拉取失败（${response.code}）"
+                401, 403 -> appString(R.string.ui_model_list_authentication_failed_check_your_api_key)
+                404, 405, 501 -> appString(R.string.ui_this_service_does_not_provide_a_model_list)
+                else -> appString(R.string.ui_unable_to_fetch_model_list, response.code)
             })
             parseTranslationModels(response.body?.string().orEmpty())
         }
@@ -70,8 +73,8 @@ internal fun parseTranslationModels(raw: String): List<String> {
                 ?.asString?.trim()?.takeIf { it.isNotEmpty() }
         }.distinct().sorted()
     } catch (_: Exception) {
-        throw IOException("模型列表格式无效")
+        throw IOException(appString(R.string.ui_invalid_model_list_format))
     }
-    if (models.isEmpty()) throw IOException("此服务未返回可用模型")
+    if (models.isEmpty()) throw IOException(appString(R.string.ui_this_service_returned_no_available_models))
     return models
 }

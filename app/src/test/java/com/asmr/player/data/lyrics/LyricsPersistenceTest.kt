@@ -1,16 +1,18 @@
 package com.asmr.player.data.lyrics
 
 import android.app.Application
-import android.database.sqlite.SQLiteDatabase
 import androidx.media3.common.MediaItem
 import androidx.room.Room
 import androidx.room.withTransaction
 import com.asmr.player.data.local.db.AppDatabase
 import com.asmr.player.data.local.db.AppDatabaseMigrations
+import com.asmr.player.data.local.db.removeManualCoverColumnForLegacySchema
 import com.asmr.player.data.local.db.entities.AlbumEntity
 import com.asmr.player.data.local.db.entities.SubtitleEntity
 import com.asmr.player.data.local.db.entities.TrackEntity
 import com.asmr.player.subtitle.GeneratedSubtitleFileExporter
+import com.asmr.player.playback.MediaItemFactory
+import com.asmr.player.playback.withExactTrackTitle
 import com.asmr.player.util.SubtitleParser
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -37,7 +39,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [34])
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [34])
 class LyricsPersistenceTest {
     @get:Rule val temporaryFolder = TemporaryFolder()
     private val context get() = RuntimeEnvironment.getApplication()
@@ -80,6 +82,47 @@ class LyricsPersistenceTest {
             assertTrue(updates.next().lyrics.isEmpty())
         } finally {
             job.cancelAndJoin()
+        }
+    }
+
+    @Test
+    fun observingCurrentAudioUpdatesExactTrackTitleAfterTranslationAndReversion() = runBlocking {
+        database.trackDao().insertSubtitles(listOf(caption("保留字幕")))
+        val updates = Channel<LyricsResult>(Channel.UNLIMITED)
+        val job = launch(Dispatchers.Default) { loader.observe(item).collect { updates.send(it) } }
+        try {
+            val initial = updates.next()
+            assertEquals("音轨", initial.exactTrackTitle)
+
+            database.trackDao().updateTrackDisplayTitle(trackId, "翻译后的音轨")
+            val translated = updates.next()
+            assertEquals("翻译后的音轨", translated.exactTrackTitle)
+            assertEquals(initial.lyrics, translated.lyrics)
+
+            database.trackDao().updateTrackDisplayTitle(trackId, "")
+            val restored = updates.next()
+            assertEquals("音轨", restored.exactTrackTitle)
+            assertEquals(initial.lyrics, restored.lyrics)
+        } finally {
+            job.cancelAndJoin()
+        }
+    }
+
+    @Test
+    fun unmatchedRemoteAndChapterReferencesKeepTheirQueueTitlesDespiteTrackIdFallback() = runBlocking {
+        database.trackDao().insertSubtitles(listOf(caption("保留字幕")))
+        database.trackDao().updateTrackDisplayTitle(trackId, "本地翻译标题")
+        val streamUrl = "https://example.test/audio.mp3"
+        listOf(streamUrl, "$streamUrl#eara-chapter=1000,4000&file=01.mp3").forEach { mediaId ->
+            val queued = MediaItemFactory.fromDetails(
+                mediaId = mediaId, uri = streamUrl, title = "在线播放标题", trackId = trackId,
+            )
+
+            val result = loader.load(queued)
+
+            assertEquals("本地翻译标题", result.title)
+            assertNull(result.exactTrackTitle)
+            assertSame(queued, queued.withExactTrackTitle(result.exactTrackTitle))
         }
     }
 
@@ -203,12 +246,26 @@ class LyricsPersistenceTest {
     }
 
     @Test
-    fun choosingManualSubtitleAfterDeletion_restoresUserSelectedSource() = runBlocking {
+    fun manualSourceBinding_persistsAndTakesPriorityAfterExplicitRescanAndReopen() = runBlocking {
         database.trackDao().deleteSubtitlesByUser(listOf(trackId))
         val chosen = temporaryFolder.newFile("chosen.lrc").apply { writeText("[00:00.00]我选择的字幕", Charsets.UTF_8) }
-        loader.saveManualLyrics(lyricsTargetContextFromMediaItem(item)!!, chosen.absolutePath)
+        val target = lyricsTargetContextFromMediaItem(item)!!
+        ManualLyricsSourceRepository(database.manualLyricsSourceDao(), context)
+            .upsert(target, chosen.absolutePath)
 
+        assertTrue(database.trackDao().isSubtitleAutoImportBlocked(audio.absolutePath))
+        assertTrue(loader.load(item).lyrics.isEmpty())
+        assertTrue(database.trackDao().importScannedSubtitles(
+            listOf(caption("主动重扫读到的字幕")), restoreDeleted = true))
         assertFalse(database.trackDao().isSubtitleAutoImportBlocked(audio.absolutePath))
+        assertEquals(listOf("主动重扫读到的字幕"), database.trackDao().getSubtitlesForTrack(trackId).map { it.text })
+        assertEquals(listOf("我选择的字幕"), loader.load(item).lyrics.map { it.text })
+
+        database.close()
+        openDatabase()
+
+        assertEquals(chosen.absolutePath,
+            ManualLyricsSourceRepository(database.manualLyricsSourceDao(), context).findBestMatch(target)?.sourceUri)
         assertEquals(listOf("我选择的字幕"), loader.load(item).lyrics.map { it.text })
     }
 
@@ -258,13 +315,14 @@ class LyricsPersistenceTest {
     @Test
     fun upgradingVersion34_preservesSubtitlesAndValidatesNewRoomSchema() = runBlocking {
         database.trackDao().insertSubtitles(listOf(caption("升级前的字幕").copy(japaneseText = "日本語")))
-        database.close()
         // 还原 34 版结构，再让 Room 执行真实升级并校验所有表和索引。
-        SQLiteDatabase.openDatabase(context.getDatabasePath(databaseName).absolutePath, null, SQLiteDatabase.OPEN_READWRITE).use {
+        database.openHelper.writableDatabase.let {
             it.execSQL("DROP TABLE subtitle_import_blocks")
             it.execSQL("DROP INDEX index_tracks_path")
+            removeManualCoverColumnForLegacySchema(it)
             it.version = 34
         }
+        database.close()
         openDatabase()
 
         assertEquals("日本語", database.trackDao().getSubtitlesForTrack(trackId).single().japaneseText)
@@ -276,7 +334,7 @@ class LyricsPersistenceTest {
 
     private fun openDatabase() {
         database = Room.databaseBuilder(context, AppDatabase::class.java, databaseName)
-            .allowMainThreadQueries().addMigrations(AppDatabaseMigrations.MIGRATION_34_35).build()
+            .allowMainThreadQueries().addMigrations(AppDatabaseMigrations.MIGRATION_34_35, AppDatabaseMigrations.MIGRATION_35_36, AppDatabaseMigrations.MIGRATION_36_37, AppDatabaseMigrations.MIGRATION_37_38).build()
         loader = LyricsLoader(database, database.trackDao(), database.albumDao(), database.remoteSubtitleSourceDao(),
             ManualLyricsSourceRepository(database.manualLyricsSourceDao(), context),
             OkHttpClient.Builder().addInterceptor { error("本地字幕测试不应访问网络") }.build(), context)

@@ -1,5 +1,8 @@
 package com.asmr.player.data.remote.download
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.util.Log
 import com.asmr.player.util.MessageManager
 import com.asmr.player.util.ChapterMediaReference
@@ -49,27 +52,27 @@ class DownloadPreparationCoordinator internal constructor(
             }
             var accepted = false
             try {
-                if (needsCheck) messageManager.showInfo("正在检查源文件")
+                if (needsCheck) messageManager.showInfo(appString(R.string.ui_checking_source_files))
                 val prepared = if (needsCheck) preflight.prepare(request, ::awaitConfirmation) else request
                 if (prepared == null) return@launch
                 when (val result = enqueueBatch(prepared)) {
                     is EnqueueDownloadBatchResult.Accepted -> {
                         accepted = true
-                        messageManager.showInfo("正在加入下载队列（${result.itemCount}项）")
+                        messageManager.showInfo(appString(R.string.ui_joining_download_queue_item, result.itemCount))
                     }
-                    EnqueueDownloadBatchResult.DirectoryUnavailable -> messageManager.showError("下载目录不可用，请重新选择或重置为默认目录")
-                    EnqueueDownloadBatchResult.TaskBlocked -> messageManager.showInfo("所选文件已在下载任务中")
+                    EnqueueDownloadBatchResult.DirectoryUnavailable -> messageManager.showError(appString(R.string.ui_the_download_directory_is_unavailable_please_select_again))
+                    EnqueueDownloadBatchResult.TaskBlocked -> messageManager.showInfo(appString(R.string.ui_the_selected_files_are_already_in_the_download))
                 }
             } catch (_: TimeoutCancellationException) {
-                messageManager.showError("源文件检查超时，请重试")
+                messageManager.showError(appString(R.string.ui_source_file_check_timed_out_try_again))
             } catch (error: CancellationException) {
                 throw error
             } catch (error: IOException) {
                 Log.w("JPDownload", "source file check failed", error)
-                messageManager.showError("无法确认源文件状态，请稍后重试")
+                messageManager.showError(appString(R.string.ui_unable_to_check_the_source_file_try_again))
             } catch (error: Exception) {
                 Log.e("JPDownload", "download preparation failed", error)
-                messageManager.showError("创建下载任务失败，请重试")
+                messageManager.showError(appString(R.string.ui_unable_to_create_download_try_again))
             } finally {
                 if (needsCheck) preparing.set(false)
                 withContext(NonCancellable + confirmationDispatcher) { onFinished(accepted) }

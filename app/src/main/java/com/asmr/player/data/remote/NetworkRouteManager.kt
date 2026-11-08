@@ -104,6 +104,10 @@ class NetworkRouteManager @Inject constructor(
         return client
     }
 
+    fun unregister(client: OkHttpClient) {
+        connectionPools.remove(client.connectionPool)
+    }
+
     private fun installSocksAuthenticator() {
         Authenticator.setDefault(object : Authenticator() {
             override fun getPasswordAuthentication(): PasswordAuthentication? {

@@ -1,97 +1,37 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
+import com.asmr.player.util.sanitizeFolderName
+
 import com.asmr.player.data.remote.crawler.AlbumResourceSource
 import com.asmr.player.util.AlbumWorkNo
+import com.asmr.player.util.isJapaneseAsmrResource
 
-import android.content.Context
-import android.util.Log
 import androidx.compose.runtime.Immutable
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import androidx.room.withTransaction
-import com.asmr.player.data.local.db.AppDatabase
-import com.asmr.player.data.local.db.dao.AlbumDao
-import com.asmr.player.data.local.db.dao.TagWithCount
-import com.asmr.player.data.local.db.dao.TrackDao
-import com.asmr.player.data.local.db.entities.AlbumEntity
-import com.asmr.player.data.local.db.entities.AlbumFtsEntity
-import com.asmr.player.data.local.db.entities.AlbumTagEntity
-import com.asmr.player.data.local.db.entities.RemoteSubtitleSourceEntity
-import com.asmr.player.data.local.db.entities.TrackEntity
-import com.asmr.player.data.local.db.entities.TagEntity
-import com.asmr.player.data.local.db.entities.TagSource
-import com.asmr.player.data.local.db.entities.TrackTagEntity
 import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
 import com.asmr.player.data.remote.api.AsmrOneRecommendationItem
 import com.asmr.player.data.remote.api.AsmrOneRecommendationSeedFeatures
 import com.asmr.player.data.remote.api.WorkDetailsResponse
-import com.asmr.player.data.remote.crawler.AsmrOneCrawler
-import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncCandidate
-import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncResolveResult
-import com.asmr.player.data.remote.dlsite.DlsitePlayWorkClient
-import com.asmr.player.data.remote.dlsite.DlsitePlayTreeResult
 import com.asmr.player.data.remote.dlsite.DlsiteLanguageEdition
-import com.asmr.player.data.remote.dlsite.DlsiteProductInfoClient
-import com.asmr.player.data.remote.dlsite.resolveCloudSyncWorkId
-import com.asmr.player.data.remote.dlsite.resolveDlsiteCloudSync
-import com.asmr.player.data.remote.dlsite.resolveSelectedDlsiteCloudSync
 import com.asmr.player.data.remote.dlsite.parseDlsitePlayImageSeed
-import com.asmr.player.data.remote.download.DownloadManager
-import com.asmr.player.data.remote.scraper.DLSiteScraper
-import com.asmr.player.data.remote.scraper.DlsiteRecommendedWork
 import com.asmr.player.data.remote.scraper.DlsiteRecommendations
 import com.asmr.player.data.remote.NetworkHeaders
-import com.asmr.player.data.lyrics.LyricsLoader
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
 import com.asmr.player.ui.nav.AlbumCoverHint
-import com.asmr.player.util.OnlineLyricsStore
-import com.asmr.player.util.RemoteSubtitleSource
-import com.asmr.player.util.SyncCoordinator
-import com.asmr.player.util.TrackKeyNormalizer
 import com.asmr.player.util.DlsiteWorkNo
-import com.asmr.player.data.remote.crawler.asmrOneWorkMatchesRj
-import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
-import java.io.File
-import java.io.FileOutputStream
-import javax.inject.Inject
 
-import com.asmr.player.util.MessageManager
-import com.asmr.player.util.TagNormalizer
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Rect
-import android.os.SystemClock
-import androidx.work.ExistingWorkPolicy
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
-import androidx.work.workDataOf
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
-import javax.inject.Named
-import com.asmr.player.BuildConfig
-import com.asmr.player.work.AlbumCoverThumbWorker
 
 internal fun centerCropSquare(src: Bitmap, size: Int): Bitmap {
     val w = src.width
@@ -290,11 +230,16 @@ internal fun resolveAlbumDetailRj(routeRj: String?, localAlbum: Album?): String 
 internal fun resolveAlbumResourceSource(
     workNo: String,
     selected: AlbumResourceSource?,
-    preferred: AlbumResourceSource?
-): AlbumResourceSource = selected ?: if (AlbumWorkNo.isJapaneseAsmrOnlyWork(workNo)) {
-    AlbumResourceSource.JapaneseAsmr
-} else {
-    preferred ?: AlbumResourceSource.AsmrOne
+    preferred: AlbumResourceSource?,
+    localAlbum: Album? = null
+): AlbumResourceSource {
+    if (selected != null) return selected
+    if (AlbumWorkNo.isJapaneseAsmrOnlyWork(workNo) ||
+        localAlbum?.tracks?.any { isJapaneseAsmrResource(it.path, it.group) } == true
+    ) {
+        return AlbumResourceSource.JapaneseAsmr
+    }
+    return preferred ?: AlbumResourceSource.AsmrOne
 }
 
 internal fun albumDetailRequestKey(albumId: Long?, rjCode: String?): String {
@@ -339,7 +284,8 @@ internal fun AlbumDetailModel.withPreservedListenTogetherListenerCount(
 internal fun AlbumDetailModel.withUpdatedLocalCover(
     albumId: Long,
     coverPath: String,
-    coverThumbPath: String
+    coverThumbPath: String,
+    manualCoverPath: String
 ): AlbumDetailModel {
     val localMatches = localAlbum?.id == albumId
     val displayMatches = displayAlbum.id == albumId || localMatches
@@ -347,12 +293,12 @@ internal fun AlbumDetailModel.withUpdatedLocalCover(
 
     return copy(
         localAlbum = if (localMatches) {
-            localAlbum?.copy(coverPath = coverPath, coverThumbPath = coverThumbPath)
+            localAlbum?.copy(coverPath = coverPath, coverThumbPath = coverThumbPath, manualCoverPath = manualCoverPath)
         } else {
             localAlbum
         },
         displayAlbum = if (displayMatches) {
-            displayAlbum.copy(coverPath = coverPath, coverThumbPath = coverThumbPath)
+            displayAlbum.copy(coverPath = coverPath, coverThumbPath = coverThumbPath, manualCoverPath = manualCoverPath)
         } else {
             displayAlbum
         }
@@ -373,6 +319,17 @@ internal fun resolveStableAlbumHeroCoverSource(
     }
 }
 
+internal fun Album.withCurrentLocalCover(localAlbum: Album?): Album {
+    if (localAlbum == null) return this
+    val manualCoverPath = localAlbum.manualCoverPath
+    if (manualCoverPath.isBlank() && this.manualCoverPath.isBlank()) return this
+    return copy(
+        manualCoverPath = manualCoverPath,
+        coverPath = manualCoverPath.ifBlank { localAlbum.coverPath },
+        coverThumbPath = localAlbum.coverThumbPath
+    )
+}
+
 internal fun buildDisplayAlbum(
     rjCode: String,
     localAlbum: Album?,
@@ -381,17 +338,18 @@ internal fun buildDisplayAlbum(
     fallbackCv: String = "",
     fallbackCoverUrl: String = ""
 ): Album {
-    val base = dlsiteInfo ?: localAlbum ?: Album(title = rjCode.ifBlank { "专辑" }, path = "")
+    val base = dlsiteInfo ?: localAlbum ?: Album(title = rjCode.ifBlank { appString(R.string.ui_album) }, path = "")
     val displayTitle = localAlbum?.displayTitle?.takeIf { it.isNotBlank() }
     return base.copy(
         title = displayTitle ?: base.title,
+        tagDetails = com.asmr.player.domain.model.mergeAlbumTags(localAlbum?.tagDetails, base.tagDetails),
         displayTitle = displayTitle.orEmpty(),
         workId = asmrOneWorkId?.takeIf { it.isNotBlank() } ?: base.workId,
         rjCode = rjCode.ifBlank { base.rjCode.ifBlank { base.workId } },
         cv = base.cv.ifBlank { fallbackCv },
         // 网络解析尚未返回封面时，保留列表种入/上一帧的 coverUrl，避免 hero 先空白再加载。
         coverUrl = base.coverUrl.ifBlank { fallbackCoverUrl }
-    )
+    ).withCurrentLocalCover(localAlbum)
 }
 
 internal fun Album.withResolvedWorkIdentity(
@@ -413,23 +371,27 @@ internal fun mergeDetailHeaderAlbum(
     preserveHeaderAlbumMetadata: Boolean
 ): Album {
     if (preserveHeaderAlbumMetadata) {
-        return currentDisplayAlbum.withResolvedWorkIdentity(
+        return currentDisplayAlbum.copy(
+            tagDetails = com.asmr.player.domain.model.mergeAlbumTags(currentDisplayAlbum.tagDetails, fetchedDlsiteInfo?.tagDetails)
+        ).withCurrentLocalCover(localAlbum).withResolvedWorkIdentity(
             rjCode = rjCode,
             asmrOneWorkId = asmrOneWorkId
         )
     }
     return if (fetchedDlsiteInfo != null) {
         val mergedOnlineInfo = fetchedDlsiteInfo.copy(
+            metadataLocale = currentDisplayAlbum.metadataLocale,
             title = fetchedDlsiteInfo.title
                 .takeUnless { title ->
                     title.isBlank() ||
-                        title == "专辑" ||
+                        title in setOf("专辑", "Album") ||
                         title.equals(fetchedDlsiteInfo.rjCode, ignoreCase = true)
                 }
                 ?: currentDisplayAlbum.title,
             circle = fetchedDlsiteInfo.circle.ifBlank { currentDisplayAlbum.circle },
             cv = fetchedDlsiteInfo.cv.ifBlank { currentDisplayAlbum.cv },
             tags = fetchedDlsiteInfo.tags.ifEmpty { currentDisplayAlbum.tags },
+            tagDetails = com.asmr.player.domain.model.mergeAlbumTags(currentDisplayAlbum.tagDetails, fetchedDlsiteInfo.tagDetails),
             coverUrl = fetchedDlsiteInfo.coverUrl.ifBlank { currentDisplayAlbum.coverUrl },
             ratingValue = fetchedDlsiteInfo.ratingValue ?: currentDisplayAlbum.ratingValue,
             ratingCount = fetchedDlsiteInfo.ratingCount.takeIf { it > 0 }
@@ -449,7 +411,7 @@ internal fun mergeDetailHeaderAlbum(
             fallbackCoverUrl = currentDisplayAlbum.coverUrl
         )
     } else {
-        currentDisplayAlbum.withResolvedWorkIdentity(
+        currentDisplayAlbum.withCurrentLocalCover(localAlbum).withResolvedWorkIdentity(
             rjCode = rjCode,
             asmrOneWorkId = asmrOneWorkId
         )
@@ -477,6 +439,7 @@ internal fun mergeAsmrOneHeaderAlbum(
                 .filter { it.isNotBlank() }
                 .distinct()
                 .joinToString(", "),
+            tagDetails = details.tags.orEmpty().map { it.toAlbumTag() },
             tags = details.tags.orEmpty()
                 .map { it.name.trim() }
                 .filter { it.isNotBlank() }
@@ -491,16 +454,18 @@ internal fun mergeAsmrOneHeaderAlbum(
         fetchedDlsiteInfo == null -> asmrOneInfo
         asmrOneInfo == null -> fetchedDlsiteInfo
         else -> fetchedDlsiteInfo.copy(
+            metadataLocale = currentDisplayAlbum.metadataLocale,
             title = fetchedDlsiteInfo.title
                 .takeUnless { title ->
                     title.isBlank() ||
-                        title == "专辑" ||
+                        title in setOf("专辑", "Album") ||
                         title.equals(fetchedDlsiteInfo.rjCode, ignoreCase = true)
                 }
                 ?: asmrOneInfo.title,
             circle = fetchedDlsiteInfo.circle.ifBlank { asmrOneInfo.circle },
             cv = fetchedDlsiteInfo.cv.ifBlank { asmrOneInfo.cv },
             tags = fetchedDlsiteInfo.tags.ifEmpty { asmrOneInfo.tags },
+            tagDetails = com.asmr.player.domain.model.mergeAlbumTags(asmrOneInfo.tagDetails, fetchedDlsiteInfo.tagDetails),
             coverUrl = fetchedDlsiteInfo.coverUrl.ifBlank { asmrOneInfo.coverUrl },
             workId = fetchedDlsiteInfo.workId.ifBlank { asmrOneInfo.workId },
             rjCode = fetchedDlsiteInfo.rjCode.ifBlank { asmrOneInfo.rjCode },
@@ -691,18 +656,6 @@ internal data class AsmrOneLeafDownload(
 
 internal const val DlsiteTrialDownloadDirectoryName = "体验版"
 
-internal fun flattenAsmrOneTracks(tree: List<AsmrOneTrackNodeResponse>): List<Track> {
-    val leaves = flattenAsmrOneLeafDownloads(tree)
-    return leaves.map {
-        Track(
-            albumId = 0,
-            title = it.relativePath.substringAfterLast('/'),
-            path = it.url,
-            duration = it.duration ?: 0.0
-        )
-    }
-}
-
 internal fun filterDownloadableMediaTree(tree: List<AsmrOneTrackNodeResponse>): List<AsmrOneTrackNodeResponse> {
     return tree.mapNotNull { node ->
         val filteredChildren = filterDownloadableMediaTree(node.children.orEmpty())
@@ -726,7 +679,7 @@ internal fun buildDlsiteTrialDownloadTree(trialTracks: List<Track>): List<AsmrOn
 
         val mediaType = inferDlsiteTrialMediaType(track.title, url) ?: return@mapNotNull null
         val ext = inferDlsiteTrialDownloadExtension(url, mediaType) ?: return@mapNotNull null
-        val fallbackTitle = if (mediaType == TreeFileType.Video) "体验视频" else "体验音频"
+        val fallbackTitle = if (mediaType == TreeFileType.Video) appString(R.string.ui_experience_video) else appString(R.string.ui_experience_audio)
         val safeTitle = sanitizeDlsiteTrialFileBaseName(track.title, fallbackTitle)
         val fileName = "${mediaIndex.toString().padStart(2, '0')}_$safeTitle.$ext"
         mediaIndex += 1
@@ -816,13 +769,10 @@ private fun inferDlsiteTrialDownloadExtension(url: String, mediaType: TreeFileTy
 
 internal fun flattenAsmrOneLeafDownloads(tree: List<AsmrOneTrackNodeResponse>): List<AsmrOneLeafDownload> {
     val out = mutableListOf<AsmrOneLeafDownload>()
-    fun sanitizeSegment(name: String): String {
-        return name.trim().ifEmpty { "item" }.replace(Regex("""[\\/:*?"<>|]"""), "_")
-    }
     fun walk(nodes: List<AsmrOneTrackNodeResponse>, parentPath: String) {
         nodes.forEach { node ->
             val title = node.title?.trim().orEmpty().ifBlank { "item" }
-            val safeTitle = sanitizeSegment(title)
+            val safeTitle = sanitizeFolderName(title)
             val path = if (parentPath.isBlank()) safeTitle else "$parentPath/$safeTitle"
             val children = node.children.orEmpty()
             val url = node.downloadUrl

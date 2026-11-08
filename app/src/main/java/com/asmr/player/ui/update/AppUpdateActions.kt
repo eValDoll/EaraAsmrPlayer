@@ -1,5 +1,8 @@
 package com.asmr.player.ui.update
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -32,7 +35,7 @@ fun launchDownloadedApkInstall(context: Context, apkPath: String): AppUpdateInst
             context.startActivity(intent)
             AppUpdateInstallResult.PermissionRequired
         }.getOrElse { e ->
-            AppUpdateInstallResult.Failed(e.message?.trim().orEmpty().ifBlank { "无法打开安装授权页面" })
+            AppUpdateInstallResult.Failed(e.message?.trim().orEmpty().ifBlank { appString(R.string.ui_unable_to_open_installation_authorization_page) })
         }
     }
 
@@ -50,7 +53,7 @@ fun launchDownloadedApkInstall(context: Context, apkPath: String): AppUpdateInst
         context.startActivity(intent)
         AppUpdateInstallResult.Started
     }.getOrElse { e ->
-        AppUpdateInstallResult.Failed(e.message?.trim().orEmpty().ifBlank { "无法打开系统安装器" })
+        AppUpdateInstallResult.Failed(e.message?.trim().orEmpty().ifBlank { appString(R.string.ui_unable_to_open_system_installer) })
     }
 }
 

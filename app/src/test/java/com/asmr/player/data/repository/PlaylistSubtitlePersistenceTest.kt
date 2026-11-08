@@ -11,6 +11,7 @@ import com.asmr.player.playback.MediaItemFactory
 import com.asmr.player.ui.playlists.toPlaybackEntity
 import com.asmr.player.util.OnlineLyricsStore
 import com.asmr.player.util.RemoteSubtitleSource
+import java.io.File
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
@@ -29,10 +30,11 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [34])
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [34])
 class PlaylistSubtitlePersistenceTest {
     private val context get() = RuntimeEnvironment.getApplication()
-    private val databaseName = "playlist-subtitles-${System.nanoTime()}.db"
+    // Keep SQLite's WAL paths below the Windows path limit in Robolectric's method directories.
+    private val databaseName = File.createTempFile("playlist-subtitles-", ".db").absolutePath
     private lateinit var db: AppDatabase
     private lateinit var repository: PlaylistRepository
     private val mediaId = "https://example.com/音频/01.mp3"
@@ -131,10 +133,10 @@ class PlaylistSubtitlePersistenceTest {
     }
 
     @Test
-    fun replacingCustomPlaylist_preservesSourcesAndPrefersItemMetadata() = runBlocking {
+    fun addingToCustomPlaylist_preservesSourcesAndPrefersItemMetadata() = runBlocking {
         val playlistId = repository.createUserPlaylist("睡前听")!!
         OnlineLyricsStore.set(mediaId, listOf(sources.first()))
-        repository.replacePlaylistWithMediaItems(playlistId, listOf(onlineItem(sources), otherItem()))
+        repository.addItemsToPlaylist(playlistId, listOf(onlineItem(sources), otherItem()))
 
         restartStorage()
 

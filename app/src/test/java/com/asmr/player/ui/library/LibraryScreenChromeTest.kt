@@ -10,7 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
-import androidx.compose.ui.test.junit4.createComposeRule
+import com.asmr.player.ui.createEaraComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.platform.testTag
@@ -27,7 +27,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class LibraryScreenChromeTest {
     @get:Rule
-    val composeRule = createComposeRule()
+    val composeRule = createEaraComposeRule()
 
     @Test
     fun libraryChrome_collapsesAndExpandsWhileKeepingControlsMounted() {
@@ -50,7 +50,6 @@ class LibraryScreenChromeTest {
                     onSortAdded = {},
                     onSortTitle = {},
                     onOpenFilterScreen = {},
-                    rightPanelToggle = null,
                     materialColorScheme = MaterialTheme.colorScheme,
                     chromeState = chromeState,
                     onMeasured = { chromeState.updateHeight(it.height.toFloat()) }
@@ -118,7 +117,6 @@ class LibraryScreenChromeTest {
                         onSortAdded = {},
                         onSortTitle = {},
                         onOpenFilterScreen = {},
-                        rightPanelToggle = null,
                         materialColorScheme = MaterialTheme.colorScheme,
                         chromeState = chromeState,
                         onMeasured = { chromeState.updateHeight(it.height.toFloat()) }

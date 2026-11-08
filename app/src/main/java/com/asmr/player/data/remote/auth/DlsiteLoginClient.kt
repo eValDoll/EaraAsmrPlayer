@@ -1,5 +1,8 @@
 package com.asmr.player.data.remote.auth
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.asmr.player.data.remote.NetworkHeaders
@@ -36,8 +39,8 @@ class DlsiteLoginClient @Inject constructor(
         android.util.Log.d(TAG, "Starting login process for user: $loginId")
         val id = loginId.trim()
         val pw = password
-        require(id.isNotBlank()) { "账号不能为空" }
-        require(pw.isNotBlank()) { "密码不能为空" }
+        require(id.isNotBlank()) { appString(R.string.ui_account_cannot_be_empty) }
+        require(pw.isNotBlank()) { appString(R.string.ui_password_cannot_be_empty) }
 
         val jar = MemoryCookieJar()
         val client = okHttpClient.newBuilder().cookieJar(jar).build()
@@ -54,7 +57,7 @@ class DlsiteLoginClient @Inject constructor(
                 .header("Accept-Language", NetworkHeaders.ACCEPT_LANGUAGE)
                 .build()
         ).execute().use { resp ->
-            if (!resp.isSuccessful) throw IllegalStateException("打开登录页失败（${resp.code}）")
+            if (!resp.isSuccessful) throw IllegalStateException(appString(R.string.ui_failed_to_open_login_page, resp.code))
             resp.body?.string().orEmpty()
         }
 
@@ -65,7 +68,7 @@ class DlsiteLoginClient @Inject constructor(
             if (loginPageHtml.contains("mypage") || !loginPageHtml.contains("login_id")) {
                 android.util.Log.d(TAG, "Already logged in detected.")
             } else {
-                throw IllegalStateException("未找到登录表单且未检测到登录状态")
+                throw IllegalStateException(appString(R.string.ui_login_form_not_found_and_login_status_not))
             }
         } else {
             val actionUrl = form.absUrl("action").ifBlank { loginPageUrl }
@@ -113,7 +116,7 @@ class DlsiteLoginClient @Inject constructor(
                     val errorDoc = Jsoup.parse(html)
                     val errorMsg = errorDoc.select(".error_msg, .alert-danger").text().trim()
                     android.util.Log.e(TAG, "Login failed: $errorMsg")
-                    throw IllegalStateException(errorMsg.ifBlank { "登录失败，请检查账号密码" })
+                    throw IllegalStateException(errorMsg.ifBlank { appString(R.string.ui_login_failed_please_check_your_account_password) })
                 }
                 android.util.Log.d(TAG, "Login form submitted successfully. Final URL: ${resp.request.url}")
             }
@@ -169,7 +172,7 @@ class DlsiteLoginClient @Inject constructor(
         android.util.Log.d(TAG, "Login completed. DlsiteCookie length: ${dlsiteCookie.length}, PlayCookie length: ${playCookie.length}")
         
         if (dlsiteCookie.isBlank() && playCookie.isBlank()) {
-            throw IllegalStateException("未获取到登录 Cookie")
+            throw IllegalStateException(appString(R.string.ui_login_cookie_not_obtained))
         }
         
         DlsiteLoginResult(

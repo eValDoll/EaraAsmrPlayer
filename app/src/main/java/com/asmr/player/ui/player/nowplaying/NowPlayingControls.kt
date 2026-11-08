@@ -1,24 +1,12 @@
 package com.asmr.player.ui.player
 
-import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
-import android.content.pm.ActivityInfo
-import android.content.res.Configuration
+import com.asmr.player.i18n.appString
+
 import android.os.SystemClock
-import android.view.LayoutInflater
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Label
@@ -27,83 +15,47 @@ import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
-import androidx.compose.material3.windowsizeclass.WindowHeightSizeClass
-import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
-import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.common.Player
-import androidx.media3.common.VideoSize
-import androidx.media3.ui.PlayerView
 import com.asmr.player.R
-import com.asmr.player.data.settings.CoverPreviewMode
-import com.asmr.player.data.settings.LyricsPageSettings
-import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.AudioOutputRouteIcon
-import com.asmr.player.ui.common.DismissOutsideBoundsOverlay
 import com.asmr.player.ui.common.AppVolumeHearingWarningDialog
 import com.asmr.player.ui.common.AppVolumeSlider
 import com.asmr.player.ui.common.AppVolumeWarningSessionState
-import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.playback.AppVolume
 import com.asmr.player.playback.PlaybackSnapshot
-import com.asmr.player.ui.common.EqualizerPanel
 import com.asmr.player.ui.common.rememberProtectedAppVolumeChangeState
-import com.asmr.player.ui.common.DiscPlaceholder
-import com.asmr.player.ui.common.smoothScrollToIndex
-import com.asmr.player.ui.library.TagAssignDialog
 import com.asmr.player.service.AudioOutputRouteKind
 import com.asmr.player.ui.theme.AsmrTheme
-import com.asmr.player.util.Formatting
+import com.asmr.player.ui.theme.AsmrColorScheme
+import com.asmr.player.ui.theme.LocalAsmrColorScheme
 import com.asmr.player.util.SubtitleEntry
 import com.asmr.player.util.SubtitleIndexFinder
-import kotlin.math.abs
 import kotlin.math.roundToInt
-import kotlin.math.roundToLong
 
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 @Composable
 internal fun PlaybackControls(
@@ -120,8 +72,7 @@ internal fun PlaybackControls(
     actionRowModifier: Modifier = Modifier,
     coreControlsModifier: Modifier = Modifier,
     landscapeControls: Boolean = false,
-    primaryColor: Color = AsmrTheme.colorScheme.primary,
-    onPrimaryColor: Color = AsmrTheme.colorScheme.onPrimary,
+    contentColor: Color = AsmrTheme.colorScheme.onSurface,
     compactLayout: Boolean = false
 ) {
     val actionButtonSize = if (compactLayout) 40.dp else 48.dp
@@ -151,10 +102,10 @@ internal fun PlaybackControls(
         else -> 72.dp
     }
     val playIconSize = when {
-        landscapeControls && compactLayout -> 36.dp
-        landscapeControls -> 40.dp
-        compactLayout -> 30.dp
-        else -> 36.dp
+        landscapeControls && compactLayout -> 60.dp
+        landscapeControls -> 68.dp
+        compactLayout -> 52.dp
+        else -> 64.dp
     }
     val currentMediaId = playback.currentMediaItem?.mediaId
     var optimisticIsPlaying by remember { mutableStateOf<Boolean?>(null) }
@@ -177,152 +128,140 @@ internal fun PlaybackControls(
         }
     }
 
-    val controlsContainerModifier = modifier
-        .fillMaxWidth()
-        .padding(bottom = bottomPadding)
-    val landscapeActionSpacing = if (compactLayout) 2.dp else 4.dp
-    val landscapeCoreSpacing = if (compactLayout) 2.dp else 10.dp
-    val landscapeCoreEndPadding = if (compactLayout) 0.dp else 16.dp
-
-    if (landscapeControls && showActionRow) {
-        BoxWithConstraints(modifier = controlsContainerModifier) {
-            val adaptiveCoreSpacing = if (compactLayout) {
-                phoneLandscapeCoreButtonSpacing(
-                    availableWidth = maxWidth,
-                    actionButtonSize = actionButtonSize,
-                    actionSpacing = landscapeActionSpacing,
-                    coreButtonSize = coreButtonSize,
-                    playButtonSize = playButtonSize
-                )
-            } else {
-                landscapeCoreSpacing
-            }
-            Row(
-                modifier = Modifier.fillMaxSize(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    modifier = Modifier.then(actionRowModifier),
-                    horizontalArrangement = Arrangement.spacedBy(landscapeActionSpacing),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    PlaybackActionButtons(
-                        playback = playback,
-                        isFavorite = isFavorite,
-                        viewModel = viewModel,
-                        onShowPlaylistPicker = onShowPlaylistPicker,
-                        onShowEqualizer = onShowEqualizer,
-                        onManageTags = onManageTags,
-                        sliceUiState = sliceUiState,
-                        actionButtonSize = actionButtonSize,
-                        actionIconSize = actionIconSize,
-                        landscapeControls = true,
-                        primaryColor = primaryColor
-                    )
-                }
-                Spacer(modifier = Modifier.weight(1f))
-                Row(
-                    modifier = Modifier
-                        .then(coreControlsModifier)
-                        .padding(end = landscapeCoreEndPadding),
-                    horizontalArrangement = Arrangement.spacedBy(adaptiveCoreSpacing),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    PlaybackCoreButtons(
-                        playback = playback,
-                        viewModel = viewModel,
-                        isPlaying = isPlayingEffective,
-                        onTogglePlay = {
-                            val shouldPlay = nextPlaybackRequest(
-                                optimisticIsPlaying = optimisticIsPlaying,
-                                playWhenReady = playback.playWhenReady
-                            )
-                            optimisticIsPlaying = shouldPlay
-                            if (shouldPlay) viewModel.play() else viewModel.pause()
-                        },
-                        compactLayout = compactLayout,
-                        coreButtonSize = coreButtonSize,
-                        modeIconSize = modeIconSize,
-                        skipIconSize = skipIconSize,
-                        playButtonSize = playButtonSize,
-                        playIconSize = playIconSize,
-                        primaryColor = primaryColor,
-                        onPrimaryColor = onPrimaryColor
-                    )
-                }
-            }
-        }
-    } else {
-        Column(
-            modifier = controlsContainerModifier,
-            verticalArrangement = Arrangement.spacedBy(
-                if (showActionRow) {
-                    if (compactLayout) 8.dp else 20.dp
-                } else {
-                    12.dp
-                }
+    PlaybackControlsLayout(
+        modifier = modifier.padding(bottom = bottomPadding),
+        landscapeControls = landscapeControls,
+        compactLayout = compactLayout,
+        showActionRow = showActionRow,
+        actionButtonSize = actionButtonSize,
+        coreButtonSize = coreButtonSize,
+        playButtonSize = playButtonSize,
+        actionRowModifier = actionRowModifier,
+        coreControlsModifier = coreControlsModifier,
+        actions = {
+            PlaybackActionButtons(
+                playback = playback,
+                isFavorite = isFavorite,
+                viewModel = viewModel,
+                onShowPlaylistPicker = onShowPlaylistPicker,
+                onShowEqualizer = onShowEqualizer,
+                onManageTags = onManageTags,
+                sliceUiState = sliceUiState,
+                actionButtonSize = actionButtonSize,
+                actionIconSize = actionIconSize,
+                landscapeControls = landscapeControls,
+                contentColor = contentColor,
             )
-        ) {
-            if (showActionRow) {
+        },
+        core = {
+            PlaybackCoreButtons(
+                playback = playback,
+                viewModel = viewModel,
+                isPlaying = isPlayingEffective,
+                onTogglePlay = {
+                    val shouldPlay = nextPlaybackRequest(
+                        optimisticIsPlaying = optimisticIsPlaying,
+                        playWhenReady = playback.playWhenReady,
+                    )
+                    optimisticIsPlaying = shouldPlay
+                    if (shouldPlay) viewModel.play() else viewModel.pause()
+                },
+                coreButtonSize = coreButtonSize,
+                modeIconSize = modeIconSize,
+                skipIconSize = skipIconSize,
+                playButtonSize = playButtonSize,
+                playIconSize = playIconSize,
+                contentColor = contentColor,
+            )
+        },
+    )
+}
+
+@Composable
+internal fun PlaybackControlsLayout(
+    landscapeControls: Boolean,
+    compactLayout: Boolean,
+    showActionRow: Boolean,
+    actionButtonSize: Dp,
+    coreButtonSize: Dp,
+    playButtonSize: Dp,
+    modifier: Modifier = Modifier,
+    actionRowModifier: Modifier = Modifier,
+    coreControlsModifier: Modifier = Modifier,
+    actions: @Composable RowScope.() -> Unit,
+    core: @Composable RowScope.() -> Unit,
+) {
+    BoxWithConstraints(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        val availableWidth = maxWidth
+        val actionSpacing = if (compactLayout) 2.dp else 4.dp
+        val coreSpacing = if (compactLayout) 2.dp else 10.dp
+        val density = LocalDensity.current
+        val coreWidthPx = with(density) { coreButtonSize.roundToPx() * 4 + playButtonSize.roundToPx() }
+        val actionWidthPx = with(density) { actionButtonSize.roundToPx() * 3 + actionSpacing.roundToPx() * 2 }
+        val preferredEndPaddingPx = with(density) { if (landscapeControls && !compactLayout) 16.dp.roundToPx() else 0 }
+        val endPaddingPx = minOf(preferredEndPaddingPx, (constraints.maxWidth - coreWidthPx).coerceAtLeast(0))
+        val endPadding = with(density) { endPaddingPx.toDp() }
+        val coreSpacingPx = with(density) { coreSpacing.roundToPx() }
+        val inline = landscapeControls && showActionRow &&
+            constraints.maxWidth >= actionWidthPx + coreWidthPx + coreSpacingPx * 4 + preferredEndPaddingPx
+        // 按整数像素分配间距，避免四个小数 dp 间距分别取整后挤窄末尾按钮。
+        val availableSpacing = with(density) {
+            ((constraints.maxWidth - endPaddingPx - coreWidthPx).coerceAtLeast(0) / 4).toDp()
+        }
+        if (inline) {
+            val spacing = if (compactLayout) {
+                val maximumSpacing = with(density) {
+                    ((constraints.maxWidth - actionWidthPx - coreWidthPx - endPaddingPx).coerceAtLeast(0) / 4).toDp()
+                }
+                minOf(
+                    phoneLandscapeCoreButtonSpacing(availableWidth, actionButtonSize, actionSpacing, coreButtonSize, playButtonSize),
+                    maximumSpacing,
+                )
+            } else coreSpacing
+            Row(
+                modifier = Modifier.fillMaxWidth().heightIn(min = playButtonSize),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = if (compactLayout) 8.dp else 16.dp)
-                        .then(actionRowModifier),
-                    horizontalArrangement = Arrangement.SpaceAround,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    PlaybackActionButtons(
-                        playback = playback,
-                        isFavorite = isFavorite,
-                        viewModel = viewModel,
-                        onShowPlaylistPicker = onShowPlaylistPicker,
-                        onShowEqualizer = onShowEqualizer,
-                        onManageTags = onManageTags,
-                        sliceUiState = sliceUiState,
-                        actionButtonSize = actionButtonSize,
-                        actionIconSize = actionIconSize,
-                        landscapeControls = false,
-                        primaryColor = primaryColor
+                    modifier = actionRowModifier,
+                    horizontalArrangement = Arrangement.spacedBy(actionSpacing),
+                    verticalAlignment = Alignment.CenterVertically,
+                    content = actions,
+                )
+                Spacer(Modifier.weight(1f))
+                Row(
+                    modifier = coreControlsModifier.padding(end = endPadding),
+                    horizontalArrangement = Arrangement.spacedBy(spacing),
+                    verticalAlignment = Alignment.CenterVertically,
+                    content = core,
+                )
+            }
+        } else {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(
+                    if (!showActionRow) 12.dp else if (compactLayout || landscapeControls) 8.dp else 20.dp
+                ),
+            ) {
+                if (showActionRow) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth()
+                            .padding(horizontal = if (landscapeControls) 0.dp else if (compactLayout) 8.dp else 16.dp)
+                            .then(actionRowModifier),
+                        horizontalArrangement = Arrangement.SpaceAround,
+                        verticalAlignment = Alignment.CenterVertically,
+                        content = actions,
                     )
                 }
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(coreControlsModifier)
-                    .padding(end = if (landscapeControls) landscapeCoreEndPadding else 0.dp),
-                horizontalArrangement = when {
-                    landscapeControls -> Arrangement.spacedBy(
-                        space = landscapeCoreSpacing,
-                        alignment = Alignment.End
-                    )
-                    showActionRow -> Arrangement.SpaceBetween
-                    else -> Arrangement.spacedBy(25.dp, Alignment.CenterHorizontally)
-                },
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                PlaybackCoreButtons(
-                    playback = playback,
-                    viewModel = viewModel,
-                    isPlaying = isPlayingEffective,
-                    onTogglePlay = {
-                        val shouldPlay = nextPlaybackRequest(
-                            optimisticIsPlaying = optimisticIsPlaying,
-                            playWhenReady = playback.playWhenReady
-                        )
-                        optimisticIsPlaying = shouldPlay
-                        if (shouldPlay) viewModel.play() else viewModel.pause()
+                Row(
+                    modifier = Modifier.fillMaxWidth().then(coreControlsModifier).padding(end = endPadding),
+                    horizontalArrangement = when {
+                        landscapeControls -> Arrangement.spacedBy(minOf(coreSpacing, availableSpacing), Alignment.End)
+                        showActionRow -> Arrangement.SpaceBetween
+                        else -> Arrangement.spacedBy(minOf(25.dp, availableSpacing), Alignment.CenterHorizontally)
                     },
-                    compactLayout = compactLayout,
-                    coreButtonSize = coreButtonSize,
-                    modeIconSize = modeIconSize,
-                    skipIconSize = skipIconSize,
-                    playButtonSize = playButtonSize,
-                    playIconSize = playIconSize,
-                    primaryColor = primaryColor,
-                    onPrimaryColor = onPrimaryColor
+                    verticalAlignment = Alignment.CenterVertically,
+                    content = core,
                 )
             }
         }
@@ -356,29 +295,30 @@ private fun PlaybackActionButtons(
     actionButtonSize: Dp,
     actionIconSize: Dp,
     landscapeControls: Boolean,
-    primaryColor: Color
+    contentColor: Color
 ) {
-    val colorScheme = AsmrTheme.colorScheme
     IconButton(
         onClick = { viewModel.toggleFavorite() },
-        modifier = Modifier.size(actionButtonSize)
+        modifier = Modifier.size(actionButtonSize),
+        colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
     ) {
         Icon(
             imageVector = if (isFavorite) Icons.Rounded.Favorite else Icons.Outlined.FavoriteBorder,
-            contentDescription = if (isFavorite) "取消收藏" else "收藏",
-            tint = if (isFavorite) Color.Red else colorScheme.onSurface.copy(alpha = 0.8f),
+            contentDescription = if (isFavorite) appString(R.string.ui_cancel_favorites) else appString(R.string.ui_favorites_d07cee),
+            tint = if (isFavorite) Color.Red else contentColor.copy(alpha = 0.8f),
             modifier = Modifier.size(actionIconSize)
         )
     }
 
     IconButton(
         onClick = onShowPlaylistPicker,
-        modifier = Modifier.size(actionButtonSize)
+        modifier = Modifier.size(actionButtonSize),
+        colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
     ) {
         Icon(
             Icons.AutoMirrored.Outlined.PlaylistAdd,
-            contentDescription = "添加到播放列表",
-            tint = colorScheme.onSurface.copy(alpha = 0.8f),
+            contentDescription = appString(R.string.ui_add_to_playlist),
+            tint = contentColor.copy(alpha = 0.8f),
             modifier = Modifier.size(actionIconSize)
         )
     }
@@ -389,12 +329,13 @@ private fun PlaybackActionButtons(
             onClick = {
                 if (isOnlineMedia) viewModel.showOnlineTagManageUnsupported() else onManageTags()
             },
-            modifier = Modifier.size(actionButtonSize)
+            modifier = Modifier.size(actionButtonSize),
+            colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
         ) {
             Icon(
                 imageVector = if (isOnlineMedia) Icons.AutoMirrored.Outlined.LabelOff else Icons.AutoMirrored.Rounded.Label,
-                contentDescription = "标签管理",
-                tint = colorScheme.onSurface.copy(alpha = if (isOnlineMedia) 0.38f else 0.8f),
+                contentDescription = appString(R.string.ui_tag_management),
+                tint = contentColor.copy(alpha = if (isOnlineMedia) 0.38f else 0.8f),
                 modifier = Modifier.size(actionIconSize)
             )
         }
@@ -402,34 +343,53 @@ private fun PlaybackActionButtons(
 
     IconButton(
         onClick = onShowEqualizer,
-        modifier = Modifier.size(actionButtonSize)
+        modifier = Modifier.size(actionButtonSize),
+        colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
     ) {
         Icon(
             imageVector = Icons.Rounded.Tune,
-            contentDescription = "音效面板",
-            tint = colorScheme.onSurface.copy(alpha = 0.8f),
+            contentDescription = appString(R.string.ui_sound_effects_panel),
+            tint = contentColor.copy(alpha = 0.8f),
             modifier = Modifier.size(actionIconSize)
         )
     }
 
     if (!landscapeControls) {
         val sliceEnabled = sliceUiState.sliceModeEnabled
-        val baseTint = colorScheme.onSurface.copy(alpha = 0.8f)
         val tint by animateColorAsState(
-            targetValue = if (sliceEnabled) primaryColor else baseTint,
+            targetValue = contentColor.copy(alpha = if (sliceEnabled) 1f else 0.55f),
             animationSpec = tween(240, easing = FastOutSlowInEasing),
             label = "sliceModeTint"
         )
         IconButton(
             onClick = { viewModel.toggleSliceMode() },
-            modifier = Modifier.size(actionButtonSize)
+            modifier = Modifier
+                .size(actionButtonSize)
+                .semantics {
+                    selected = sliceEnabled
+                    stateDescription = if (sliceEnabled) appString(R.string.ui_enabled) else appString(R.string.ui_disabled)
+                },
+            colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
         ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_segment),
-                contentDescription = "切片播放",
-                tint = tint,
-                modifier = Modifier.size(actionIconSize)
-            )
+            Box(
+                modifier = Modifier.size(actionIconSize + 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_segment),
+                    contentDescription = appString(R.string.ui_slice_play),
+                    tint = tint,
+                    modifier = Modifier.size(actionIconSize)
+                )
+                if (sliceEnabled) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .size(width = 12.dp, height = 2.dp)
+                            .background(contentColor, RoundedCornerShape(1.dp))
+                    )
+                }
+            }
         }
     }
 }
@@ -445,19 +405,17 @@ private fun PlaybackCoreButtons(
     viewModel: PlayerViewModel,
     isPlaying: Boolean,
     onTogglePlay: () -> Unit,
-    compactLayout: Boolean,
     coreButtonSize: Dp,
     modeIconSize: Dp,
     skipIconSize: Dp,
     playButtonSize: Dp,
     playIconSize: Dp,
-    primaryColor: Color,
-    onPrimaryColor: Color
+    contentColor: Color
 ) {
-    val colorScheme = AsmrTheme.colorScheme
     IconButton(
         onClick = { viewModel.cyclePlayMode() },
-        modifier = Modifier.size(coreButtonSize)
+        modifier = Modifier.size(coreButtonSize),
+        colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
     ) {
         val icon = when {
             playback.shuffleEnabled -> Icons.Rounded.Shuffle
@@ -466,87 +424,69 @@ private fun PlaybackCoreButtons(
         }
         Icon(
             icon,
-            contentDescription = "播放模式",
-            tint = colorScheme.onSurface,
+            contentDescription = appString(R.string.ui_play_mode),
+            tint = contentColor,
             modifier = Modifier.size(modeIconSize)
         )
     }
 
     IconButton(
         onClick = { viewModel.previous() },
-        modifier = Modifier.size(coreButtonSize)
+        modifier = Modifier.size(coreButtonSize),
+        colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
     ) {
         Icon(
             Icons.Rounded.SkipPrevious,
-            contentDescription = "上一首",
-            tint = colorScheme.onSurface,
+            contentDescription = appString(R.string.ui_previous_track),
+            tint = contentColor,
             modifier = Modifier.size(skipIconSize)
         )
     }
 
-    val playButtonCorner by animateDpAsState(
-        targetValue = if (isPlaying) {
-            if (compactLayout) 20.dp else 24.dp
-        } else {
-            if (compactLayout) 30.dp else 36.dp
-        },
-        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
-        label = "playButtonCorner"
-    )
-    val playButtonInteractionSource = remember { MutableInteractionSource() }
-    Surface(
+    IconButton(
+        onClick = onTogglePlay,
         modifier = Modifier.size(playButtonSize),
-        shape = RoundedCornerShape(playButtonCorner),
-        color = primaryColor,
-        contentColor = onPrimaryColor
+        colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clickable(
-                    interactionSource = playButtonInteractionSource,
-                    indication = null,
-                    onClick = onTogglePlay
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            AnimatedContent(
-                targetState = isPlaying,
-                transitionSpec = {
-                    (fadeIn(tween(durationMillis = 120)) + scaleIn(tween(durationMillis = 120), initialScale = 0.9f)) togetherWith
-                        (fadeOut(tween(durationMillis = 90)) + scaleOut(tween(durationMillis = 90), targetScale = 1.05f))
-                },
-                label = "play_pause_icon"
-            ) { playing ->
-                Icon(
-                    imageVector = if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                    contentDescription = "播放/暂停",
-                    modifier = Modifier.size(playIconSize)
-                )
-            }
+        AnimatedContent(
+            targetState = isPlaying,
+            transitionSpec = {
+                (fadeIn(tween(durationMillis = 120)) + scaleIn(tween(durationMillis = 120), initialScale = 0.9f)) togetherWith
+                    (fadeOut(tween(durationMillis = 90)) + scaleOut(tween(durationMillis = 90), targetScale = 1.05f))
+            },
+            label = "play_pause_icon"
+        ) { playing ->
+            Icon(
+                imageVector = if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                contentDescription = if (playing) appString(R.string.ui_pause) else appString(R.string.ui_play),
+                tint = contentColor,
+                modifier = Modifier.size(playIconSize)
+            )
         }
     }
 
     IconButton(
         onClick = { viewModel.next() },
-        modifier = Modifier.size(coreButtonSize)
+        modifier = Modifier.size(coreButtonSize),
+        colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
     ) {
         Icon(
             Icons.Rounded.SkipNext,
-            contentDescription = "下一首",
-            tint = colorScheme.onSurface,
+            contentDescription = appString(R.string.ui_next_track),
+            tint = contentColor,
             modifier = Modifier.size(skipIconSize)
         )
     }
 
     IconButton(
         onClick = { viewModel.seekForward10s() },
-        modifier = Modifier.size(coreButtonSize)
+        modifier = Modifier.size(coreButtonSize),
+        colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
     ) {
         Icon(
             Icons.Rounded.FastForward,
-            contentDescription = "快进10秒",
-            tint = colorScheme.onSurface,
+            contentDescription = appString(R.string.ui_fast_forward_10_seconds),
+            tint = contentColor,
             modifier = Modifier.size(modeIconSize)
         )
     }
@@ -659,7 +599,7 @@ internal fun NowPlayingLyricsPreview(
     marqueeCurrentLine: Boolean = false,
     contentTopPadding: Dp = 0.dp,
     onCurrentLineAnchorChanged: ((Float) -> Unit)? = null,
-    emptyText: String = "当前音频暂无同步歌词",
+    emptyText: String = appString(R.string.ui_there_are_no_synchronized_lyrics_in_the_current),
     modifier: Modifier = Modifier
 ) {
     val sortedLyrics = remember(lyrics) {
@@ -708,6 +648,12 @@ internal fun NowPlayingLyricsPreview(
             upcoming = upcoming
         )
     }
+    val isDark = AsmrTheme.colorScheme.isDark
+    val previewColors = remember(colors, sourceContent.current, emptyText, isDark) {
+        if (sourceContent.current == emptyText) {
+            colors.copy(activeText = playerSupportingTextColor(isDark))
+        } else colors
+    }
     val typographyMetrics = remember(largeTypography, highlightFontSizeSp) {
         nowPlayingLyricTypographyMetrics(largeTypography, highlightFontSizeSp)
     }
@@ -731,7 +677,7 @@ internal fun NowPlayingLyricsPreview(
             text = sourceContent.current,
             cueKey = sortedLyrics.getOrNull(activeIndex),
             style = currentStyle,
-            colors = colors,
+            colors = previewColors,
             centered = centered,
             interactionEnabled = interactionEnabled,
             onOpenLyrics = onOpenLyrics,
@@ -1052,7 +998,7 @@ internal fun NowPlayingLyricsPreview(
                             text = line.text,
                             durationMs = line.durationMs,
                             style = currentStyle,
-                            colors = colors,
+                            colors = previewColors,
                             fontWeight = currentFontWeight,
                             modifier = lineModifier
                         )
@@ -1060,7 +1006,7 @@ internal fun NowPlayingLyricsPreview(
                         Text(
                             text = line.text,
                             style = if (renderAsCurrent) currentStyle else upcomingStyle,
-                            color = if (renderAsCurrent) colors.activeText else colors.inactiveText,
+                            color = if (renderAsCurrent) previewColors.activeText else colors.inactiveText,
                             modifier = lineModifier,
                             textAlign = textAlign,
                             maxLines = if (renderAsCurrent) currentMaxLines else upcomingMaxLines,
@@ -1175,7 +1121,8 @@ internal fun VolumeControl(
     warningSessionState: AppVolumeWarningSessionState,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
-    compactLayout: Boolean = false
+    compactLayout: Boolean = false,
+    dialogColorScheme: AsmrColorScheme = AsmrTheme.colorScheme
 ) {
     val volume by viewModel.appVolumePercent.collectAsStateWithLifecycle()
     var lastNonZeroVolume by remember { mutableIntStateOf(AppVolume.DefaultPercent) }
@@ -1269,9 +1216,9 @@ internal fun VolumeControl(
                 )
                 Spacer(modifier = Modifier.width(if (compactLayout) 8.dp else 10.dp))
                 Text(
-                    text = "长按调整音量",
+                    text = appString(R.string.ui_long_press_to_adjust_volume),
                     style = if (compactLayout) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall,
-                    color = colorScheme.textTertiary
+                    color = playerSupportingTextColor(colorScheme.isDark)
                 )
             }
         } else {
@@ -1309,15 +1256,15 @@ internal fun VolumeControl(
                     )
                     Spacer(modifier = Modifier.width(if (compactLayout) 8.dp else 10.dp))
                     Text(
-                        text = "音量",
+                        text = appString(R.string.ui_volume),
                         style = if (compactLayout) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall,
-                        color = colorScheme.textTertiary
+                        color = playerSupportingTextColor(colorScheme.isDark)
                     )
                     Spacer(modifier = Modifier.weight(1f))
                     Text(
                         text = "${AppVolume.clampPercent(volume)}%",
                         style = if (compactLayout) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall,
-                        color = colorScheme.textTertiary
+                        color = playerSupportingTextColor(colorScheme.isDark)
                     )
                 }
 
@@ -1338,7 +1285,12 @@ internal fun VolumeControl(
             }
         }
     }
-    AppVolumeHearingWarningDialog(state = protectedVolumeChangeState)
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalAsmrColorScheme provides dialogColorScheme,
+        androidx.compose.material3.LocalContentColor provides dialogColorScheme.onSurface
+    ) {
+        AppVolumeHearingWarningDialog(state = protectedVolumeChangeState)
+    }
 }
 
 // AdaptiveLyricsView has been replaced by AppleLyricsView

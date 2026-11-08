@@ -90,8 +90,8 @@ android {
         applicationId = "com.asmr.player"
         minSdk = 24
         targetSdk = 34
-        versionCode = 10204
-        versionName = "1.2.4"
+        versionCode = 10205
+        versionName = "1.2.5"
         buildConfigField("String", "UPDATE_REPO_OWNER", "\"eValDoll\"")
         buildConfigField("String", "UPDATE_REPO_NAME", "\"EaraAsmrPlayer\"")
         buildConfigField("String", "LISTEN_TOGETHER_BASE_URL", "\"$listenTogetherBaseUrl\"")
@@ -175,11 +175,11 @@ dependencies {
     implementation("androidx.savedstate:savedstate:1.2.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.activity:activity-compose:1.8.2")
+    implementation("androidx.appcompat:appcompat:1.7.0")
     implementation(platform("androidx.compose:compose-bom:2024.02.00"))
     implementation("androidx.compose.foundation:foundation:1.7.8")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
-    implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material3:material3-window-size-class")
     implementation("androidx.compose.material:material-icons-extended")
@@ -231,20 +231,18 @@ dependencies {
     implementation("androidx.paging:paging-runtime-ktx:$paging_version")
     implementation("androidx.paging:paging-compose:$paging_version")
 
-    implementation("androidx.metrics:metrics-performance:1.0.0-beta01")
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
     baselineProfile(project(":baselineprofile"))
 
     // Coil (Image Loading)
     implementation("io.coil-kt:coil-compose:2.5.0")
-    implementation("androidx.palette:palette-ktx:1.0.0")
 
     // Unit Testing
     testImplementation(platform("androidx.compose:compose-bom:2024.02.00"))
     testImplementation("junit:junit:4.13.2")
     testImplementation("androidx.test.ext:junit:1.1.5")
     testImplementation("androidx.compose.ui:ui-test-junit4")
-    testImplementation("org.robolectric:robolectric:4.11.1")
+    testImplementation("org.robolectric:robolectric:4.12.1")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")

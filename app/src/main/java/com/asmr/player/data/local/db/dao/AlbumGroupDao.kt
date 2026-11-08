@@ -29,6 +29,7 @@ interface AlbumGroupDao {
             ) AS albumCount,
             (
                 SELECT COALESCE(
+                    NULLIF(a.manualCoverPath, ''),
                     NULLIF(a.coverThumbPath, ''),
                     NULLIF(a.coverPath, ''),
                     NULLIF(a.coverUrl, '')

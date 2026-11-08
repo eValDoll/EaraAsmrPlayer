@@ -1,5 +1,8 @@
 package com.asmr.player.data.remote.download
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.room.withTransaction
 import com.asmr.player.data.local.db.AppDatabase
 import com.asmr.player.data.local.db.entities.AlbumEntity
@@ -99,7 +102,7 @@ class DownloadDirectoryCoordinator @Inject constructor(
     suspend fun resolveLegacyPaths(targetDir: String, taskRootDir: String): ResolvedDownloadPaths {
         val destination = destinationStore.current()
         if (destination is DownloadDestination.DocumentTree && !storage.hasPersistedWritePermission(destination.root)) {
-            error("下载目录权限已失效")
+            error(appString(R.string.ui_download_directory_permission_has_expired))
         }
 
         val defaultRoot = destinationStore.defaultDestination().root
@@ -220,13 +223,15 @@ class DownloadDirectoryCoordinator @Inject constructor(
                 deleteAlbumCompletely(album, remainingTracks)
             } else {
                 val removedCover = removableRoots.any { root -> storage.isSameOrDescendant(album.coverPath, root) }
+                val removedManualCover = removableRoots.any { root -> storage.isSameOrDescendant(album.manualCoverPath, root) }
                 val updated = album.copy(
                     path = retainedPath,
                     localPath = localPath,
                     downloadPath = downloadPath,
                     coverPath = album.coverPath.takeUnless { removedCover }.orEmpty(),
+                    manualCoverPath = album.manualCoverPath.takeUnless { removedManualCover }.orEmpty(),
                     coverThumbPath = album.coverThumbPath
-                        .takeUnless { removedCover || storage.isSameOrDescendant(it, oldRoot) }
+                        .takeUnless { removedCover || removedManualCover || storage.isSameOrDescendant(it, oldRoot) }
                         .orEmpty(),
                     audioTrackCount = remainingTracks.count { !isOnlineTrackPath(it.path) },
                     audioTotalDuration = remainingTracks.sumOf { it.duration },

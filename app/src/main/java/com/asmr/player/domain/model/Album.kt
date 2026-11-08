@@ -14,8 +14,11 @@ data class Album(
     val circle: String = "",
     val cv: String = "",
     val tags: List<String> = emptyList(),
+    val tagDetails: List<AlbumTag>? = emptyList(),
+    val metadataLocale: String? = null,
     val coverUrl: String = "",
     val coverPath: String = "",
+    val manualCoverPath: String = "",
     val coverThumbPath: String = "",
     val workId: String = "",
     val rjCode: String = "",
@@ -47,33 +50,4 @@ data class Album(
         return roots.distinct()
     }
 
-    fun getGroupedTracks(): Map<String, List<Track>> {
-        if (tracks.isEmpty()) return emptyMap()
-        val paths = getAllLocalPaths()
-        val groups = tracks.groupBy { track ->
-            if (track.group.isNotEmpty()) return@groupBy track.group
-            val trackPath = track.path
-            val matchingRoot = paths.firstOrNull { trackPath.startsWith(it) }
-            if (matchingRoot != null) {
-                val relative = trackPath.removePrefix(matchingRoot).trimStart('/', '\\')
-                relative.firstSegmentOrEmpty()
-            } else {
-                ""
-            }
-        }
-        return groups.toSortedMap().mapValues { (_, list) ->
-            list.sortedBy { it.path }
-        }
-    }
-}
-
-private fun String.firstSegmentOrEmpty(): String {
-    val idx1 = indexOf('/')
-    val idx2 = indexOf('\\')
-    val idx = when {
-        idx1 == -1 -> idx2
-        idx2 == -1 -> idx1
-        else -> minOf(idx1, idx2)
-    }
-    return if (idx <= 0) "" else substring(0, idx)
 }

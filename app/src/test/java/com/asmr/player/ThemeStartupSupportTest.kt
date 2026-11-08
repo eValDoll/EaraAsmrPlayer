@@ -31,33 +31,95 @@ class ThemeStartupSupportTest {
             isVideo = true
         )
 
-        assertEquals("artwork:https://example.com/cover.jpg", source.dynamicThemeSourceKey())
+        assertEquals("cover-hsl-readable:artwork:https://example.com/cover.jpg", source.dynamicThemeSourceKey())
     }
 
     @Test
     fun resolveBootstrapDynamicHueSeedArgb_usesPersistedSeedBeforePlaybackRestoreResolves() {
-        val result = resolveBootstrapDynamicHueSeedArgb(
-            dynamicHueEnabled = true,
-            playbackRestoreResolved = false,
-            currentSourceKey = null,
-            persistedSourceKey = "artwork:https://example.com/cover.jpg",
-            persistedSeedArgb = 0xFF336699.toInt()
-        )
+        for (sourceKey in listOf(
+            "cover-hsl-readable:artwork:https://example.com/cover.jpg",
+            "cover-hsl-readable:video:file:///sample.mp4"
+        )) {
+            val result = resolveBootstrapDynamicHueSeedArgb(
+                dynamicHueEnabled = true,
+                playbackRestoreResolved = false,
+                currentSourceKey = null,
+                persistedSourceKey = sourceKey,
+                persistedSeedArgb = 0xFF336699.toInt()
+            )
 
-        assertEquals(0xFF336699.toInt(), result)
+            assertEquals(sourceKey, 0xFF336699.toInt(), result)
+        }
     }
 
     @Test
     fun resolveBootstrapDynamicHueSeedArgb_usesPersistedSeedWhenCurrentSourceMatches() {
-        val result = resolveBootstrapDynamicHueSeedArgb(
-            dynamicHueEnabled = true,
-            playbackRestoreResolved = true,
-            currentSourceKey = "artwork:https://example.com/cover.jpg",
-            persistedSourceKey = "artwork:https://example.com/cover.jpg",
-            persistedSeedArgb = 0xFF663399.toInt()
+        for (sourceKey in listOf(
+            "cover-hsl-readable:artwork:https://example.com/cover.jpg",
+            "cover-hsl-readable:video:file:///sample.mp4"
+        )) {
+            val result = resolveBootstrapDynamicHueSeedArgb(
+                dynamicHueEnabled = true,
+                playbackRestoreResolved = true,
+                currentSourceKey = sourceKey,
+                persistedSourceKey = sourceKey,
+                persistedSeedArgb = 0xFF663399.toInt()
+            )
+
+            assertEquals(sourceKey, 0xFF663399.toInt(), result)
+        }
+    }
+
+    @Test
+    fun resolveBootstrapDynamicHueSeedArgb_rejectsPreviousExtractorBeforeAndAfterRestore() {
+        for (source in listOf("artwork:https://example.com/cover.jpg", "video:file:///sample.mp4")) {
+            for (previousPrefix in listOf("", "cover-hsl-v1:")) {
+                for (restored in listOf(false, true)) {
+                    assertNull(
+                        "source=$source, previousPrefix=$previousPrefix, restored=$restored",
+                        resolveBootstrapDynamicHueSeedArgb(
+                            dynamicHueEnabled = true,
+                            playbackRestoreResolved = restored,
+                            currentSourceKey = if (restored) "cover-hsl-readable:$source" else null,
+                            persistedSourceKey = "$previousPrefix$source",
+                            persistedSeedArgb = 0xFF336699.toInt()
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun resolveBootstrapDynamicHueSeedArgb_ignoresPersistedSeedWhenCurrentSourceChanges() {
+        for (restored in listOf(false, true)) {
+            for (currentSourceKey in listOf(
+                "cover-hsl-readable:artwork:https://example.com/other-cover.jpg",
+                "cover-hsl-readable:video:file:///sample.mp4"
+            )) {
+                assertNull(
+                    "source=$currentSourceKey, restored=$restored",
+                    resolveBootstrapDynamicHueSeedArgb(
+                        dynamicHueEnabled = true,
+                        playbackRestoreResolved = restored,
+                        currentSourceKey = currentSourceKey,
+                        persistedSourceKey = "cover-hsl-readable:artwork:https://example.com/cover.jpg",
+                        persistedSeedArgb = 0xFF336699.toInt()
+                    )
+                )
+            }
+        }
+    }
+
+    @Test
+    fun dynamicThemeSourceKey_versionsVideoSourcesWithoutArtwork() {
+        val source = ThemeMediaSource(
+            artworkUri = null,
+            videoUri = Uri.parse("file:///sample.mp4"),
+            isVideo = true
         )
 
-        assertEquals(0xFF663399.toInt(), result)
+        assertEquals("cover-hsl-readable:video:file:///sample.mp4", source.dynamicThemeSourceKey())
     }
 
     @Test
@@ -66,7 +128,7 @@ class ThemeStartupSupportTest {
             dynamicHueEnabled = true,
             playbackRestoreResolved = true,
             currentSourceKey = null,
-            persistedSourceKey = "artwork:https://example.com/cover.jpg",
+            persistedSourceKey = "cover-hsl-readable:artwork:https://example.com/cover.jpg",
             persistedSeedArgb = 0xFF663399.toInt()
         )
 
@@ -80,7 +142,7 @@ class ThemeStartupSupportTest {
                 dynamicHueEnabled = true,
                 playbackRestoreResolved = false,
                 currentSourceKey = null,
-                persistedSourceKey = "artwork:https://example.com/cover.jpg",
+                persistedSourceKey = "cover-hsl-readable:artwork:https://example.com/cover.jpg",
                 persistedSeedArgb = 0xFF336699.toInt()
             )
         )
@@ -90,7 +152,7 @@ class ThemeStartupSupportTest {
                 dynamicHueEnabled = true,
                 playbackRestoreResolved = true,
                 currentSourceKey = null,
-                persistedSourceKey = "artwork:https://example.com/cover.jpg",
+                persistedSourceKey = "cover-hsl-readable:artwork:https://example.com/cover.jpg",
                 persistedSeedArgb = 0xFF336699.toInt()
             )
         )
@@ -102,8 +164,8 @@ class ThemeStartupSupportTest {
             shouldClearPersistedDynamicHueSeed(
                 dynamicHueEnabled = false,
                 playbackRestoreResolved = false,
-                currentSourceKey = "artwork:https://example.com/cover.jpg",
-                persistedSourceKey = "artwork:https://example.com/cover.jpg",
+                currentSourceKey = "cover-hsl-readable:artwork:https://example.com/cover.jpg",
+                persistedSourceKey = "cover-hsl-readable:artwork:https://example.com/cover.jpg",
                 persistedSeedArgb = 0xFF336699.toInt()
             )
         )

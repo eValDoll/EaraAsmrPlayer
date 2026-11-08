@@ -1,4 +1,7 @@
-﻿package com.asmr.player.ui.library
+package com.asmr.player.ui.library
+
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
@@ -99,7 +102,7 @@ fun TagAssignDialog(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    TextButton(onClick = { onApplyUserTags(dedupeByNormalized(workingUserTags)) }) { Text("保存") }
+                    TextButton(onClick = { onApplyUserTags(dedupeByNormalized(workingUserTags)) }) { Text(androidx.compose.ui.res.stringResource(R.string.ui_save)) }
                 }
 
                 Column(
@@ -115,7 +118,7 @@ fun TagAssignDialog(
                 ) {
                     if (inheritedTags.isNotEmpty()) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(text = "已有标签", color = colorScheme.textTertiary)
+                            Text(text = appString(R.string.ui_already_tagged), color = colorScheme.textTertiary)
                             FlowRow(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -128,13 +131,13 @@ fun TagAssignDialog(
                     }
 
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(text = "用户标签", color = colorScheme.textTertiary)
+                        Text(text = appString(R.string.ui_user_tag), color = colorScheme.textTertiary)
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             if (workingUserTags.isEmpty()) {
-                                Text(text = "未添加", color = colorScheme.textSecondary)
+                                Text(text = appString(R.string.ui_not_added), color = colorScheme.textSecondary)
                             } else {
                                 workingUserTags.forEach { t ->
                                     TagBadge(
@@ -150,7 +153,7 @@ fun TagAssignDialog(
                             }
                         }
                         if (workingUserTags.isNotEmpty()) {
-                            Text(text = "点击用户标签可移除", color = colorScheme.textSecondary)
+                            Text(text = appString(R.string.ui_click_on_user_label_to_remove), color = colorScheme.textSecondary)
                         }
                     }
 
@@ -167,7 +170,7 @@ fun TagAssignDialog(
                                 }
                             }
                         },
-                        placeholder = { Text("搜索已有标签") }
+                        placeholder = { Text(androidx.compose.ui.res.stringResource(R.string.ui_search_existing_tags)) }
                     )
 
                     FlowRow(
@@ -193,7 +196,7 @@ fun TagAssignDialog(
                             onValueChange = { customInput = it },
                             modifier = Modifier.weight(1f),
                             singleLine = true,
-                            placeholder = { Text("添加自定义标签") }
+                            placeholder = { Text(androidx.compose.ui.res.stringResource(R.string.ui_add_custom_labels)) }
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         IconButton(
@@ -211,7 +214,7 @@ fun TagAssignDialog(
                         }
                         if (onOpenTagManager != null) {
                             Spacer(modifier = Modifier.width(6.dp))
-                            TextButton(onClick = { onOpenTagManager() }) { Text("自定义标签管理") }
+                            TextButton(onClick = { onOpenTagManager() }) { Text(androidx.compose.ui.res.stringResource(R.string.ui_custom_tag_management)) }
                         }
                     }
                     Spacer(modifier = Modifier.height(2.dp))

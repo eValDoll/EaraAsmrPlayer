@@ -32,21 +32,26 @@ private const val StretchScaleFraction = 0.028f
 private const val StretchTranslationFraction = 0.14f
 
 @Composable
-fun Modifier.lightweightVerticalStretchOverscroll(
-    isAtStart: () -> Boolean,
-    isAtEnd: () -> Boolean,
-): Modifier {
+fun rememberLightweightVerticalOverscrollState(): LightweightVerticalOverscrollState {
     val density = LocalDensity.current
     val coroutineScope = rememberCoroutineScope()
-    val latestIsAtStart by rememberUpdatedState(isAtStart)
-    val latestIsAtEnd by rememberUpdatedState(isAtEnd)
     val maxDistancePx = with(density) { 72.dp.toPx() }
-    val state = remember(coroutineScope, maxDistancePx) {
+    return remember(coroutineScope, maxDistancePx) {
         LightweightVerticalOverscrollState(
             coroutineScope = coroutineScope,
             maxDistancePx = maxDistancePx,
         )
     }
+}
+
+@Composable
+fun Modifier.lightweightVerticalStretchOverscroll(
+    isAtStart: () -> Boolean,
+    isAtEnd: () -> Boolean,
+    state: LightweightVerticalOverscrollState = rememberLightweightVerticalOverscrollState(),
+): Modifier {
+    val latestIsAtStart by rememberUpdatedState(isAtStart)
+    val latestIsAtEnd by rememberUpdatedState(isAtEnd)
 
     DisposableEffect(state) {
         onDispose(state::dispose)
@@ -92,7 +97,7 @@ fun Modifier.lightweightVerticalStretchOverscroll(
         }
     }.drawWithContent {
         val distancePx = state.distancePx
-        if (abs(distancePx) < 0.5f) {
+        if (state.isTransformIdentity) {
             drawContent()
             return@drawWithContent
         }
@@ -114,20 +119,23 @@ fun Modifier.lightweightVerticalStretchOverscroll(
     }
 }
 
-private class LightweightVerticalOverscrollState(
+class LightweightVerticalOverscrollState internal constructor(
     private val coroutineScope: CoroutineScope,
-    val maxDistancePx: Float,
+    internal val maxDistancePx: Float,
 ) {
     var distancePx by mutableFloatStateOf(0f)
         private set
 
+    val isTransformIdentity: Boolean
+        get() = abs(distancePx) < 0.5f
+
     private var settleJob: Job? = null
 
-    fun interruptSettle() {
+    internal fun interruptSettle() {
         settleJob?.cancel()
     }
 
-    fun dragBy(deltaY: Float, isAtStart: Boolean, isAtEnd: Boolean) {
+    internal fun dragBy(deltaY: Float, isAtStart: Boolean, isAtEnd: Boolean) {
         if (deltaY == 0f) return
         interruptSettle()
 
@@ -140,7 +148,7 @@ private class LightweightVerticalOverscrollState(
         }
     }
 
-    fun settle() {
+    internal fun settle() {
         settleJob?.cancel()
         if (distancePx == 0f) return
 
@@ -159,7 +167,7 @@ private class LightweightVerticalOverscrollState(
         }
     }
 
-    fun dispose() {
+    internal fun dispose() {
         settleJob?.cancel()
     }
 

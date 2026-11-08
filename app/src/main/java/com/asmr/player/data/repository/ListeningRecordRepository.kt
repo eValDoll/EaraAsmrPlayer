@@ -160,8 +160,8 @@ class ListeningRecordRepository @Inject constructor(
             cv = album?.cv?.ifBlank { artistMeta.cv } ?: artistMeta.cv,
             tags = album?.tags.orEmpty(),
             coverUrl = album?.coverUrl?.ifBlank { context.artworkUri.orEmpty() } ?: context.artworkUri.orEmpty(),
-            coverPath = album?.coverPath.orEmpty(),
-            coverThumbPath = album?.coverThumbPath.orEmpty(),
+            coverPath = album?.let { it.manualCoverPath.ifBlank { it.coverPath } }.orEmpty(),
+            coverThumbPath = album?.coverThumbPath?.takeIf { album.manualCoverPath.isBlank() }.orEmpty(),
             listeningDate = "",
             startAtMs = 0L,
             lastActiveAtMs = 0L

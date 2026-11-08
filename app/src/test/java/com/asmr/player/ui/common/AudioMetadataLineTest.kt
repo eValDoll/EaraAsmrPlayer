@@ -19,7 +19,7 @@ import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.createComposeRule
+import com.asmr.player.ui.createEaraComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -38,7 +38,7 @@ import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
 class AudioMetadataLineTest {
-    @get:Rule val composeRule = createComposeRule()
+    @get:Rule val composeRule = createEaraComposeRule()
 
     @Test
     fun playbackQualityUpdatesRemainOneSupportingLine() = assertSingleSupportingLine(1f)

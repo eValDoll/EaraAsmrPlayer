@@ -29,8 +29,6 @@ class AppVolumeBoostController(
         return AppVolume.percentFromSystemVolume(currentSystemVolume, maxSystemVolume)
     }
 
-    fun release() = Unit
-
     private companion object {
         private const val TAG = "AppVolumeBoost"
     }

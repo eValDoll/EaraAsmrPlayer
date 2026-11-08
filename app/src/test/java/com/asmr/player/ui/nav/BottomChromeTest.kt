@@ -12,7 +12,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
-import androidx.compose.ui.test.junit4.createComposeRule
+import com.asmr.player.ui.createEaraComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
@@ -34,7 +35,7 @@ private const val BOTTOM_CHROME_ROOT_TAG = "bottomChromeRoot"
 @RunWith(AndroidJUnit4::class)
 class BottomChromeTest {
     @get:Rule
-    val composeRule = createComposeRule()
+    val composeRule = createEaraComposeRule()
 
     @Test
     fun blankAreaTap_doesNotPassThroughToUnderlyingContent() {
@@ -475,6 +476,126 @@ class BottomChromeTest {
         assertEquals(activeContainer.blue, partial.blue, 0.0001f)
         assertTrue(abs(partial.alpha - (activeContainer.alpha * 0.5f)) <= 0.0001f)
     }
+
+    @Test
+    fun programmaticSelection_animatesIconScaleBeforeSettling() {
+        val activeRoute = mutableStateOf(Routes.Library)
+        val selection = mutableStateOf(mapOf(Routes.Library to 1f))
+        composeRule.mainClock.autoAdvance = false
+        try {
+            composeRule.setContent {
+                AsmrPlayerTheme {
+                    BottomChrome(
+                        activeRoute = activeRoute.value,
+                        selectionProgresses = selection.value,
+                        animateSelection = true,
+                        miniPlayerVisible = false,
+                        miniPlayerDisplayMode = MiniPlayerDisplayMode.CoverOnly,
+                        onMiniPlayerDisplayModeChange = {},
+                        onOpenNowPlaying = {},
+                        onOpenQueue = {},
+                        onNavigate = {},
+                        modifier = Modifier.size(width = 360.dp, height = 120.dp),
+                    )
+                }
+            }
+            composeRule.waitForIdle()
+            val inactiveWidth = navIconWidth("在线搜索")
+            assertTrue(inactiveWidth > 0f)
+            assertEquals(inactiveWidth * 1.16f, navIconWidth("本地库"), 0.2f)
+
+            composeRule.runOnIdle {
+                activeRoute.value = Routes.Search
+                selection.value = mapOf(Routes.Search to 1f)
+            }
+            composeRule.waitForIdle()
+            assertEquals(inactiveWidth, navIconWidth("在线搜索"), 0.2f)
+
+            composeRule.mainClock.advanceTimeByFrame()
+            composeRule.mainClock.advanceTimeBy(32)
+            val intermediateWidth = navIconWidth("在线搜索")
+            assertTrue(intermediateWidth > inactiveWidth + 0.05f)
+            // The tilt and pulse may briefly exceed the final selected bounds.
+            assertTrue(intermediateWidth < inactiveWidth * 1.5f)
+
+            composeRule.mainClock.advanceTimeBy(400)
+            assertEquals(inactiveWidth * 1.16f, navIconWidth("在线搜索"), 0.2f)
+            assertEquals(inactiveWidth, navIconWidth("本地库"), 0.2f)
+        } finally {
+            composeRule.mainClock.autoAdvance = true
+            composeRule.waitForIdle()
+        }
+    }
+
+    @Test
+    fun gestureSelection_updatesScaleImmediatelyAndResumesFromCurrentProgress() {
+        val activeRoute = mutableStateOf(Routes.Library)
+        val selection = mutableStateOf(mapOf(Routes.Library to 1f))
+        val animateSelection = mutableStateOf(true)
+        composeRule.mainClock.autoAdvance = false
+        try {
+            composeRule.setContent {
+                AsmrPlayerTheme {
+                    BottomChrome(
+                        activeRoute = activeRoute.value,
+                        selectionProgresses = selection.value,
+                        animateSelection = animateSelection.value,
+                        miniPlayerVisible = false,
+                        miniPlayerDisplayMode = MiniPlayerDisplayMode.CoverOnly,
+                        onMiniPlayerDisplayModeChange = {},
+                        onOpenNowPlaying = {},
+                        onOpenQueue = {},
+                        onNavigate = {},
+                        modifier = Modifier.size(width = 360.dp, height = 120.dp),
+                    )
+                }
+            }
+            composeRule.waitForIdle()
+            val inactiveWidth = navIconWidth("在线搜索")
+            composeRule.runOnIdle {
+                activeRoute.value = Routes.Search
+                selection.value = mapOf(Routes.Search to 1f)
+            }
+            composeRule.mainClock.advanceTimeByFrame()
+            composeRule.mainClock.advanceTimeBy(32)
+
+            composeRule.runOnIdle {
+                animateSelection.value = false
+                activeRoute.value = Routes.Library
+                selection.value = mapOf(Routes.Library to 0.75f, Routes.Search to 0.25f)
+            }
+            composeRule.mainClock.advanceTimeByFrame()
+            composeRule.waitForIdle()
+            val earlyGestureWidth = navIconWidth("在线搜索")
+            assertTrue(earlyGestureWidth > inactiveWidth)
+            assertTrue(navIconWidth("本地库") > inactiveWidth)
+
+            composeRule.runOnIdle {
+                activeRoute.value = Routes.Search
+                selection.value = mapOf(Routes.Library to 0.2f, Routes.Search to 0.8f)
+            }
+            composeRule.mainClock.advanceTimeByFrame()
+            composeRule.waitForIdle()
+            val gestureWidth = navIconWidth("在线搜索")
+            assertTrue(gestureWidth > earlyGestureWidth)
+
+            composeRule.runOnIdle { animateSelection.value = true }
+            composeRule.mainClock.advanceTimeByFrame()
+            composeRule.waitForIdle()
+            assertEquals(gestureWidth, navIconWidth("在线搜索"), 0.2f)
+            composeRule.mainClock.advanceTimeBy(32)
+            assertEquals(gestureWidth, navIconWidth("在线搜索"), 0.2f)
+        } finally {
+            composeRule.mainClock.autoAdvance = true
+            composeRule.waitForIdle()
+        }
+    }
+
+    private fun navIconWidth(label: String): Float = composeRule
+        .onNodeWithContentDescription(label, useUnmergedTree = true)
+        .fetchSemanticsNode()
+        .boundsInRoot
+        .width
 
     private fun compactWidthWithMiniPlayer_scalesChromeWithoutChangingVisibleNavCount(width: Dp) {
         composeRule.setContent {

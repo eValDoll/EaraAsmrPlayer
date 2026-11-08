@@ -1,5 +1,8 @@
 package com.asmr.player.ui.nav
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.domain.model.Album
 
 /**
@@ -51,6 +54,8 @@ object AlbumCoverHintStore {
             circle = album.circle,
             cv = album.cv,
             tags = album.tags,
+            tagDetails = album.tagDetails,
+            metadataLocale = album.metadataLocale,
             coverUrl = album.coverUrl.takeIf { it.startsWith("http", ignoreCase = true) }.orEmpty(),
             ratingValue = album.ratingValue,
             ratingCount = album.ratingCount,
@@ -73,6 +78,8 @@ object AlbumCoverHintStore {
         cv: String?,
         coverUrl: String?,
         tags: List<String> = emptyList(),
+        tagDetails: List<com.asmr.player.domain.model.AlbumTag>? = emptyList(),
+        metadataLocale: String? = null,
         ratingValue: Double? = null,
         ratingCount: Int = 0,
         releaseDate: String? = null,
@@ -88,6 +95,8 @@ object AlbumCoverHintStore {
             rjCode = rjCode?.trim().orEmpty().uppercase(),
             circle = circle?.trim().orEmpty(),
             cv = cv?.trim().orEmpty(),
+            tagDetails = tagDetails,
+            metadataLocale = metadataLocale,
             tags = tags
                 .map { it.trim() }
                 .filter { it.isNotBlank() }
@@ -120,6 +129,20 @@ object AlbumCoverHintStore {
         }
     }
 
+    fun invalidateAlbum(albumId: Long, workNos: List<String>) {
+        val workNoKeys = workNos.asSequence()
+            .map { it.trim().uppercase() }
+            .filter { it.isNotBlank() }
+            .map { "rj:$it" }
+            .toSet()
+        synchronized(lock) {
+            hints.entries.removeAll { (key, hint) ->
+                key in workNoKeys ||
+                    (albumId > 0L && (key == "id:$albumId" || hint.localAlbum?.id == albumId))
+            }
+        }
+    }
+
     fun peek(albumId: Long?, rjCode: String?): String? {
         return peekHint(albumId, rjCode)?.coverUrl
     }
@@ -142,6 +165,8 @@ data class AlbumCoverHint(
     val circle: String,
     val cv: String,
     val tags: List<String>,
+    val tagDetails: List<com.asmr.player.domain.model.AlbumTag>? = emptyList(),
+    val metadataLocale: String? = null,
     val coverUrl: String,
     val ratingValue: Double?,
     val ratingCount: Int,
@@ -175,13 +200,15 @@ internal fun albumFromCoverHint(rj: String, hint: AlbumCoverHint?): Album {
     hint?.localAlbum?.let { return it }
     val normalizedRj = rj.ifBlank { hint?.rjCode.orEmpty() }
     return Album(
-        title = hint?.title?.ifBlank { normalizedRj }.orEmpty().ifBlank { "专辑" },
+        title = hint?.title?.ifBlank { normalizedRj }.orEmpty().ifBlank { appString(R.string.ui_album) },
         path = "",
         workId = normalizedRj,
         rjCode = normalizedRj,
         circle = hint?.circle.orEmpty(),
         cv = hint?.cv.orEmpty(),
         tags = hint?.tags.orEmpty(),
+        tagDetails = hint?.tagDetails,
+        metadataLocale = hint?.metadataLocale,
         coverUrl = hint?.coverUrl.orEmpty(),
         ratingValue = hint?.ratingValue,
         ratingCount = hint?.ratingCount ?: 0,

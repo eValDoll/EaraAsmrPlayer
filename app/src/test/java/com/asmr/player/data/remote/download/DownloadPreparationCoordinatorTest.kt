@@ -19,7 +19,7 @@ import org.junit.Assert.*
 import org.junit.Test
 import java.util.concurrent.atomic.AtomicInteger
 
-class DownloadPreparationCoordinatorTest {
+class DownloadPreparationCoordinatorTest : com.asmr.player.LocalizedRobolectricTest() {
     private fun request(native: String? = null) = DownloadBatchRequest(
         "RJ01637938", "album:RJ01637938", listOf(RelativeDownloadItem(
             ChapterMediaReference("https://audio.example/work.m3u8", 0L, 239_000L, native, "01_T0.m4a").encode(),

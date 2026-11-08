@@ -1,6 +1,14 @@
 package com.asmr.player.ui.search
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
+import com.asmr.player.ui.common.AlbumRowRasterCacheScope
+
+import com.asmr.player.ui.common.LocalPageAnimationsActive
+
 import com.asmr.player.domain.model.CollectedSearchSource
+import com.asmr.player.ui.common.LocalTabletLayout
 import com.asmr.player.ui.common.LocalMainHeaderPadding
 import com.asmr.player.ui.common.progressiveHeaderContent
 
@@ -19,6 +27,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.stopScroll
+import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +35,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,7 +47,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed as lazyItemsIndexed
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
@@ -118,20 +127,20 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.domain.model.Album
-import com.asmr.player.data.local.db.entities.AlbumEntity
-import com.asmr.player.data.local.db.entities.titleForDisplay
 import com.asmr.player.cache.ImageCacheEntryPoint
 import com.asmr.player.cache.LazyListPreloader
 import com.asmr.player.ui.library.albumListCoverSize
 import com.asmr.player.cache.LazyStaggeredGridPreloader
 import com.asmr.player.ui.common.ActiveDropdownMenuItem
 import com.asmr.player.ui.common.CustomSearchBar
+import com.asmr.player.ui.common.DeferredPageItem
 import com.asmr.player.ui.common.EaraBrandedEmptyState
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.common.albumStableKey
 import com.asmr.player.ui.common.interruptScrollableFlingOnPointerDown
+import com.asmr.player.ui.common.interruptOngoingScroll
 import com.asmr.player.ui.common.clearFocusOnTapOutside
 import com.asmr.player.ui.common.CollapsibleHeaderState
 import com.asmr.player.ui.common.collapsibleHeaderUiState
@@ -139,24 +148,23 @@ import com.asmr.player.ui.common.consumeTapThrough
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.common.rememberSaveablePrefetchedLazyListState
+import com.asmr.player.ui.library.prepared.PreparedAlbumParagraphItem
+import com.asmr.player.ui.library.prepared.PreparedAlbumParagraphs
 import com.asmr.player.ui.common.shouldFadeInCover
 import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.ui.library.AlbumGridItem
 import com.asmr.player.ui.library.AlbumGridItemSpacing
 import com.asmr.player.ui.library.AlbumItem
+import com.asmr.player.ui.library.AlbumListIconScope
 import com.asmr.player.ui.library.AlbumMetaActionDialog
 import com.asmr.player.ui.library.rememberAlbumMetaCopyAction
 import com.asmr.player.ui.groups.AlbumGroupsViewModel
 import com.asmr.player.ui.playlists.PlaylistsViewModel
 import com.asmr.player.ui.settings.SettingsViewModel
-import com.asmr.player.ui.sidepanel.LandscapeRightPanelHost
-import com.asmr.player.ui.sidepanel.RecentAlbumsPanel
 import com.asmr.player.ui.theme.AsmrTheme
 import dagger.hilt.android.EntryPointAccessors
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.runtime.snapshotFlow
 import kotlin.math.absoluteValue
@@ -339,7 +347,7 @@ fun SearchScreen(
     submittedSearchHasSubtitle: Boolean = false,
     submittedSearchAllAges: Boolean = false,
     submittedSearchCollectedSortName: String = SearchCollectedSortOption.ReleaseNew.name,
-    submittedSearchLocale: String = "ja_JP",
+    submittedSearchLocale: String = "",
     submittedSearchSignal: Long = 0L,
     scrollToTopSignal: Long = 0L,
     onHorizontalPagerScrollLockChanged: (Boolean) -> Unit = {},
@@ -389,12 +397,15 @@ private fun SearchScreenContent(
     submittedSearchHasSubtitle: Boolean = false,
     submittedSearchAllAges: Boolean = false,
     submittedSearchCollectedSortName: String = SearchCollectedSortOption.ReleaseNew.name,
-    submittedSearchLocale: String = "ja_JP",
+    submittedSearchLocale: String = "",
     submittedSearchSignal: Long = 0L,
     scrollToTopSignal: Long = 0L,
     onHorizontalPagerScrollLockChanged: (Boolean) -> Unit = {},
     viewModel: SearchViewModel = hiltViewModel()
 ) {
+    LaunchedEffect(isActive, LocalConfiguration.current) {
+        if (isActive) viewModel.refreshApplicationLocale()
+    }
     var keyword by rememberSaveable { mutableStateOf("") }
     var purchasedOnly by rememberSaveable { mutableStateOf(false) }
     var presaleOnly by rememberSaveable { mutableStateOf(false) }
@@ -404,7 +415,7 @@ private fun SearchScreenContent(
     var hasSubtitle by rememberSaveable { mutableStateOf(false) }
     var allAges by rememberSaveable { mutableStateOf(false) }
     var selectedCollectedSortName by rememberSaveable { mutableStateOf(SearchCollectedSortOption.ReleaseNew.name) }
-    var selectedLocale by rememberSaveable { mutableStateOf("ja_JP") }
+    var selectedLocale by rememberSaveable { mutableStateOf("") }
     var selectedOrderName by rememberSaveable { mutableStateOf(SearchSortOption.Trend.name) }
     val selectedOrder = remember(selectedOrderName) {
         SearchSortOption.values().firstOrNull { it.name == selectedOrderName } ?: SearchSortOption.Trend
@@ -425,14 +436,20 @@ private fun SearchScreenContent(
     val uiState by viewModel.uiState.collectAsStateWhileActive(isDataActive)
     val hotKeywordTerms by viewModel.hotKeywordTerms.collectAsStateWhileActive(isDataActive)
     val showHotKeywordFallback by viewModel.showHotKeywordFallback.collectAsStateWhileActive(isDataActive)
+    val localizedKeywords = rememberLocalizedSearchKeywords(hotKeywordTerms)
     val hotKeywordCarouselItem = rememberSearchHotKeywordCarouselItem(
         terms = hotKeywordTerms,
-        showFallback = showHotKeywordFallback
+        labels = localizedKeywords,
+        showFallback = showHotKeywordFallback,
+        isActive = isActive,
     )
     val success = uiState as? SearchUiState.Success
     val resultScrollKey = searchResultScrollKey(success)
     val listState = rememberSaveablePrefetchedLazyListState(stateKey = resultScrollKey)
     val gridState = rememberSaveable(resultScrollKey, saver = LazyStaggeredGridState.Saver) { LazyStaggeredGridState() }
+    val tabletList = LocalTabletLayout.current.landscape && viewMode == 0
+    val useSingleColumnList = viewMode == 0 && !tabletList
+    val activeScroll: ScrollableState = if (useSingleColumnList) listState else gridState
     val colorScheme = AsmrTheme.colorScheme
     val copyMeta = rememberAlbumMetaCopyAction(viewModel.messageManager)
     val scope = rememberCoroutineScope()
@@ -504,7 +521,7 @@ private fun SearchScreenContent(
             hasSubtitle = state.hasSubtitle
             allAges = state.allAges
             selectedCollectedSortName = state.collectedSort.name
-            selectedLocale = state.locale ?: "ja_JP"
+            selectedLocale = state.locale.orEmpty()
             selectedOrderName = state.order.name
             optionsSyncedFromState = true
         }
@@ -526,12 +543,10 @@ private fun SearchScreenContent(
     val topPadding = with(androidx.compose.ui.platform.LocalDensity.current) { chromeReservedHeightPx.toDp() } + SearchChromeContentGap + LocalMainHeaderPadding.current
 
     fun scrollResultsToTop() {
-        scope.launch {
-            runCatching { listState.stopScroll(MutatePriority.PreventUserInput) }
-            runCatching { gridState.stopScroll(MutatePriority.PreventUserInput) }
-            runCatching { listState.scrollToItem(0) }
-            runCatching { gridState.scrollToItem(0) }
-        }
+        activeScroll.interruptOngoingScroll(scope, MutatePriority.PreventUserInput)
+        // 两种布局都保留回顶意图；未挂载的布局在下一次测量直接使用位置 0。
+        listState.requestScrollToItem(0)
+        gridState.requestScrollToItem(0)
     }
 
     fun requestNextPage() {
@@ -563,7 +578,7 @@ private fun SearchScreenContent(
 
     fun searchMetaKeyword(value: String) {
         if (searchSubmitLocked) {
-            viewModel.messageManager.showInfo("搜索处理中，请稍后再试")
+            viewModel.messageManager.showInfo(appString(R.string.ui_the_search_is_being_processed_please_try_again))
             return
         }
         val normalized = value.trim()
@@ -685,7 +700,7 @@ private fun SearchScreenContent(
     val pullNextPageGestureEnabled = pullNextPageEnabled && !pullNextPageReturnInProgress
     val latestPullNextPageEnabled = rememberUpdatedState(pullNextPageGestureEnabled)
     val latestIsAtBottom = rememberUpdatedState(
-        if (viewMode == 0) !listState.canScrollForward else !gridState.canScrollForward
+        if (useSingleColumnList) !listState.canScrollForward else !gridState.canScrollForward
     )
     val latestPullNextPageTriggerDistancePx = rememberUpdatedState(pullNextPageTriggerDistancePx)
     val latestPullNextPageMaxDistancePx = rememberUpdatedState(pullNextPageMaxDistancePx)
@@ -703,7 +718,7 @@ private fun SearchScreenContent(
             followRatio = SearchPullNextPageFollowRatio
         )
     }
-    val pullNextPageVisualOffsetPx by animateFloatAsState(
+    val pullNextPageVisualOffsetState = animateFloatAsState(
         targetValue = pullNextPageVisualTargetPx,
         animationSpec = if (pullNextPageGestureActive) {
             snap()
@@ -723,6 +738,7 @@ private fun SearchScreenContent(
         },
         label = "searchPullNextPageOffset"
     )
+    val pullNextPageVisualOffsetPx by pullNextPageVisualOffsetState
     val pullNextPageProgress =
         (pullNextPageVisualOffsetPx / pullNextPageMaxLiftPx).coerceIn(0f, 1f)
     val finishPullNextPageGesture = rememberUpdatedState finish@{
@@ -768,7 +784,7 @@ private fun SearchScreenContent(
         minimumValue = 0f,
         maximumValue = pullRefreshMaxDistancePx
     )
-    val pullContentOffsetPx by animateFloatAsState(
+    val pullContentOffsetState = animateFloatAsState(
         targetValue = pullContentOffsetTargetPx,
         animationSpec = if (
             searchPointerPressed &&
@@ -784,6 +800,7 @@ private fun SearchScreenContent(
         },
         label = "searchPullContentOffset"
     )
+    val pullContentOffsetPx by pullContentOffsetState
     val pullRefreshProgress =
         if (pullToRefreshState.isRefreshing) {
             1f
@@ -796,7 +813,6 @@ private fun SearchScreenContent(
     val pullRefreshArmed = pullToRefreshState.progress >= 1f
     val pullRefreshHintVisible = pullContentOffsetPx > 1f || pullToRefreshState.isRefreshing
     val pullNextPageHintVisible = pullNextPageVisualOffsetPx > 1f
-    val listStretchOffsetPx = pullContentOffsetPx - pullNextPageVisualOffsetPx
     val pullRefreshHintHeightPx = pullContentOffsetPx.coerceIn(0f, pullActionHintHeightPx)
     val pullRefreshHintHeight = with(androidx.compose.ui.platform.LocalDensity.current) {
         pullRefreshHintHeightPx.toDp()
@@ -808,16 +824,13 @@ private fun SearchScreenContent(
     val latestKeyword by rememberUpdatedState(keyword)
     val latestHorizontalPagerScrollLockChanged = rememberUpdatedState(onHorizontalPagerScrollLockChanged)
     fun stopActiveScroll() {
-        scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            if (!pullNextPageReturnInProgress) {
-                pullNextPageDragPx = 0f
-                pullNextPageGestureActive = false
-                pullNextPageRequestAfterReturn = false
-                latestHorizontalPagerScrollLockChanged.value(false)
-            }
-            runCatching { listState.stopScroll(MutatePriority.UserInput) }
-            runCatching { gridState.stopScroll(MutatePriority.UserInput) }
+        if (!pullNextPageReturnInProgress) {
+            pullNextPageDragPx = 0f
+            pullNextPageGestureActive = false
+            pullNextPageRequestAfterReturn = false
+            latestHorizontalPagerScrollLockChanged.value(false)
         }
+        activeScroll.interruptOngoingScroll(scope)
     }
     LaunchedEffect(pullToRefreshState.isRefreshing) {
         if (!pullToRefreshState.isRefreshing) {
@@ -886,8 +899,8 @@ private fun SearchScreenContent(
             lastChromeResetKey = chromeResetKey
         }
     }
-    LaunchedEffect(listState, viewMode) {
-        if (viewMode != 0) return@LaunchedEffect
+    LaunchedEffect(listState, useSingleColumnList) {
+        if (!useSingleColumnList) return@LaunchedEffect
         snapshotFlow {
             listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
         }
@@ -896,8 +909,8 @@ private fun SearchScreenContent(
                 if (atTop) chromeState.expand()
             }
     }
-    LaunchedEffect(gridState, viewMode) {
-        if (viewMode == 0) return@LaunchedEffect
+    LaunchedEffect(gridState, useSingleColumnList) {
+        if (useSingleColumnList) return@LaunchedEffect
         snapshotFlow {
             gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset == 0
         }
@@ -912,8 +925,8 @@ private fun SearchScreenContent(
         pullNextPageGestureActive = false
         pullNextPageRequestAfterReturn = false
         pullNextPageReturnInProgress = false
-        when (viewMode) {
-            0 -> {
+        when {
+            useSingleColumnList -> {
                 runCatching { listState.stopScroll(MutatePriority.PreventUserInput) }
                 runCatching { listState.scrollToItem(0) }
             }
@@ -924,12 +937,9 @@ private fun SearchScreenContent(
         }
         chromeState.expand()
     }
-    LaunchedEffect(isActive, viewMode) {
+    LaunchedEffect(isActive, useSingleColumnList) {
         if (isActive) return@LaunchedEffect
-        when (viewMode) {
-            0 -> listState.stopScroll(MutatePriority.PreventUserInput)
-            else -> gridState.stopScroll(MutatePriority.PreventUserInput)
-        }
+        activeScroll.interruptOngoingScroll(this, MutatePriority.PreventUserInput)
         pullNextPageDragPx = 0f
         pullNextPageGestureActive = false
         pullNextPageRequestAfterReturn = false
@@ -942,331 +952,331 @@ private fun SearchScreenContent(
         containerColor = Color.Transparent,
         contentColor = colorScheme.onBackground
     ) { padding ->
-        LandscapeRightPanelHost(
-            windowSizeClass = windowSizeClass,
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize(),
-            topPanel = {
-                RecentAlbumsPanel(
-                    onOpenAlbum = { album ->
-                        onAlbumClick(
-                            Album(
-                                id = album.id,
-                                title = album.titleForDisplay,
-                                path = album.path,
-                                localPath = album.localPath,
-                                downloadPath = album.downloadPath,
-                                circle = album.circle,
-                                cv = album.cv,
-                                tags = album.tags.split(",").map { it.trim() }.filter { it.isNotBlank() },
-                                coverUrl = album.coverUrl,
-                                coverPath = album.coverPath,
-                                coverThumbPath = album.coverThumbPath,
-                                workId = album.workId,
-                                rjCode = album.rjCode,
-                                description = album.description
-                            ),
-                            false,
-                            false
-                        )
-                    },
-                    modifier = Modifier.fillMaxHeight()
-                )
-            },
-            bottomPanel = null
-        ) { contentModifier, hasRightPanel, rightPanelToggle ->
+        Box(
+            modifier = Modifier.padding(padding).fillMaxSize(),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            val searchContentModifier = if (isCompact || LocalTabletLayout.current.isTablet) {
+                Modifier.fillMaxSize()
+            } else {
+                Modifier
+                    .fillMaxHeight()
+                    .widthIn(max = 800.dp)
+                    .fillMaxWidth()
+            }
             Box(
-                modifier = contentModifier,
-                contentAlignment = if (hasRightPanel) Alignment.TopStart else Alignment.TopCenter
+                modifier = searchContentModifier
+                    .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
+                    .progressiveHeaderContent()
             ) {
-                val searchContentModifier = if (isCompact || hasRightPanel) {
-                    Modifier.fillMaxSize()
-                } else {
-                    Modifier
-                        .fillMaxHeight()
-                        .widthIn(max = 800.dp)
-                        .fillMaxWidth()
-                }
-                Box(
-                    modifier = searchContentModifier
-                        .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
-                        .progressiveHeaderContent()
-                ) {
-                    CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .pointerInput(resultScrollKey, viewMode) {
-                                awaitEachGesture {
-                                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                                    searchPointerPressed = true
-                                    var trackedPointerId = down.id
-                                    var previousPosition = down.position
-                                    var dragFromDown = Offset.Zero
-                                    var pullNextGestureActive = false
-                                    var horizontalGestureActive = false
-                                    val touchSlop = viewConfiguration.touchSlop
-                                    do {
-                                        val event = awaitPointerEvent(PointerEventPass.Initial)
-                                        val change =
-                                            event.changes.firstOrNull { it.id == trackedPointerId }
-                                                ?: event.changes.firstOrNull()
-                                        if (change != null) {
-                                            trackedPointerId = change.id
-                                            val positionDelta = change.position - previousPosition
-                                            previousPosition = change.position
-                                            if (!pullNextGestureActive && !horizontalGestureActive) {
-                                                dragFromDown += positionDelta
-                                                val isPastTouchSlop = dragFromDown.getDistance() > touchSlop
-                                                if (isPastTouchSlop) {
-                                                    horizontalGestureActive =
-                                                        dragFromDown.x.absoluteValue >=
-                                                            dragFromDown.y.absoluteValue * SearchPullNextPageVerticalBias
-                                                    pullNextGestureActive =
-                                                        !horizontalGestureActive &&
-                                                            dragFromDown.y < 0f &&
-                                                            dragFromDown.y.absoluteValue >=
-                                                            dragFromDown.x.absoluteValue * SearchPullNextPageVerticalBias &&
-                                                            latestIsAtBottom.value &&
-                                                            latestPullNextPageEnabled.value
-                                                    if (pullNextGestureActive) {
-                                                        pullNextPageGestureActive = true
-                                                        latestHorizontalPagerScrollLockChanged.value(true)
-                                                    }
-                                                }
-                                            }
-                                            val deltaY = positionDelta.y
-                                            when {
-                                                horizontalGestureActive -> Unit
-
-                                                !latestPullNextPageEnabled.value -> {
-                                                    if (pullNextPageDragPx != 0f) {
-                                                        pullNextPageDragPx = 0f
-                                                    }
-                                                    pullNextPageGestureActive = false
-                                                }
-
-                                                deltaY < 0f && latestIsAtBottom.value && pullNextGestureActive -> {
-                                                    val delta = (-deltaY) * SearchPullNextPageDragResistance
-                                                    pullNextPageDragPx =
-                                                        (pullNextPageDragPx + delta)
-                                                            .coerceIn(0f, latestPullNextPageMaxDistancePx.value)
+                CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .pointerInput(resultScrollKey, viewMode) {
+                            awaitEachGesture {
+                                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                                searchPointerPressed = true
+                                var trackedPointerId = down.id
+                                var previousPosition = down.position
+                                var dragFromDown = Offset.Zero
+                                var pullNextGestureActive = false
+                                var horizontalGestureActive = false
+                                val touchSlop = viewConfiguration.touchSlop
+                                do {
+                                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                                    val change =
+                                        event.changes.firstOrNull { it.id == trackedPointerId }
+                                            ?: event.changes.firstOrNull()
+                                    if (change != null) {
+                                        trackedPointerId = change.id
+                                        val positionDelta = change.position - previousPosition
+                                        previousPosition = change.position
+                                        if (!pullNextGestureActive && !horizontalGestureActive) {
+                                            dragFromDown += positionDelta
+                                            val isPastTouchSlop = dragFromDown.getDistance() > touchSlop
+                                            if (isPastTouchSlop) {
+                                                horizontalGestureActive =
+                                                    dragFromDown.x.absoluteValue >=
+                                                        dragFromDown.y.absoluteValue * SearchPullNextPageVerticalBias
+                                                pullNextGestureActive =
+                                                    !horizontalGestureActive &&
+                                                        dragFromDown.y < 0f &&
+                                                        dragFromDown.y.absoluteValue >=
+                                                        dragFromDown.x.absoluteValue * SearchPullNextPageVerticalBias &&
+                                                        latestIsAtBottom.value &&
+                                                        latestPullNextPageEnabled.value
+                                                if (pullNextGestureActive) {
+                                                    pullNextPageGestureActive = true
                                                     latestHorizontalPagerScrollLockChanged.value(true)
-                                                    change.consume()
-                                                }
-
-                                                deltaY > 0f && (pullNextPageDragPx > 0f || pullNextGestureActive) -> {
-                                                    pullNextPageDragPx =
-                                                        (pullNextPageDragPx - deltaY).coerceAtLeast(0f)
-                                                    if (pullNextPageDragPx == 0f) {
-                                                        pullNextGestureActive = false
-                                                        pullNextPageGestureActive = false
-                                                        latestHorizontalPagerScrollLockChanged.value(false)
-                                                    }
-                                                    change.consume()
-                                                }
-
-                                                pullNextGestureActive -> {
-                                                    change.consume()
-                                                }
-
-                                                !latestIsAtBottom.value && pullNextPageDragPx > 0f -> {
-                                                    pullNextPageDragPx = 0f
-                                                    pullNextPageGestureActive = false
                                                 }
                                             }
                                         }
-                                    } while (event.changes.any { it.pressed })
-                                    searchPointerPressed = false
-                                    finishPullNextPageGesture.value()
-                                }
-                            }
-                            .then(
-                                if (refreshGestureEnabled) {
-                                    Modifier.nestedScroll(pullToRefreshState.nestedScrollConnection)
-                                } else {
-                                    Modifier
-                                }
-                            )
-                                .clipToBounds()
-                        ) {
-                        if (pullRefreshHintVisible) {
-                            SearchPullActionHint(
-                                progress = pullRefreshProgress,
-                                active = pullToRefreshState.isRefreshing,
-                                armed = pullRefreshArmed,
-                                direction = if (pullRefreshArmed) {
-                                    SearchPullActionDirection.Up
-                                } else {
-                                    SearchPullActionDirection.Down
-                                },
-                                idleText = "下拉刷新",
-                                armedText = "松手刷新",
-                                activeText = "正在刷新",
-                                height = pullRefreshHintHeight,
-                                modifier = Modifier
-                                    .align(Alignment.TopCenter)
-                                    .graphicsLayer {
-                                        alpha = pullRefreshProgress.coerceIn(0f, 1f)
-                                        translationY = pullRefreshHintEdgeOffsetPx
+                                        val deltaY = positionDelta.y
+                                        when {
+                                            horizontalGestureActive -> Unit
+
+                                            !latestPullNextPageEnabled.value -> {
+                                                if (pullNextPageDragPx != 0f) {
+                                                    pullNextPageDragPx = 0f
+                                                }
+                                                pullNextPageGestureActive = false
+                                            }
+
+                                            deltaY < 0f && latestIsAtBottom.value && pullNextGestureActive -> {
+                                                val delta = (-deltaY) * SearchPullNextPageDragResistance
+                                                pullNextPageDragPx =
+                                                    (pullNextPageDragPx + delta)
+                                                        .coerceIn(0f, latestPullNextPageMaxDistancePx.value)
+                                                latestHorizontalPagerScrollLockChanged.value(true)
+                                                change.consume()
+                                            }
+
+                                            deltaY > 0f && (pullNextPageDragPx > 0f || pullNextGestureActive) -> {
+                                                pullNextPageDragPx =
+                                                    (pullNextPageDragPx - deltaY).coerceAtLeast(0f)
+                                                if (pullNextPageDragPx == 0f) {
+                                                    pullNextGestureActive = false
+                                                    pullNextPageGestureActive = false
+                                                    latestHorizontalPagerScrollLockChanged.value(false)
+                                                }
+                                                change.consume()
+                                            }
+
+                                            pullNextGestureActive -> {
+                                                change.consume()
+                                            }
+
+                                            !latestIsAtBottom.value && pullNextPageDragPx > 0f -> {
+                                                pullNextPageDragPx = 0f
+                                                pullNextPageGestureActive = false
+                                            }
+                                        }
                                     }
-                            )
+                                } while (event.changes.any { it.pressed })
+                                searchPointerPressed = false
+                                finishPullNextPageGesture.value()
+                            }
                         }
-                        Box(
+                        .then(
+                            if (refreshGestureEnabled) {
+                                Modifier.nestedScroll(pullToRefreshState.nestedScrollConnection)
+                            } else {
+                                Modifier
+                            }
+                        )
+                            .clipToBounds()
+                    ) {
+                    if (pullRefreshHintVisible) {
+                        SearchPullActionHint(
+                            progress = pullRefreshProgress,
+                            active = pullToRefreshState.isRefreshing,
+                            armed = pullRefreshArmed,
+                            direction = if (pullRefreshArmed) {
+                                SearchPullActionDirection.Up
+                            } else {
+                                SearchPullActionDirection.Down
+                            },
+                            idleText = appString(R.string.ui_pull_down_to_refresh),
+                            armedText = appString(R.string.ui_release_to_refresh),
+                            activeText = appString(R.string.ui_refreshing),
+                            height = pullRefreshHintHeight,
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .graphicsLayer {
+                                    alpha = pullRefreshProgress.coerceIn(0f, 1f)
+                                    translationY = pullRefreshHintEdgeOffsetPx
+                                }
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clearFocusOnTapOutside()
+                            .graphicsLayer {
+                                translationY = pullContentOffsetState.value - pullNextPageVisualOffsetState.value
+                            }
+                    ) {
+                        when (val state = uiState) {
+                        is SearchUiState.Loading -> Column(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .clearFocusOnTapOutside()
-                                .graphicsLayer { translationY = listStretchOffsetPx }
+                                .verticalScroll(
+                                    state = rememberScrollState(),
+                                    flingBehavior = rememberCalmScrollableFlingBehavior()
+                                )
+                                .padding(top = topPadding),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
                         ) {
-                            when (val state = uiState) {
-                            is SearchUiState.Loading -> Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .verticalScroll(
-                                        state = rememberScrollState(),
-                                        flingBehavior = rememberCalmScrollableFlingBehavior()
-                                    )
-                                    .padding(top = topPadding),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                EaraLogoLoadingIndicator(tint = colorScheme.primary)
-                            }
+                            EaraLogoLoadingIndicator(tint = colorScheme.primary)
+                        }
 
-                            is SearchUiState.Success -> {
-                                if (state.results.isEmpty()) {
-                                    EaraBrandedEmptyState(
-                                        sectionTitle = "在线搜索",
-                                        headline = if (state.keyword.isBlank()) "还没有搜索结果" else "没有找到匹配结果",
-                                        sectionIcon = Icons.Rounded.Search,
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentPadding = PaddingValues(
-                                            top = topPadding,
-                                            bottom = LocalBottomOverlayPadding.current + 24.dp
-                                        )
+                        is SearchUiState.Success -> {
+                            if (state.results.isEmpty()) {
+                                EaraBrandedEmptyState(
+                                    sectionTitle = appString(R.string.ui_search),
+                                    headline = if (state.keyword.isBlank()) appString(R.string.ui_no_search_results_yet) else appString(R.string.ui_no_matching_results_found),
+                                    sectionIcon = Icons.Rounded.Search,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = PaddingValues(
+                                        top = topPadding,
+                                        bottom = LocalBottomOverlayPadding.current + 24.dp
                                     )
-                                } else if (viewMode == 0) {
-                                    val app = LocalContext.current.applicationContext
-                                    val cacheManager = remember(app) {
-                                        EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java)
-                                            .imageCacheManager()
+                                )
+                            } else if (useSingleColumnList) {
+                                val app = LocalContext.current.applicationContext
+                                val cacheManager = remember(app) {
+                                    EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java)
+                                        .imageCacheManager()
+                                }
+                                val density = LocalDensity.current
+                                val screenWidthDp = LocalConfiguration.current.screenWidthDp
+                                val listItemHeight = albumListCoverSize(screenWidthDp)
+                                val coverPx = remember(listItemHeight, density) { with(density) { listItemHeight.roundToPx() } }
+                                val preloadSize = remember(coverPx) { IntSize(coverPx, coverPx) }
+                                val coverFadeInState = remember(listState) {
+                                    derivedStateOf {
+                                        shouldFadeInCover(listState.isScrollInProgress)
                                     }
-                                    val density = LocalDensity.current
-                                    val screenWidthDp = LocalConfiguration.current.screenWidthDp
-                                    val listItemHeight = albumListCoverSize(screenWidthDp)
-                                    val coverPx = remember(listItemHeight, density) { with(density) { listItemHeight.roundToPx() } }
-                                    val preloadSize = remember(coverPx) { IntSize(coverPx, coverPx) }
-                                    val coverFadeInState = remember(listState) {
-                                        derivedStateOf {
-                                            shouldFadeInCover(listState.isScrollInProgress)
+                                }
+                                LazyListPreloader(
+                                    state = listState,
+                                    itemCount = state.results.size,
+                                    enabled = isActive,
+                                    preloadNext = 24,
+                                    preloadSize = preloadSize,
+                                    cacheManagerProvider = { cacheManager },
+                                    modelAt = { idx ->
+                                        state.results.getOrNull(idx)?.let { albumCoverImageModel(it) }
+                                    }
+                                )
+                                AlbumRowRasterCacheScope(
+                                    transformIsIdentity = { pullContentOffsetState.value - pullNextPageVisualOffsetState.value == 0f },
+                                ) {
+                                    AlbumListIconScope {
+                                        PreparedAlbumParagraphs(
+                                            listState = listState,
+                                            active = isActive && isDataActive,
+                                            dataKey = state.results,
+                                            itemAtLazyIndex = { index ->
+                                                state.results.getOrNull(index)?.let { album ->
+                                                    PreparedAlbumParagraphItem(searchResultItemKey(album), album)
+                                                }
+                                            },
+                                        ) {
+                                            LazyColumn(
+                                                state = listState,
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .nestedScroll(chromeState.nestedScrollConnection),
+                                                flingBehavior = rememberCalmScrollableFlingBehavior(),
+                                                contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
+                                                    .withAddedBottomPadding(LocalBottomOverlayPadding.current)
+                                            ) {
+                                                lazyItemsIndexed(
+                                                    items = state.results,
+                                                    key = { _, album -> searchResultItemKey(album) },
+                                                    contentType = { _, _ -> "album" }
+                                                ) { _, album ->
+                                                    DeferredPageItem(placeholder = {
+                                                        Spacer(Modifier.fillMaxWidth().height(
+                                                            albumListCoverSize(LocalConfiguration.current.screenWidthDp) + 12.dp
+                                                        ))
+                                                    }) {
+                                                        val onlineDetailLoading = onlineDetailLoadingFor(album, state)
+                                                        val skeletonMode = searchResultSkeletonMode(
+                                                            onlineDetailLoading = onlineDetailLoading,
+                                                            isRefreshingLocalizedText = state.isRefreshingLocalizedText
+                                                        )
+                                                        val rj = album.rjCode.ifBlank { album.workId }.trim().uppercase()
+                                                        val hasResolvedDetail = rj.isNotBlank() && rj in state.enrichedDetailRjCodes
+                                                        val itemPurchasedOnly = state.purchasedOnly
+                                                        val preparedItemKey = searchResultItemKey(album)
+                                                        AlbumItem(
+                                                            album = album,
+                                                            preparedItemKey = remember(preparedItemKey) { preparedItemKey },
+                                                            onClick = { onAlbumClick(album, itemPurchasedOnly, hasResolvedDetail) },
+                                                            modifier = Modifier.animateItem(
+                                                                fadeInSpec = null,
+                                                                placementSpec = if (LocalPageAnimationsActive.current) SearchResultPlacementSpring else null,
+                                                                fadeOutSpec = null,
+                                                            ),
+                                                            onlineDetailLoading =
+                                                                skeletonMode == SearchResultSkeletonMode.DetailMetadata,
+                                                            onlineTitleLoading =
+                                                                skeletonMode == SearchResultSkeletonMode.LocalizedText,
+                                                            onlineCvLoading =
+                                                                skeletonMode == SearchResultSkeletonMode.DetailMetadata,
+                                                            onlineTagsLoading = skeletonMode != SearchResultSkeletonMode.None,
+                                                            showCollectedIndicator = !state.collectedOnly,
+                                                            showStatsPlaceholders = true,
+                                                            coverFadeInState = coverFadeInState,
+                                                            coverReloadKey = state.resultRevision,
+                                                            onRjLongClick = ::openMetaActions,
+                                                            onCircleLongClick = ::openMetaActions,
+                                                            onCvLongClick = ::openMetaActions,
+                                                            onTagLongClick = ::openMetaActions,
+                                                        )
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
-                                    LazyListPreloader(
-                                        state = listState,
-                                        itemCount = state.results.size,
-                                        enabled = isActive,
-                                        preloadNext = 24,
-                                        preloadSize = preloadSize,
-                                        cacheManagerProvider = { cacheManager },
-                                        modelAt = { idx ->
-                                            state.results.getOrNull(idx)?.let { albumCoverImageModel(it) }
-                                        }
-                                    )
-                                    LazyColumn(
-                                        state = listState,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .nestedScroll(chromeState.nestedScrollConnection),
-                                        flingBehavior = rememberCalmScrollableFlingBehavior(),
-                                        contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
-                                            .withAddedBottomPadding(LocalBottomOverlayPadding.current)
-                                    ) {
-                                        lazyItemsIndexed(
-                                            items = state.results,
-                                            key = { _, album -> searchResultItemKey(album) },
-                                            contentType = { _, _ -> "album" }
-                                        ) { _, album ->
-                                            val onlineDetailLoading = onlineDetailLoadingFor(album, state)
-                                            val skeletonMode = searchResultSkeletonMode(
-                                                onlineDetailLoading = onlineDetailLoading,
-                                                isRefreshingLocalizedText = state.isRefreshingLocalizedText
-                                            )
-                                            val rj = album.rjCode.ifBlank { album.workId }.trim().uppercase()
-                                            val hasResolvedDetail = rj.isNotBlank() && rj in state.enrichedDetailRjCodes
-                                            AlbumItem(
-                                                album = album,
-                                                onClick = { onAlbumClick(album, state.purchasedOnly, hasResolvedDetail) },
-                                                modifier = Modifier.animateItem(
-                                                    fadeInSpec = null,
-                                                    placementSpec = SearchResultPlacementSpring,
-                                                    fadeOutSpec = null,
-                                                ),
-                                                onlineDetailLoading =
-                                                    skeletonMode == SearchResultSkeletonMode.DetailMetadata,
-                                                onlineTitleLoading =
-                                                    skeletonMode == SearchResultSkeletonMode.LocalizedText,
-                                                onlineCvLoading =
-                                                    skeletonMode == SearchResultSkeletonMode.DetailMetadata,
-                                                onlineTagsLoading = skeletonMode != SearchResultSkeletonMode.None,
-                                                showCollectedIndicator = !state.collectedOnly,
-                                                showStatsPlaceholders = true,
-                                                coverFadeInState = coverFadeInState,
-                                                coverReloadKey = state.resultRevision,
-                                                onRjLongClick = ::openMetaActions,
-                                                onCircleLongClick = ::openMetaActions,
-                                                onCvLongClick = ::openMetaActions,
-                                                onTagLongClick = ::openMetaActions,
-                                            )
-                                        }
+                                }
+                            } else {
+                                val app = LocalContext.current.applicationContext
+                                val cacheManager = remember(app) {
+                                    EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java)
+                                        .imageCacheManager()
+                                }
+                                val density = LocalDensity.current
+                                val gridCellSize = if (tabletList) 360.dp else if (LocalTabletLayout.current.isTablet) 176.dp else if (isCompact) 150.dp else 200.dp
+                                val gridCoverPx = remember(gridCellSize, density) { with(density) { (if (tabletList) 152.dp else gridCellSize).roundToPx() } }
+                                val gridPreloadSize = remember(gridCoverPx) { IntSize(gridCoverPx, gridCoverPx) }
+                                val coverFadeInState = remember(gridState) {
+                                    derivedStateOf {
+                                        shouldFadeInCover(gridState.isScrollInProgress)
                                     }
-                                } else {
-                                    val app = LocalContext.current.applicationContext
-                                    val cacheManager = remember(app) {
-                                        EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java)
-                                            .imageCacheManager()
+                                }
+                                LazyStaggeredGridPreloader(
+                                    state = gridState,
+                                    itemCount = state.results.size,
+                                    enabled = isActive,
+                                    preloadNext = 24,
+                                    preloadSize = gridPreloadSize,
+                                    cacheManagerProvider = { cacheManager },
+                                    modelAt = { idx ->
+                                        state.results.getOrNull(idx)?.let { albumCoverImageModel(it) }
                                     }
-                                    val density = LocalDensity.current
-                                    val gridCellSize = if (isCompact) 150.dp else 200.dp
-                                    val gridCoverPx = remember(gridCellSize, density) { with(density) { gridCellSize.roundToPx() } }
-                                    val gridPreloadSize = remember(gridCoverPx) { IntSize(gridCoverPx, gridCoverPx) }
-                                    val coverFadeInState = remember(gridState) {
-                                        derivedStateOf {
-                                            shouldFadeInCover(gridState.isScrollInProgress)
-                                        }
-                                    }
-                                    LazyStaggeredGridPreloader(
-                                        state = gridState,
-                                        itemCount = state.results.size,
-                                        enabled = isActive,
-                                        preloadNext = 24,
-                                        preloadSize = gridPreloadSize,
-                                        cacheManagerProvider = { cacheManager },
-                                        modelAt = { idx ->
-                                            state.results.getOrNull(idx)?.let { albumCoverImageModel(it) }
-                                        }
-                                    )
-                                    LazyVerticalStaggeredGrid(
-                                        columns = StaggeredGridCells.Adaptive(gridCellSize),
-                                        state = gridState,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .nestedScroll(chromeState.nestedScrollConnection),
-                                        flingBehavior = rememberCalmScrollableFlingBehavior(),
-                                        contentPadding = PaddingValues(
-                                            top = topPadding,
-                                            start = SearchPageHorizontalPadding,
-                                            end = SearchPageHorizontalPadding,
-                                            bottom = 16.dp
-                                        ).withAddedBottomPadding(LocalBottomOverlayPadding.current),
-                                        horizontalArrangement = Arrangement.spacedBy(AlbumGridItemSpacing),
-                                        verticalItemSpacing = AlbumGridItemSpacing
-                                    ) {
-                                        items(
-                                            state.results.size,
-                                            key = { index -> searchResultItemKey(state.results[index]) },
-                                            contentType = { "albumGrid" }
-                                        ) { index ->
+                                )
+                                LazyVerticalStaggeredGrid(
+                                    columns = StaggeredGridCells.Adaptive(gridCellSize),
+                                    state = gridState,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .nestedScroll(chromeState.nestedScrollConnection),
+                                    flingBehavior = rememberCalmScrollableFlingBehavior(),
+                                    contentPadding = PaddingValues(
+                                        top = topPadding,
+                                        start = SearchPageHorizontalPadding,
+                                        end = SearchPageHorizontalPadding,
+                                        bottom = 16.dp
+                                    ).withAddedBottomPadding(LocalBottomOverlayPadding.current),
+                                    horizontalArrangement = Arrangement.spacedBy(AlbumGridItemSpacing),
+                                    verticalItemSpacing = AlbumGridItemSpacing
+                                ) {
+                                    items(
+                                        state.results.size,
+                                        key = { index -> searchResultItemKey(state.results[index]) },
+                                        contentType = { "albumGrid" }
+                                    ) { index ->
+                                        DeferredPageItem(placeholder = {
+                                            Column {
+                                                Spacer(Modifier.fillMaxWidth().aspectRatio(1f))
+                                                Spacer(Modifier.height(168.dp))
+                                            }
+                                        }) {
                                             val album = state.results[index]
                                             val onlineDetailLoading = onlineDetailLoadingFor(album, state)
                                             val skeletonMode = searchResultSkeletonMode(
@@ -1275,12 +1285,14 @@ private fun SearchScreenContent(
                                             )
                                             val rj = album.rjCode.ifBlank { album.workId }.trim().uppercase()
                                             val hasResolvedDetail = rj.isNotBlank() && rj in state.enrichedDetailRjCodes
+                                            val itemPurchasedOnly = state.purchasedOnly
                                             AlbumGridItem(
+                                                horizontal = tabletList,
                                                 album = album,
-                                                onClick = { onAlbumClick(album, state.purchasedOnly, hasResolvedDetail) },
+                                                onClick = { onAlbumClick(album, itemPurchasedOnly, hasResolvedDetail) },
                                                 modifier = Modifier.animateItem(
                                                     fadeInSpec = null,
-                                                    placementSpec = SearchResultPlacementSpring,
+                                                    placementSpec = if (LocalPageAnimationsActive.current) SearchResultPlacementSpring else null,
                                                     fadeOutSpec = null,
                                                 ),
                                                 onlineDetailLoading =
@@ -1303,147 +1315,146 @@ private fun SearchScreenContent(
                                     }
                                 }
                             }
+                        }
 
-                            is SearchUiState.Error -> EaraBrandedEmptyState(
-                                sectionTitle = "在线搜索",
-                                headline = "网络连接出了点问题",
-                                sectionIcon = Icons.Rounded.WifiOff,
-                                modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(
-                                    top = topPadding,
-                                    bottom = LocalBottomOverlayPadding.current + 24.dp
-                                ),
-                                footer = {
-                                    FilledTonalButton(
-                                        onClick = { viewModel.retry() },
-                                        colors = ButtonDefaults.filledTonalButtonColors(
-                                            containerColor = colorScheme.primaryContainer,
-                                            contentColor = colorScheme.onPrimaryContainer
-                                        )
-                                    ) {
-                                        Text("重试")
-                                    }
-                                }
-                            )
-
-                            else -> Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .verticalScroll(
-                                        state = rememberScrollState(),
-                                        flingBehavior = rememberCalmScrollableFlingBehavior()
+                        is SearchUiState.Error -> EaraBrandedEmptyState(
+                            sectionTitle = appString(R.string.ui_search),
+                            headline = appString(R.string.ui_there_s_something_wrong_with_the_network_connection),
+                            sectionIcon = Icons.Rounded.WifiOff,
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(
+                                top = topPadding,
+                                bottom = LocalBottomOverlayPadding.current + 24.dp
+                            ),
+                            footer = {
+                                FilledTonalButton(
+                                    onClick = { viewModel.retry() },
+                                    colors = ButtonDefaults.filledTonalButtonColors(
+                                        containerColor = colorScheme.primaryContainer,
+                                        contentColor = colorScheme.onPrimaryContainer
                                     )
-                            ) {}
+                                ) {
+                                    Text(androidx.compose.ui.res.stringResource(R.string.ui_retry))
+                                }
                             }
-                        }
+                        )
 
-                        if (pullNextPageHintVisible) {
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .padding(bottom = LocalBottomOverlayPadding.current)
-                                    .fillMaxWidth()
-                                    .height(pullNextRevealHeight)
-                                    .clipToBounds()
-                                    .graphicsLayer {
-                                        alpha = pullNextPageProgress.coerceIn(0f, 1f)
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                SearchPullActionHint(
-                                    progress = pullNextPageProgress,
-                                    active = pullNextPageRequestAfterReturn,
-                                    armed = pullNextPageArmed,
-                                    direction = if (pullNextPageArmed) {
-                                        SearchPullActionDirection.Down
-                                    } else {
-                                        SearchPullActionDirection.Up
-                                    },
-                                    idleText = "上拉下一页",
-                                    armedText = "松手翻页",
-                                    activeText = "正在翻页"
+                        else -> Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(
+                                    state = rememberScrollState(),
+                                    flingBehavior = rememberCalmScrollableFlingBehavior()
                                 )
-                            }
-                        }
+                        ) {}
                         }
                     }
 
-                    SearchChrome(
-                        modifier = Modifier.align(Alignment.TopCenter).padding(top = LocalMainHeaderPadding.current),
-                        keyword = keyword,
-                        onKeywordChange = { keyword = it },
-                        placeholder = hotKeywordCarouselItem.placeholder,
-                        searchFieldReadOnly = true,
-                        onSearchFieldClick = { onOpenSearchAssist(currentSearchAssistRequest()) },
-                        selectedFilter = selectedFilter,
-                        selectedOrder = selectedOrder,
-                        selectedCollectedSort = selectedCollectedSort,
-                        hasSubtitle = hasSubtitle,
-                        allAges = allAges,
-                        selectedLocale = selectedLocale,
-                        filterControlsLocked = filterControlsLocked,
-                        searchSubmitLocked = searchSubmitLocked,
-                        showSearchSpinner = showSearchSpinner,
-                        showPagination = success != null,
-                        page = highlightedPage,
-                        canGoPrev = canGoPrev,
-                        canGoNext = canGoNext,
-                        controlsLocked = interactionLocked,
-                        rightPanelToggle = rightPanelToggle,
-                        chromeState = chromeState,
-                        onMeasured = { size: IntSize -> chromeState.updateHeight(size.height.toFloat()) },
-                        onSearchSubmit = { submitSearch() },
-                        onClearKeyword = { clearKeywordAndSearch() },
-                        onOptionsChanged = { options ->
-                            val option = options.scope
-                            val resultSetOptionsChanged =
-                                option != selectedFilter ||
-                                    options.order != selectedOrder ||
-                                    options.collectedSort != selectedCollectedSort ||
-                                    options.hasSubtitle != hasSubtitle ||
-                                    options.allAges != allAges
-                            val accepted = viewModel.updateSearchOptions(
-                                order = options.order,
-                                collectedSort = options.collectedSort,
-                                purchasedOnly = option.isPurchasedOnly,
-                                presaleOnly = option.isPresaleOnly,
-                                chineseTranslatedOnly = option.isChineseTranslated,
-                                collectedOnly = option.isCollectedOnly,
-                                collectedSourceName = option.collectedSource.name,
-                                hasSubtitle = options.hasSubtitle,
-                                allAges = options.allAges,
-                                locale = options.locale
+                    if (pullNextPageHintVisible) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = LocalBottomOverlayPadding.current)
+                                .fillMaxWidth()
+                                .height(pullNextRevealHeight)
+                                .clipToBounds()
+                                .graphicsLayer {
+                                    alpha = pullNextPageProgress.coerceIn(0f, 1f)
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            SearchPullActionHint(
+                                progress = pullNextPageProgress,
+                                active = pullNextPageRequestAfterReturn,
+                                armed = pullNextPageArmed,
+                                direction = if (pullNextPageArmed) {
+                                    SearchPullActionDirection.Down
+                                } else {
+                                    SearchPullActionDirection.Up
+                                },
+                                idleText = appString(R.string.ui_pull_up_next_page),
+                                armedText = appString(R.string.ui_let_go_and_turn_the_page),
+                                activeText = appString(R.string.ui_turning_pages)
                             )
-                            if (accepted) {
-                                purchasedOnly = option.isPurchasedOnly
-                                presaleOnly = option.isPresaleOnly
-                                chineseTranslatedOnly = option.isChineseTranslated
-                                collectedOnly = option.isCollectedOnly
-                                collectedSourceName = option.collectedSource.name
-                                selectedOrderName = options.order.name
-                                selectedCollectedSortName = options.collectedSort.name
-                                hasSubtitle = options.hasSubtitle
-                                allAges = options.allAges
-                                selectedLocale = options.locale
-                                if (resultSetOptionsChanged) {
-                                    scrollResultsToTop()
-                                    chromeState.expand()
-                                }
-                            }
-                        },
-                        onFirstPage = {
-                            scrollResultsToTop()
-                            viewModel.firstPage()
-                        },
-                        onPrev = {
-                            scrollResultsToTop()
-                            viewModel.prevPage()
-                        },
-                        onNext = {
-                            requestNextPage()
                         }
-                    )
+                    }
+                    }
                 }
+
+                SearchChrome(
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = LocalMainHeaderPadding.current),
+                    keyword = localizedKeywords[keyword] ?: keyword,
+                    onKeywordChange = { keyword = it },
+                    placeholder = hotKeywordCarouselItem.placeholder,
+                    searchFieldReadOnly = true,
+                    onSearchFieldClick = { onOpenSearchAssist(currentSearchAssistRequest()) },
+                    selectedFilter = selectedFilter,
+                    selectedOrder = selectedOrder,
+                    selectedCollectedSort = selectedCollectedSort,
+                    hasSubtitle = hasSubtitle,
+                    allAges = allAges,
+                    selectedLocale = selectedLocale,
+                    filterControlsLocked = filterControlsLocked,
+                    searchSubmitLocked = searchSubmitLocked,
+                    showSearchSpinner = showSearchSpinner,
+                    showPagination = success != null,
+                    page = highlightedPage,
+                    canGoPrev = canGoPrev,
+                    canGoNext = canGoNext,
+                    controlsLocked = interactionLocked,
+                    chromeState = chromeState,
+                    onMeasured = { size: IntSize -> chromeState.updateHeight(size.height.toFloat()) },
+                    onSearchSubmit = { submitSearch() },
+                    onClearKeyword = { clearKeywordAndSearch() },
+                    onOptionsChanged = { options ->
+                        val option = options.scope
+                        val resultSetOptionsChanged =
+                            option != selectedFilter ||
+                                options.order != selectedOrder ||
+                                options.collectedSort != selectedCollectedSort ||
+                                options.hasSubtitle != hasSubtitle ||
+                                options.allAges != allAges
+                        val accepted = viewModel.updateSearchOptions(
+                            order = options.order,
+                            collectedSort = options.collectedSort,
+                            purchasedOnly = option.isPurchasedOnly,
+                            presaleOnly = option.isPresaleOnly,
+                            chineseTranslatedOnly = option.isChineseTranslated,
+                            collectedOnly = option.isCollectedOnly,
+                            collectedSourceName = option.collectedSource.name,
+                            hasSubtitle = options.hasSubtitle,
+                            allAges = options.allAges,
+                            locale = options.locale
+                        )
+                        if (accepted) {
+                            purchasedOnly = option.isPurchasedOnly
+                            presaleOnly = option.isPresaleOnly
+                            chineseTranslatedOnly = option.isChineseTranslated
+                            collectedOnly = option.isCollectedOnly
+                            collectedSourceName = option.collectedSource.name
+                            selectedOrderName = options.order.name
+                            selectedCollectedSortName = options.collectedSort.name
+                            hasSubtitle = options.hasSubtitle
+                            allAges = options.allAges
+                            selectedLocale = options.locale
+                            if (resultSetOptionsChanged) {
+                                scrollResultsToTop()
+                                chromeState.expand()
+                            }
+                        }
+                    },
+                    onFirstPage = {
+                        scrollResultsToTop()
+                        viewModel.firstPage()
+                    },
+                    onPrev = {
+                        scrollResultsToTop()
+                        viewModel.prevPage()
+                    },
+                    onNext = {
+                        requestNextPage()
+                    }
+                )
             }
         }
     }
@@ -1465,13 +1476,13 @@ private fun SearchScreenContent(
                     val exists = searchBlockedKeywords.any { it.equals(normalized, ignoreCase = true) }
                     settingsViewModel.addSearchBlockedKeyword(normalized)
                     if (exists) {
-                        viewModel.messageManager.showInfo("屏蔽词已存在：$normalized")
+                        viewModel.messageManager.showInfo(appString(R.string.ui_blocked_word_already_exists, normalized))
                     } else {
-                        viewModel.messageManager.showSuccess("已添加屏蔽词：$normalized")
+                        viewModel.messageManager.showSuccess(appString(R.string.ui_blocked_word_added, normalized))
                     }
                 }
             },
-            onCopy = { copyMeta("内容", it) },
+            onCopy = { copyMeta(appString(R.string.ui_content), it) },
         )
     }
 }
@@ -1576,7 +1587,6 @@ internal fun SearchChrome(
     canGoPrev: Boolean,
     canGoNext: Boolean,
     controlsLocked: Boolean,
-    rightPanelToggle: (@Composable (Modifier) -> Unit)?,
     chromeState: CollapsibleHeaderState,
     chromeTestTag: String = SEARCH_CHROME_TAG,
     inputTestTag: String = SEARCH_INPUT_TAG,
@@ -1627,7 +1637,6 @@ internal fun SearchChrome(
             onSearchSubmit = onSearchSubmit,
             onClearKeyword = onClearKeyword,
             onOptionsChanged = onOptionsChanged,
-            rightPanelToggle = rightPanelToggle
         )
         if (showPagination) {
             SearchPaginationHeader(
@@ -1675,7 +1684,6 @@ internal fun SearchToolbar(
     onSearchSubmit: () -> Unit,
     onClearKeyword: (() -> Unit)? = null,
     onOptionsChanged: (SearchToolbarOptions) -> Unit,
-    rightPanelToggle: (@Composable (Modifier) -> Unit)? = null
 ) {
     val colorScheme = AsmrTheme.colorScheme
     var filterMenuExpanded by remember { mutableStateOf(false) }
@@ -1733,10 +1741,10 @@ internal fun SearchToolbar(
                             .height(32.dp)
                             .semantics {
                                 stateDescription = when {
-                                    !supportsWorkFilters -> "当前范围不支持作品筛选"
-                                    activeWorkFilterCount == 0 -> "未启用作品筛选"
-                                    activeWorkFilterCount == 1 -> "已启用 1 项作品筛选"
-                                    else -> "已启用 2 项作品筛选"
+                                    !supportsWorkFilters -> appString(R.string.ui_the_current_scope_does_not_support_work_filtering)
+                                    activeWorkFilterCount == 0 -> appString(R.string.ui_item_filtering_is_not_enabled)
+                                    activeWorkFilterCount == 1 -> appString(R.string.ui_1_item_filter_enabled)
+                                    else -> appString(R.string.ui_2_item_filters_enabled)
                                 }
                             }
                             .testTag(SEARCH_SCOPE_BUTTON_TAG),
@@ -1825,10 +1833,10 @@ internal fun SearchToolbar(
                         }
 
                         if (supportsWorkFilters) {
-                            SearchMenuSectionLabel("作品筛选")
+                            SearchMenuSectionLabel(appString(R.string.ui_work_screening))
                             if (selectedFilter.supportsSubtitleFilter) {
                                 SearchCheckableMenuItem(
-                                    label = "有字幕",
+                                    label = appString(R.string.ui_with_subtitles),
                                     icon = Icons.Rounded.Subtitles,
                                     selected = hasSubtitle,
                                     testTag = SEARCH_HAS_SUBTITLE_OPTION_TAG,
@@ -1839,7 +1847,7 @@ internal fun SearchToolbar(
                                 SearchMenuDivider()
                             }
                             SearchCheckableMenuItem(
-                                label = "全年龄",
+                                label = appString(R.string.ui_all_ages),
                                 icon = Icons.Rounded.FamilyRestroom,
                                 selected = allAges,
                                 testTag = SEARCH_ALL_AGES_OPTION_TAG,
@@ -1942,7 +1950,7 @@ internal fun SearchToolbar(
                                         )
                                     }
 
-                                    SearchMenuSectionLabel("作品语言")
+                                    SearchMenuSectionLabel(appString(R.string.ui_language_of_work))
                                     SearchLocaleOptions.forEachIndexed { index, (locale, label) ->
                                         if (index > 0) {
                                             SearchMenuDivider()
@@ -2000,17 +2008,15 @@ internal fun SearchToolbar(
                 onSearch = { onSearchSubmit() }
             )
         )
-        if (rightPanelToggle != null) {
-            Spacer(modifier = Modifier.width(8.dp))
-            rightPanelToggle(Modifier.size(50.dp))
-        }
     }
 }
 
-private val SearchLocaleOptions = listOf(
-    "ja_JP" to "日语",
-    "zh_CN" to "简中",
-    "zh_TW" to "繁中"
+private val SearchLocaleOptions: List<Pair<String, String>> get() = listOf(
+    "" to appString(R.string.ui_app_language),
+    "en_US" to "English",
+    "ja_JP" to appString(R.string.ui_japanese),
+    "zh_CN" to appString(R.string.ui_simplified_chinese),
+    "zh_TW" to appString(R.string.ui_traditional_chinese)
 )
 
 @Composable
@@ -2070,7 +2076,7 @@ private fun SearchCheckableMenuItem(
         modifier = Modifier
             .semantics {
                 this.selected = selected
-                stateDescription = if (selected) "已筛选" else "未筛选"
+                stateDescription = if (selected) appString(R.string.ui_filtered) else appString(R.string.ui_unfiltered)
             }
             .testTag(testTag)
     )
@@ -2150,14 +2156,14 @@ internal fun SearchPaginationHeader(
                             onClick = onFirstPage,
                             enabled = canGoFirst && !controlsLocked,
                             imageVector = Icons.Rounded.SkipPrevious,
-                            contentDescription = "回到第一页",
+                            contentDescription = appString(R.string.ui_return_to_first_page),
                             modifier = Modifier.testTag(SEARCH_FIRST_PAGE_BUTTON_TAG)
                         )
                         SearchPaginationIconButton(
                             onClick = onPrev,
                             enabled = canGoPrev && !controlsLocked,
                             imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = "上一页",
+                            contentDescription = appString(R.string.ui_previous_page),
                             modifier = Modifier.testTag(SEARCH_PREV_BUTTON_TAG)
                         )
                     }
@@ -2168,7 +2174,7 @@ internal fun SearchPaginationHeader(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "第 ${page.coerceAtLeast(1)} 页",
+                        text = appString(R.string.ui_page, page.coerceAtLeast(1)),
                         style = MaterialTheme.typography.bodySmall,
                         color = if (isDark) colorScheme.textPrimary else Color.Black
                     )
@@ -2182,7 +2188,7 @@ internal fun SearchPaginationHeader(
                         onClick = onNext,
                         enabled = canGoNext && !controlsLocked,
                         imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
-                        contentDescription = "下一页",
+                        contentDescription = appString(R.string.ui_next_page),
                         modifier = Modifier.testTag(SEARCH_NEXT_BUTTON_TAG)
                     )
                 }

@@ -1,5 +1,8 @@
 package com.asmr.player.data.remote.update
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.os.Build
 import com.asmr.player.data.remote.NetworkHeaders
 import com.google.gson.Gson
@@ -38,14 +41,14 @@ class GitHubUpdateClient(
             if (!it.isSuccessful) {
                 val code = it.code
                 val msg = it.message.ifBlank { "HTTP $code" }
-                throw IllegalStateException("GitHub 请求失败：$code $msg")
+                throw IllegalStateException(appString(R.string.ui_github_request_failed, code, msg))
             }
             val bodyStr = it.body?.string().orEmpty()
             val parsed = gson.fromJson(bodyStr, GitHubReleaseResponse::class.java)
             val tag = parsed.tagName.orEmpty().trim()
             val version = normalizeVersionName(tag)
             val asset = pickApkAssetForDevice(parsed.assets.orEmpty(), supportedAbis)
-                ?: throw IllegalStateException("Release 未包含 APK 资源")
+                ?: throw IllegalStateException(appString(R.string.ui_release_does_not_contain_apk_resources))
             return UpdateRelease(
                 tagName = tag,
                 versionName = version,

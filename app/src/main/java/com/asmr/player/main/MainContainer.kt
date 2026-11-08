@@ -1,5 +1,11 @@
 package com.asmr.player
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
+import com.asmr.player.ui.common.LocalAlbumCoverShadowCache
+import com.asmr.player.ui.common.rememberAlbumCoverShadowCache
+
 import com.asmr.player.data.remote.crawler.AlbumResourceSource
 import com.asmr.player.ui.search.SEARCH_ASSIST_RESULT_COLLECTED_SOURCE_KEY
 import com.asmr.player.translation.LocalPageTranslationHeader
@@ -7,18 +13,12 @@ import com.asmr.player.translation.PageTranslationAction
 import com.asmr.player.translation.PageTranslationHeaderAction
 import com.asmr.player.translation.PageTranslationHeaderState
 import com.asmr.player.translation.PageTranslationHost
-import android.os.Bundle
-import android.view.KeyEvent
 import android.view.Choreographer
 import android.view.View
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.setContent
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.pager.HorizontalPager
@@ -26,19 +26,12 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ViewList
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material.icons.rounded.AccessTime
 import androidx.compose.material.icons.rounded.Audiotrack
-import androidx.compose.material.icons.rounded.CloudDownload
-import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
 import android.content.res.Configuration
 import android.net.Uri
 import androidx.compose.ui.platform.LocalConfiguration
@@ -48,15 +41,11 @@ import androidx.core.view.WindowInsetsAnimationCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.material3.*
-import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
-import androidx.compose.material3.windowsizeclass.WindowHeightSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
-import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Shape
@@ -64,16 +53,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.common.util.UnstableApi
-import androidx.navigation.NavHostController
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -93,15 +79,14 @@ import com.asmr.player.ui.library.LibraryViewModel
 import com.asmr.player.ui.library.BulkPhase
 import com.asmr.player.data.remote.scraper.resolveRecommendedWorkHeroCoverUrl
 import com.asmr.player.performance.UiFrameWorkCoordinator
-import com.asmr.player.ui.player.MiniPlayer
 import com.asmr.player.ui.player.NowPlayingMotionLayout
 import com.asmr.player.ui.player.NowPlayingMotionSpec
 import com.asmr.player.ui.player.NowPlayingScreen
 import com.asmr.player.ui.player.PlayerSharedBackdrop
+import com.asmr.player.ui.player.playerSurfaceColors
 import com.asmr.player.ui.player.PlayerViewModel
 import com.asmr.player.ui.player.rememberCoverDragPreviewState
 import com.asmr.player.ui.player.rememberCoverMotionState
-import com.asmr.player.ui.sidepanel.LocalRightPanelExpandedState
 import com.asmr.player.ui.downloads.DownloadsScreen
 import com.asmr.player.ui.downloads.DownloadsViewModel
 import com.asmr.player.ui.downloads.DownloadItemState
@@ -143,9 +128,24 @@ import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.FlatTextFieldDialog
 import com.asmr.player.ui.common.RoundedTopSheet
+import com.asmr.player.ui.common.EaraBrand
 import com.asmr.player.ui.common.EaraTopBarContainer
 import com.asmr.player.ui.common.ProgressiveHeaderBlurState
+import com.asmr.player.ui.common.TabletLayout
+import com.asmr.player.ui.common.TabletPage
+import com.asmr.player.ui.common.LocalTabletLayout
+import com.asmr.player.ui.common.rememberIsTabletDevice
+import com.asmr.player.ui.nav.TabletNavigationRail
+import com.asmr.player.ui.nav.TabletNavigationRailWidth
+import com.asmr.player.ui.player.MiniPlayer
 import com.asmr.player.ui.common.LocalMainHeaderPadding
+import com.asmr.player.performance.tracePrimaryPagePreloadEvent
+import com.asmr.player.ui.common.DeferredPageContentState
+import com.asmr.player.ui.common.LocalDeferredPageContent
+import com.asmr.player.ui.common.LocalPageAnimationsActive
+import com.asmr.player.ui.common.LocalAlbumRowRasterCacheAllowed
+import com.asmr.player.ui.common.rememberAlbumRowRasterCachePolicy
+import com.asmr.player.ui.common.rememberAlbumRowRasterCacheTarget
 import com.asmr.player.ui.common.LocalProgressiveHeaderBlur
 import com.asmr.player.ui.common.progressiveHeaderContent
 import com.asmr.player.ui.common.hasProgressiveMainHeader
@@ -153,10 +153,6 @@ import com.asmr.player.ui.common.rememberProgressiveHeaderBlur
 import com.asmr.player.ui.common.EaraMainTopBarHeight
 import com.asmr.player.ui.common.EaraTopBarIconButton
 import com.asmr.player.ui.common.resolveMainPageBackgroundColor
-import com.asmr.player.ui.common.glassMenu
-import com.asmr.player.ui.drawer.DrawerStatusViewModel
-import com.asmr.player.ui.drawer.SiteStatus
-import com.asmr.player.ui.drawer.SiteStatusType
 import com.asmr.player.ui.nav.AlbumCoverHintStore
 import com.asmr.player.ui.nav.AppNavigator
 import com.asmr.player.ui.nav.BottomChrome
@@ -167,11 +163,7 @@ import com.asmr.player.ui.nav.bottomChromeOverlayHeight
 import com.asmr.player.ui.nav.isPrimaryRoute
 import com.asmr.player.ui.nav.resolvePrimaryRoute
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
-import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
-import com.asmr.player.ui.splash.EaraSplashOverlay
-import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
-import java.net.URLDecoder
 import java.net.URLEncoder
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 
@@ -179,17 +171,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.ui.theme.AsmrTheme
-import androidx.compose.ui.draw.blur
 import android.os.Build
-import android.graphics.RenderEffect
-import android.graphics.Shader
-import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.animation.*
@@ -209,66 +194,40 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material.icons.automirrored.rounded.QueueMusic
-import com.asmr.player.ui.player.QueueSheetContent
-import com.asmr.player.ui.player.SleepTimerSheetContent
 import com.asmr.player.ui.player.MiniPlayerDisplayMode
 
 import com.asmr.player.data.local.datastore.SettingsDataStore
 import com.asmr.player.data.settings.CoverPreviewMode
+import com.asmr.player.data.settings.PlayerBackgroundMode
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.data.settings.NowPlayingHomeLayoutMode
 import com.asmr.player.data.settings.NowPlayingLyricsSettings
 import com.asmr.player.util.MessageManager
 import com.asmr.player.ui.common.StableWindowInsets
-import com.asmr.player.ui.theme.HuePalette
-import com.asmr.player.ui.theme.PlayerTheme
-import com.asmr.player.ui.theme.ThemeMode
-import com.asmr.player.ui.theme.DefaultBrandPrimaryDark
-import com.asmr.player.ui.theme.DefaultBrandPrimaryLight
-import com.asmr.player.ui.theme.deriveHuePalette
-import kotlin.math.roundToInt
-import com.asmr.player.ui.theme.neutralPaletteForMode
-import com.asmr.player.ui.theme.rememberDynamicHuePalette
-import com.asmr.player.ui.theme.rememberDynamicHuePaletteFromVideoFrame
 import com.asmr.player.ui.theme.dynamicPageContainerColor
 import com.asmr.player.ui.update.AppUpdateInstallResult
 import com.asmr.player.ui.update.launchDownloadedApkInstall
 import com.asmr.player.ui.update.openUpdateReleasePage
-import com.asmr.player.ui.common.AppVolumeHearingWarningDialog
-import com.asmr.player.ui.common.AppVolumeWarningSessionState
 import com.asmr.player.ui.common.rememberAppVolumeWarningSessionState
 import com.asmr.player.ui.common.rememberCurrentAudioOutputRouteKind
-import com.asmr.player.ui.common.rememberProtectedAppVolumeChangeState
-import com.asmr.player.ui.common.AudioOutputRouteIcon
 import com.asmr.player.ui.common.DismissOutsideBoundsOverlay
-import com.asmr.player.service.AudioOutputRouteKind
 import com.asmr.player.service.PlaybackService
-import javax.inject.Inject
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 import androidx.compose.foundation.border
-import androidx.compose.foundation.BorderStroke
 import androidx.media3.common.MediaItem
-import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.playback.AppVolume
-import com.asmr.player.ui.common.AppVolumeVerticalSlider
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
 
 internal data class PlaylistPickerRequest(
     val items: List<MediaItem>
@@ -283,10 +242,8 @@ private const val SecondaryPageExitDurationMs = 420
 private const val SecondaryPageTouchBlockDurationMs = 320
 private const val AlbumDetailPresentedStateKey = "album_detail_presented"
 private const val PrimaryPagerSnapThreshold = 0.16f
-private const val PrimaryPageSwitchDurationMs = 320
-private const val PrimaryPageSwitchQuietTailMs = 120L
+private const val PrimaryPageSelectionQuietWindowMs = 200L
 private val SecondaryPageSlideEasing = CubicBezierEasing(0.215f, 0.61f, 0.355f, 1f)
-private val PrimaryPageSwitchEasing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f)
 private val PrimaryPageParallaxOffset = 120.dp
 private val AlbumDetailTopBarButtonShape = CircleShape
 private val AlbumDetailBackTouchPassThroughWidth = 88.dp
@@ -396,7 +353,7 @@ private fun AlbumDetailRouteFrame(
     previousBackStackEntry: NavBackStackEntry?,
     stackPopTargetEntryId: String?,
     onPopBackStack: (String?) -> Unit,
-    onPageOffsetReader: (() -> Float) -> Unit,
+    onPageProgressReader: (() -> Float) -> Unit,
     onExitStateChanged: (Boolean) -> Unit,
     onLocalAlbumRemoved: (AlbumDetailUiState.Removed) -> Unit = {},
     onEditRj: (String) -> Unit,
@@ -420,13 +377,11 @@ private fun AlbumDetailRouteFrame(
     val pageOffsetProgress = remember(backStackEntry.id) {
         Animatable(if (skipEnterAnimation) 0f else 1f)
     }
-    val pageOffsetReader = remember(pageOffsetProgress, rootView) {
-        {
-            pageOffsetProgress.value * rootView.width.toFloat().coerceAtLeast(1f)
-        }
+    val pageProgressReader = remember(pageOffsetProgress) {
+        { pageOffsetProgress.value }
     }
     SideEffect {
-        onPageOffsetReader(pageOffsetReader)
+        onPageProgressReader(pageProgressReader)
     }
     var exitRequested by remember(backStackEntry.id) { mutableStateOf(false) }
     val currentPopBackStack by rememberUpdatedState(onPopBackStack)
@@ -599,7 +554,7 @@ private fun AlbumDetailRouteTopBar(
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Edit,
-                            contentDescription = "手动输入作品编号",
+                            contentDescription = appString(R.string.ui_manually_enter_item_number),
                             tint = Color.White
                         )
                     }
@@ -618,7 +573,7 @@ private fun SecondaryPageBackground(
     val colorScheme = AsmrTheme.colorScheme
     val pageBackgroundColor = resolveMainPageBackgroundColor(colorScheme)
 
-    Box(
+    TabletPage(
         modifier = modifier
             .fillMaxSize()
             .padding(top = topPadding)
@@ -834,6 +789,7 @@ private fun PrimaryBottomChrome(
     BottomChrome(
         activeRoute = activeRoute,
         selectionProgresses = selectionProgresses,
+        animateSelection = !pagerState.isScrollInProgress || lockedRoute != null,
         miniPlayerVisible = miniPlayerVisible,
         miniPlayerDisplayMode = miniPlayerDisplayMode,
         miniPlayerPlayFeedbackSignal = miniPlayerPlayFeedbackSignal,
@@ -857,13 +813,13 @@ fun MainContainer(
     settingsDataStore: SettingsDataStore,
     messageManager: MessageManager,
     listeningTracker: ListeningTracker,
-    recentAlbumsPanelExpandedInitial: Boolean,
     startRouteFromIntent: String?,
     onShowQueue: () -> Unit,
     onShowSleepTimer: () -> Unit,
     onContentReady: () -> Unit,
-    showMiniPlayerBar: Boolean,
+    playerBackgroundMode: PlayerBackgroundMode,
     coverBackgroundEnabled: Boolean,
+    dynamicFlowingBackgroundEnabled: Boolean,
     coverBackgroundClarity: Float,
     coverPreviewMode: CoverPreviewMode,
     nowPlayingHomeLayoutMode: NowPlayingHomeLayoutMode,
@@ -879,7 +835,7 @@ fun MainContainer(
     val currentRoute = navBackStackEntry?.destination?.route
     val mainRootView = LocalView.current
     var albumDetailStackPopTargetEntryId by remember { mutableStateOf<String?>(null) }
-    var albumDetailPageOffsetReader by remember { mutableStateOf<(() -> Float)?>(null) }
+    var albumDetailPageProgressReader by remember { mutableStateOf<(() -> Float)?>(null) }
     var albumDetailEnterPreparing by remember { mutableStateOf(false) }
     var albumDetailEnterRequestId by remember { mutableLongStateOf(0L) }
     val albumDetailInsetsDispatchSuppressor = remember(mainRootView) {
@@ -934,7 +890,7 @@ fun MainContainer(
         )
         if (!isAlbumDetailRoute(currentRoute)) {
             albumDetailStackPopTargetEntryId = null
-            albumDetailPageOffsetReader = null
+            albumDetailPageProgressReader = null
         }
     }
     val bottomNavItems = remember { bottomChromeNavItems() }
@@ -947,9 +903,10 @@ fun MainContainer(
         miniPlayerPlayFeedbackSignal += 1L
     }
     val primaryPagerRoutes = remember(bottomNavItems) { bottomNavItems.map { it.route } }
-    val primaryPagerBeyondBoundsPageCount = remember(primaryPagerRoutes) {
-        resolvePrimaryPagerBeyondBoundsPageCount(primaryPagerRoutes.size)
+    val primaryPagePreloadState = remember(primaryPagerRoutes) {
+        PrimaryPagePreloadState(primaryPagerRoutes.size)
     }
+    val initialLibraryContentReady = remember(libraryViewModel) { kotlinx.coroutines.CompletableDeferred<Unit>() }
     val initialPrimaryPage = remember(initialDestination, primaryPagerRoutes) {
         primaryPagerRoutes.indexOf(initialDestination).takeIf { it >= 0 } ?: 0
     }
@@ -964,6 +921,7 @@ fun MainContainer(
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val primaryContentStateHolder = rememberSaveableStateHolder()
+    val coverShadowCache = rememberAlbumCoverShadowCache()
     var primaryPagerScrollLocked by remember { mutableStateOf(false) }
     var pendingPrimaryNavigationRoute by remember { mutableStateOf<String?>(null) }
     val visualPrimaryRoute = remember(activePrimaryRoute, pendingPrimaryNavigationRoute, primaryPagerRoutes) {
@@ -1010,7 +968,6 @@ fun MainContainer(
     var pendingDetailNavigationSeq by remember { mutableIntStateOf(0) }
     var cancelPendingDetailNavigation by remember { mutableStateOf(false) }
     var albumDetailExitInProgress by remember { mutableStateOf(false) }
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val downloadsViewModel: DownloadsViewModel = hiltViewModel(activityViewModelStoreOwner)
     val onlineAudioDownloadConfirmation by downloadsViewModel.onlineAudioDownloadConfirmation.collectAsStateWithLifecycle()
@@ -1029,7 +986,6 @@ fun MainContainer(
                     old?.mediaMetadata?.artworkUri == new?.mediaMetadata?.artworkUri
             }
     }.collectAsStateWithLifecycle(initialValue = null)
-    val drawerStatusViewModel: DrawerStatusViewModel = hiltViewModel(activityViewModelStoreOwner)
     val bulkProgress by libraryViewModel.bulkProgress.collectAsStateWithLifecycle()
     val cloudSyncSelectionDialogState by libraryViewModel.cloudSyncSelectionDialogState.collectAsStateWithLifecycle()
     val appVolumePercent by playerViewModel.appVolumePercent.collectAsStateWithLifecycle()
@@ -1074,8 +1030,9 @@ fun MainContainer(
     
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-    // 使用 smallestScreenWidthDp 判定是否为手机 (一般 < 600dp 为手机)
-    val isPhone = configuration.smallestScreenWidthDp < 600
+    val isPhone = !rememberIsTabletDevice()
+    val useTabletRail = !isPhone && isLandscape && configuration.screenWidthDp >= 840
+    val tabletRailInset = if (useTabletRail) TabletNavigationRailWidth else 0.dp
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
     val updateState by settingsViewModel.updateState.collectAsStateWithLifecycle()
@@ -1144,11 +1101,7 @@ fun MainContainer(
     }
     val playerBackdropVisible = nowPlayingVisible
     val sharedPlayerIsVideo = sharedPlayerItem.isVideoPlaybackItem()
-    val videoOutputEnabled = shouldKeepVideoOutputEnabled(
-        currentItemIsVideo = sharedPlayerIsVideo,
-        miniPlayerEnabled = showMiniPlayerBar,
-        nowPlayingVisible = nowPlayingVisible
-    )
+    val videoOutputEnabled = sharedPlayerIsVideo
     DisposableEffect(playerViewModel, videoOutputEnabled) {
         playerViewModel.setVideoOutputEnabled(videoOutputEnabled)
         onDispose {
@@ -1156,10 +1109,12 @@ fun MainContainer(
         }
     }
     val sharedUseDragPreview = playerBackdropVisible &&
+        playerBackgroundMode == PlayerBackgroundMode.Theme &&
         coverBackgroundEnabled &&
         coverPreviewMode == CoverPreviewMode.Drag &&
         !sharedPlayerIsVideo
     val sharedUseMotionPreview = playerBackdropVisible &&
+        playerBackgroundMode == PlayerBackgroundMode.Theme &&
         coverBackgroundEnabled &&
         coverPreviewMode == CoverPreviewMode.Motion &&
         !sharedPlayerIsVideo
@@ -1200,7 +1155,17 @@ fun MainContainer(
         label = "nowPlayingBackdropAlpha"
     )
     val currentPrimaryRouteState = rememberUpdatedState(currentPrimaryRoute)
-    val pendingPrimaryNavigationRouteState = rememberUpdatedState(pendingPrimaryNavigationRoute)
+    val primaryPagePreloadEnabled = currentPrimaryRoute != null &&
+        !albumDetailExitInProgress && !nowPlayingBackdropActive &&
+        !pendingDetailNavigation && pendingPrimaryNavigationRoute == null &&
+        !primaryPagerState.isScrollInProgress && !blockNavTouches &&
+        !settingsDetailPageVisible && !primaryPagerScrollLocked && !primaryPagePreloadState.interactionActive
+    PreloadPrimaryPages(
+        state = primaryPagePreloadState,
+        pagerState = primaryPagerState,
+        routes = primaryPagerRoutes,
+        enabled = primaryPagePreloadEnabled,
+    )
     var primaryNavigationJob by remember { mutableStateOf<Job?>(null) }
     var primaryNavigationRequestId by remember { mutableLongStateOf(0L) }
     DisposableEffect(Unit) {
@@ -1216,46 +1181,31 @@ fun MainContainer(
         val requestId = primaryNavigationRequestId
         if (targetPage >= 0 && currentPrimaryRoute != null) {
             pendingPrimaryNavigationRoute = route
-            UiFrameWorkCoordinator.markFrameCritical(
-                PrimaryPageSwitchDurationMs + PrimaryPageSwitchQuietTailMs
-            )
-            primaryNavigationJob = scope.launch {
+            UiFrameWorkCoordinator.markFrameCritical(PrimaryPageSelectionQuietWindowMs)
+            primaryNavigationJob = scope.launch(start = CoroutineStart.LAZY) {
                 var completed = false
                 try {
                     primaryPagerState.stopScroll(MutatePriority.PreventUserInput)
-                    // 相邻页已由 Pager 保留在屏外。先提交 active/data-active 状态，让它在
-                    // 可见动画前完成一次状态恢复，避免数据订阅与动画首帧争抢主线程。
-                    withFrameNanos { }
-                    val currentPage = primaryPagerState.currentPage
-                    resolvePrimaryPagerApproachPage(
-                        currentPage = currentPage,
-                        targetPage = targetPage
-                    )?.let { approachPage ->
-                        primaryPagerState.scrollToPage(approachPage)
-                    }
-                    UiFrameWorkCoordinator.markFrameCritical(
-                        PrimaryPageSwitchDurationMs + PrimaryPageSwitchQuietTailMs
+                    primaryPagerState.scrollToPage(targetPage)
+                    val currentEntry = navController.currentBackStackEntry
+                    val currentDestination = resolveCurrentPrimaryDestinationRoute(
+                        currentRoute = currentEntry?.destination?.route,
+                        playlistSystemType = currentEntry?.arguments?.getString("type"),
                     )
-                    primaryPagerState.animateScrollToPage(
-                        page = targetPage,
-                        animationSpec = tween(
-                            durationMillis = PrimaryPageSwitchDurationMs,
-                            easing = PrimaryPageSwitchEasing
-                        )
-                    )
-                    if (currentPrimaryRouteState.value != route) {
+                    if (currentDestination != route) {
                         navController.navigatePrimaryRoute(route)
                     }
                     completed = true
                 } finally {
                     if (primaryNavigationRequestId == requestId) {
                         primaryNavigationJob = null
-                        if (!completed && pendingPrimaryNavigationRouteState.value == route) {
+                        if (!completed && pendingPrimaryNavigationRoute == route) {
                             pendingPrimaryNavigationRoute = null
                         }
                     }
                 }
             }
+            primaryNavigationJob?.start()
         } else {
             primaryNavigationJob = null
             pendingPrimaryNavigationRoute = null
@@ -1336,15 +1286,15 @@ fun MainContainer(
         when (result) {
             AppUpdateInstallResult.Started -> {
                 pendingAutomaticInstallPath = null
-                messageManager.showInfo("正在打开系统安装器")
+                messageManager.showInfo(appString(R.string.ui_opening_system_installer))
             }
             AppUpdateInstallResult.PermissionRequired -> {
                 pendingAutomaticInstallPath = apkPath
-                messageManager.showInfo("请允许 Eara 安装未知来源应用后继续安装")
+                messageManager.showInfo(appString(R.string.ui_please_allow_eara_to_continue_installing_apps_from))
             }
             AppUpdateInstallResult.FileInvalid -> {
                 pendingAutomaticInstallPath = null
-                messageManager.showError("下载文件无效，请重新下载")
+                messageManager.showError(appString(R.string.ui_the_download_file_is_invalid_please_download_again))
             }
             is AppUpdateInstallResult.Failed -> {
                 pendingAutomaticInstallPath = null
@@ -1449,7 +1399,7 @@ fun MainContainer(
         snapshotFlow { primaryPagerState.settledPage }
             .distinctUntilChanged()
             .collect { page ->
-                if (pendingPrimaryNavigationRouteState.value != null) return@collect
+                if (pendingPrimaryNavigationRoute != null) return@collect
                 val currentPrimary = currentPrimaryRouteState.value ?: return@collect
                 val targetRoute = primaryPagerRoutes.getOrNull(page) ?: return@collect
                 if (targetRoute != currentPrimary) {
@@ -1512,8 +1462,8 @@ fun MainContainer(
         }
     }
 
-    LaunchedEffect(currentPrimaryRoute, hasPreviousBackStackEntry, nowPlayingVisible, drawerState.isOpen) {
-        if (currentPrimaryRoute != Routes.Library || hasPreviousBackStackEntry || nowPlayingVisible || drawerState.isOpen) {
+    LaunchedEffect(currentPrimaryRoute, hasPreviousBackStackEntry, nowPlayingVisible) {
+        if (currentPrimaryRoute != Routes.Library || hasPreviousBackStackEntry || nowPlayingVisible) {
             lastLibraryBackPressElapsedRealtime = 0L
         }
     }
@@ -1543,7 +1493,6 @@ fun MainContainer(
     val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
     val isAlbumDetailRoute = currentRoute?.startsWith("album_detail") == true
     val topBarContentColor = if (isAlbumDetailRoute) Color.White else colorScheme.onSurface
-    val drawerContainerColor = if (colorScheme.isDark) Color(0xFF121212) else Color.White
 
     val defaultSystemUi = remember(activity) {
         activity?.let { act -> captureDefaultSystemUiState(act.window) }
@@ -1584,7 +1533,7 @@ fun MainContainer(
         onDispose { }
     }
 
-    // 普通播放页保持原方向策略，仅视频全屏时锁定横屏。
+    // 手机沿用播放页方向策略，平板所有页面保持横屏。
     LaunchedEffect(
         nowPlayingVisible,
         isPhone,
@@ -1635,10 +1584,6 @@ fun MainContainer(
         }
     }
 
-    BackHandler(drawerState.isOpen) {
-        scope.launch { drawerState.close() }
-    }
-
     BackHandler(pendingDetailNavigation && currentRoute == Routes.Search) {
         pendingDetailNavigation = false
         cancelPendingDetailNavigation = true
@@ -1647,7 +1592,6 @@ fun MainContainer(
     BackHandler(
         enabled = currentPrimaryRoute == Routes.Library &&
             !hasPreviousBackStackEntry &&
-            !drawerState.isOpen &&
             !pendingDetailNavigation &&
             !nowPlayingVisible
     ) {
@@ -1659,144 +1603,14 @@ fun MainContainer(
             }
         } else {
             lastLibraryBackPressElapsedRealtime = now
-            messageManager.showInfo("再按一次返回退出应用")
+            messageManager.showInfo(appString(R.string.ui_press_return_again_to_exit_the_app))
         }
     }
 
-    val drawerGesturesEnabled = false
-
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        gesturesEnabled = drawerGesturesEnabled,
-        drawerContent = {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(300.dp)
-                    .glassMenu(
-                        shape = RoundedCornerShape(topEnd = 26.dp, bottomEnd = 26.dp),
-                        baseColor = drawerContainerColor,
-                        elevation = if (colorScheme.isDark) 0.dp else 6.dp,
-                        isDark = colorScheme.isDark
-                    )
-            ) {
-                ModalDrawerSheet(
-                    drawerContainerColor = Color.Transparent,
-                    drawerContentColor = colorScheme.onSurface,
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    val navItems = listOf(
-                        Triple(Icons.Rounded.Home, "本地库", "library"),
-                        Triple(Icons.Rounded.Search, "在线搜索", "search"),
-                        Triple(Icons.Rounded.Favorite, "我的收藏", "playlist_system/favorites"),
-                        Triple(Icons.AutoMirrored.Rounded.QueueMusic, "我的列表", "playlists"),
-                        Triple(Icons.Rounded.Folder, "我的分组", "groups"),
-                        Triple(Icons.Rounded.Sync, "任务管理", "downloads"),
-                        Triple(Icons.Rounded.Route, "ASMR 看板", "listening_calendar"),
-                        Triple(Icons.Rounded.Settings, "设置", "settings")
-                    )
-
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_launcher_foreground),
-                                contentDescription = null,
-                                tint = colorScheme.onSurface,
-                                modifier = Modifier.size(46.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                stringResource(R.string.app_name),
-                                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                                color = colorScheme.onSurface
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                            LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
-                                flingBehavior = rememberCalmScrollableFlingBehavior(),
-                                contentPadding = PaddingValues(top = 10.dp, bottom = 32.dp)
-                            ) {
-                                items(navItems, key = { it.third }) { (icon, label, route) ->
-                                    val isAlbumDetailFromSearch =
-                                        currentRoute?.startsWith("album_detail_rj") == true ||
-                                            currentRoute?.startsWith("album_detail_online") == true
-                                    val isAlbumDetailFromLibrary =
-                                        currentRoute?.startsWith("album_detail/") == true &&
-                                            !currentRoute.startsWith("album_detail_rj")
-                                    val isSelected = when (route) {
-                                        "library" -> currentRoute == route || isAlbumDetailFromLibrary
-                                        "search" -> currentRoute == route || isAlbumDetailFromSearch
-                                        "groups" -> currentRoute == route ||
-                                            currentRoute?.startsWith("group/") == true
-                                        "playlist_system/favorites" -> {
-                                            currentRoute == "playlist_system/{type}" &&
-                                                navBackStackEntry?.arguments?.getString("type") == "favorites"
-                                        }
-                                        else -> currentRoute == route
-                                    }
-                                    DrawerNavCardItem(
-                                        icon = icon,
-                                        label = label,
-                                        selected = isSelected,
-                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                                        onClick = { openPrimaryRoute(route) }
-                                    )
-                                }
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.TopCenter)
-                                    .fillMaxWidth()
-                                    .height(18.dp)
-                                    .background(
-                                        Brush.verticalGradient(
-                                            colors = listOf(drawerContainerColor, Color.Transparent)
-                                        )
-                                    )
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .fillMaxWidth()
-                                    .height(28.dp)
-                                    .background(
-                                        Brush.verticalGradient(
-                                            colors = listOf(Color.Transparent, drawerContainerColor)
-                                        )
-                                    )
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-                        DrawerSiteStatusFooter(drawerStatusViewModel, modifier = Modifier.padding(horizontal = 18.dp))
-                        Spacer(modifier = Modifier.height(18.dp))
-                    }
-                }
-            }
-        }
-    ) {
-        val miniPlayerVisible = showMiniPlayerBar &&
-            hasCurrentMediaItem &&
-            !nowPlayingVisible
+    Box(Modifier.fillMaxSize()) {
+        val miniPlayerHasContent = hasCurrentMediaItem
+        val miniPlayerVisible = miniPlayerHasContent && !nowPlayingVisible
         val bottomChromeVisible = !nowPlayingVisible
-        val rightPanelExpandedFromStore by settingsDataStore.recentAlbumsPanelExpanded
-            .collectAsStateWithLifecycle(initialValue = recentAlbumsPanelExpandedInitial)
-        val rightPanelExpandedState = remember(settingsDataStore, scope, recentAlbumsPanelExpandedInitial) {
-            PersistedBooleanState(initial = recentAlbumsPanelExpandedInitial) { expanded ->
-                scope.launch { settingsDataStore.setRecentAlbumsPanelExpanded(expanded) }
-            }
-        }
-        LaunchedEffect(rightPanelExpandedFromStore) {
-            rightPanelExpandedState.updateFromStore(rightPanelExpandedFromStore)
-        }
         // 专辑详情始终覆盖在主页面之上；让底层顶栏/页面 active 标记在整个详情生命周期内
         // 保持稳定，退出时只更新必要的详情页位移和裁剪，不在同一帧重建整套主页面 chrome。
         val currentScreenIsPrimary = currentPrimaryRoute != null ||
@@ -1805,6 +1619,11 @@ fun MainContainer(
         val showPrimaryBrand = currentScreenIsPrimary
         val hasOverlayRoute = currentPrimaryRoute == null && !albumDetailExitInProgress
         val albumDetailTransitionActive = isAlbumDetailRoute || albumDetailExitInProgress
+        val primaryPageExposed by remember(albumDetailTransitionActive, albumDetailPageProgressReader) {
+            derivedStateOf {
+                !albumDetailTransitionActive || (albumDetailPageProgressReader?.invoke() ?: 1f) > 0f
+            }
+        }
         val primaryPageParallaxActive = hasOverlayRoute && !albumDetailTransitionActive
         val primaryPageParallaxOffset = animateDpAsState(
             targetValue = if (primaryPageParallaxActive) -PrimaryPageParallaxOffset else 0.dp,
@@ -1818,6 +1637,17 @@ fun MainContainer(
             ),
             label = "primaryPageParallaxOffset"
         )
+        val rowRasterCacheTarget = rememberAlbumRowRasterCacheTarget(
+            eligiblePage = {
+                val page = primaryPagerState.currentPage
+                val route = primaryPagerRoutes.getOrNull(page)
+                if (primaryPageExposed && !primaryPagerState.isScrollInProgress &&
+                    primaryPagerState.currentPageOffsetFraction == 0f &&
+                    (route == Routes.Library || route == Routes.Search || route == Routes.HotListening)
+                ) page else null
+            },
+            transformIsIdentity = { primaryPageParallaxOffset.value == 0.dp },
+        )
         val useLargeBottomChrome = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact && !isPhone
         val navigationBarBottomPadding = StableWindowInsets.navigationBars
             .only(WindowInsetsSides.Bottom)
@@ -1825,6 +1655,8 @@ fun MainContainer(
             .calculateBottomPadding()
         val bottomChromeBottomPadding = 24.dp + navigationBarBottomPadding
         val bottomOverlayPadding = bottomChromeOverlayHeight(useLargeBottomChrome) + navigationBarBottomPadding
+        // 播放页覆盖期间仍保留迷你播放栏占位，避免底层空态在转场中重新居中。
+        val tabletBottomPadding = (if (miniPlayerHasContent) 96.dp else 16.dp) + navigationBarBottomPadding
         var secondaryPageTopPadding by remember { mutableStateOf(0.dp) }
         val pageTranslationHeader = remember { PageTranslationHeaderState() }
         val headerBlur = rememberProgressiveHeaderBlur()
@@ -1859,29 +1691,29 @@ fun MainContainer(
                                 } else ""
                                 val appName = stringResource(R.string.app_name)
                                 val titleText = when {
-                                    resolvedTitleRoute == "library" -> "本地库"
-                                    resolvedTitleRoute == "library_filter" -> "筛选"
-                                    resolvedTitleRoute == "search" -> "在线搜索"
-                                    resolvedTitleRoute == Routes.SearchAssist -> "在线搜索"
-                                    resolvedTitleRoute == Routes.SearchAssistPattern -> "在线搜索"
-                                    resolvedTitleRoute == Routes.HotListening -> "热门收听"
-                                    resolvedTitleRoute == "playlists" -> "我的列表"
+                                    resolvedTitleRoute == "library" -> appString(R.string.ui_library)
+                                    resolvedTitleRoute == "library_filter" -> appString(R.string.ui_filter)
+                                    resolvedTitleRoute == "search" -> appString(R.string.ui_search)
+                                    resolvedTitleRoute == Routes.SearchAssist -> appString(R.string.ui_search)
+                                    resolvedTitleRoute == Routes.SearchAssistPattern -> appString(R.string.ui_search)
+                                    resolvedTitleRoute == Routes.HotListening -> appString(R.string.ui_popular)
+                                    resolvedTitleRoute == "playlists" -> appString(R.string.ui_playlists)
                                     resolvedTitleRoute == "playlist/{playlistId}/{playlistName}" ->
-                                        playlistName.ifBlank { "我的列表" }
-                                    resolvedTitleRoute == "playlist_system/favorites" -> "我的收藏"
+                                        playlistName.ifBlank { appString(R.string.ui_playlists) }
+                                    resolvedTitleRoute == "playlist_system/favorites" -> appString(R.string.ui_favorites)
                                     resolvedTitleRoute == "playlist_system/{type}" -> when (systemPlaylistType) {
-                                        "favorites" -> "我的收藏"
-                                        else -> "我的收藏"
+                                        "favorites" -> appString(R.string.ui_favorites)
+                                        else -> appString(R.string.ui_favorites)
                                     }
-                                    resolvedTitleRoute == "groups" -> "我的分组"
+                                    resolvedTitleRoute == "groups" -> appString(R.string.ui_groups)
                                     resolvedTitleRoute == "group/{groupId}/{groupName}" ->
-                                        groupName.ifBlank { "我的分组" }
-                                    resolvedTitleRoute == "settings" -> "设置"
-                                    resolvedTitleRoute == "downloads" -> "任务管理"
-                                    resolvedTitleRoute == "listening_calendar" -> "ASMR 看板"
-                                    resolvedTitleRoute == "dlsite_login" -> "DLsite 登录"
-                                    resolvedTitleRoute?.startsWith("playlist_picker") == true -> "添加到我的列表"
-                                    resolvedTitleRoute?.startsWith("album_detail") == true -> "专辑详情"
+                                        groupName.ifBlank { appString(R.string.ui_groups) }
+                                    resolvedTitleRoute == "settings" -> appString(R.string.ui_settings)
+                                    resolvedTitleRoute == "downloads" -> appString(R.string.ui_tasks)
+                                    resolvedTitleRoute == "listening_calendar" -> appString(R.string.ui_asmr_dashboard)
+                                    resolvedTitleRoute == "dlsite_login" -> appString(R.string.ui_dlsite_login)
+                                    resolvedTitleRoute?.startsWith("playlist_picker") == true -> appString(R.string.ui_add_to_my_lists)
+                                    resolvedTitleRoute?.startsWith("album_detail") == true -> appString(R.string.ui_album_details)
                                     else -> appName
                                 }
                                 AnimatedContent(
@@ -1926,8 +1758,8 @@ fun MainContainer(
                             ),
                             navigationIcon = {
                                 Box {
-                                    if (showPrimaryBrand || albumDetailTransitionActive) {
-                                        PrimaryTopBarBrand(
+                                    if (!useTabletRail && (showPrimaryBrand || albumDetailTransitionActive)) {
+                                        EaraBrand(
                                             appName = stringResource(R.string.app_name),
                                             tint = colorScheme.primaryStrong
                                         )
@@ -1971,7 +1803,7 @@ fun MainContainer(
                                                 onClick = { navController.navigate("downloads") },
                                                 modifier = Modifier.padding(end = 4.dp)
                                             ) {
-                                                Icon(Icons.Rounded.Inbox, contentDescription = "任务管理")
+                                                Icon(Icons.Rounded.Inbox, contentDescription = appString(R.string.ui_tasks))
                                             }
                                             if (activeTaskCount > 0) {
                                                 Badge(
@@ -1998,7 +1830,7 @@ fun MainContainer(
                                                     onClick = { viewMenuExpanded = true },
                                                     modifier = Modifier.padding(end = 4.dp)
                                                 ) {
-                                                    Icon(imageVector = icon, contentDescription = "切换视图")
+                                                    Icon(imageVector = icon, contentDescription = appString(R.string.ui_switch_view))
                                                 }
                                                 MaterialTheme(
                                                     colorScheme = materialColorScheme.copy(
@@ -2012,7 +1844,7 @@ fun MainContainer(
                                                         modifier = Modifier.background(dynamicContainerColor)
                                                     ) {
                                                         DropdownMenuItem(
-                                                            text = { Text("专辑列表") },
+                                                            text = { Text(androidx.compose.ui.res.stringResource(R.string.ui_album_list)) },
                                                             leadingIcon = {
                                                                 Icon(Icons.AutoMirrored.Rounded.ViewList, contentDescription = null)
                                                             },
@@ -2027,7 +1859,7 @@ fun MainContainer(
                                                             color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
                                                         )
                                                         DropdownMenuItem(
-                                                            text = { Text("专辑卡片") },
+                                                            text = { Text(androidx.compose.ui.res.stringResource(R.string.ui_album_card)) },
                                                             leadingIcon = {
                                                                 Icon(Icons.Rounded.GridView, contentDescription = null)
                                                             },
@@ -2042,7 +1874,7 @@ fun MainContainer(
                                                             color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
                                                         )
                                                         DropdownMenuItem(
-                                                            text = { Text("音轨列表") },
+                                                            text = { Text(androidx.compose.ui.res.stringResource(R.string.ui_audio_track_list)) },
                                                             leadingIcon = {
                                                                 Icon(Icons.Rounded.Audiotrack, contentDescription = null)
                                                             },
@@ -2064,7 +1896,7 @@ fun MainContainer(
                                         ) {
                                             Icon(
                                                 imageVector = if (viewMode == 1) Icons.AutoMirrored.Rounded.ViewList else Icons.Rounded.ViewModule,
-                                                contentDescription = if (viewMode == 1) "切换为列表视图" else "切换为卡片视图"
+                                                contentDescription = if (viewMode == 1) appString(R.string.ui_switch_to_list_view) else appString(R.string.ui_switch_to_card_view)
                                             )
                                         }
                                     } else if (headerActionRoute == Routes.HotListening) {
@@ -2076,7 +1908,7 @@ fun MainContainer(
                                         ) {
                                             Icon(
                                                 imageVector = if (viewMode == 1) Icons.AutoMirrored.Rounded.ViewList else Icons.Rounded.ViewModule,
-                                                contentDescription = if (viewMode == 1) "切换为列表视图" else "切换为卡片视图"
+                                                contentDescription = if (viewMode == 1) appString(R.string.ui_switch_to_list_view) else appString(R.string.ui_switch_to_card_view)
                                             )
                                         }
                                     } else if (headerActionRoute == "downloads") {
@@ -2096,12 +1928,12 @@ fun MainContainer(
                                             TextButton(
                                                 onClick = { downloadsViewModel.pauseAll() },
                                                 colors = ButtonDefaults.textButtonColors(contentColor = topBarContentColor)
-                                            ) { Text("全部暂停") }
+                                            ) { Text(androidx.compose.ui.res.stringResource(R.string.ui_pause_all)) }
                                         } else if (hasPausedDownloads) {
                                             TextButton(
                                                 onClick = { downloadsViewModel.resumeAll() },
                                                 colors = ButtonDefaults.textButtonColors(contentColor = topBarContentColor)
-                                            ) { Text("全部继续") }
+                                            ) { Text(androidx.compose.ui.res.stringResource(R.string.ui_continue_all)) }
                                         }
                                     }
                                 }
@@ -2124,8 +1956,8 @@ fun MainContainer(
             }
         }
         CompositionLocalProvider(
-            LocalBottomOverlayPadding provides bottomOverlayPadding,
-            LocalRightPanelExpandedState provides rightPanelExpandedState,
+            LocalBottomOverlayPadding provides (if (useTabletRail) tabletBottomPadding else bottomOverlayPadding),
+            LocalTabletLayout provides TabletLayout(!isPhone, configuration.screenWidthDp.dp - tabletRailInset, configuration.screenHeightDp.dp),
             LocalPageTranslationHeader provides pageTranslationHeader,
         ) {
             Box(
@@ -2139,7 +1971,9 @@ fun MainContainer(
                         .graphicsLayer {
                             val width = size.width.toFloat().coerceAtLeast(1f)
                             val visibleRight = if (albumDetailTransitionActive) {
-                                albumDetailPageOffsetReader?.invoke()?.coerceIn(0f, width) ?: width
+                                val contentStart = tabletRailInset.toPx().coerceIn(0f, width)
+                                val progress = (albumDetailPageProgressReader?.invoke() ?: 1f).coerceIn(0f, 1f)
+                                contentStart + (width - contentStart) * progress
                             } else {
                                 width
                             }
@@ -2150,6 +1984,7 @@ fun MainContainer(
                         }
                 ) {
                     Scaffold(
+                        modifier = Modifier.padding(start = tabletRailInset),
                         contentWindowInsets = WindowInsets(0, 0, 0, 0),
                         containerColor = Color.Transparent,
                         contentColor = colorScheme.onBackground,
@@ -2176,6 +2011,7 @@ fun MainContainer(
                                     state = primaryPagerState,
                                     modifier = Modifier
                                         .fillMaxSize()
+                                        .observePrimaryPagePreloadInteractions(primaryPagePreloadState)
                                         .padding(top = if (headerBlur == null) topContentPadding else 0.dp)
                                         .graphicsLayer {
                                             translationX = if (albumDetailTransitionActive) {
@@ -2184,7 +2020,7 @@ fun MainContainer(
                                                 primaryPageParallaxOffset.value.toPx()
                                             }
                                         },
-                                    beyondViewportPageCount = primaryPagerBeyondBoundsPageCount,
+                                    beyondViewportPageCount = primaryPagePreloadState.beyondBoundsPageCount,
                                     flingBehavior = primaryPagerFlingBehavior,
                                     userScrollEnabled = !primaryPagerScrollLocked && !hasOverlayRoute,
                                     key = { primaryPagerRoutes[it] }
@@ -2198,11 +2034,31 @@ fun MainContainer(
                                             )
                                     val primaryRouteImmediatelyActive = !hasOverlayRoute &&
                                         (primaryRouteActive || pagerRouteVisible)
-                                    // ViewModel 的 StateFlow 已经持有最新页面数据；隐藏页面无需继续
-                                    // 收集、排序和转换数据。目标页在横向手势开始时会立即恢复收集。
+                                    val pageActuallyVisible by remember(page, primaryPagerState) {
+                                        derivedStateOf {
+                                            val layout = primaryPagerState.layoutInfo
+                                            layout.visiblePagesInfo.any {
+                                                it.index == page && it.offset < layout.viewportEndOffset &&
+                                                    it.offset + layout.pageSize > layout.viewportStartOffset
+                                            }
+                                        }
+                                    }
+                                    val primaryPageContentVisible = primaryPageExposed &&
+                                        (pageActuallyVisible || primaryRouteActive || pagerRouteVisible)
+                                    val primaryRouteVisibleState = rememberUpdatedState(primaryPageContentVisible)
+                                    val deferredPageContent = remember(route) {
+                                        DeferredPageContentState(primaryRouteVisibleState, route)
+                                    }
+                                    LaunchedEffect(route, primaryPageContentVisible) {
+                                        tracePrimaryPagePreloadEvent("visible:$route:$primaryPageContentVisible")
+                                    }
+                                    val primaryRouteWarming = primaryPagePreloadEnabled &&
+                                        primaryPagePreloadState.requestedRoute == route &&
+                                        !primaryPagePreloadState.isComplete(route)
+                                    // 空闲期先让隐藏页消费首份真实数据并完成布局，再冻结订阅。
                                     // 详情页退出动画中使用已保留的主页面快照状态；等详情真正弹栈后再恢复
                                     // 数据流，避免在返回手势首帧同时启动查询、排序和列表状态转换。
-                                    val primaryRouteDataActive = primaryRouteImmediatelyActive &&
+                                    val primaryRouteDataActive = (primaryRouteImmediatelyActive || primaryRouteWarming) &&
                                         !isAlbumDetailRoute
                                     val primaryRouteDataActiveState = rememberUpdatedState(
                                         primaryRouteDataActive
@@ -2211,11 +2067,24 @@ fun MainContainer(
                                         searchAssistHeaderPadding
                                     } else 0.dp
                                     val pageHeaderBlur = if (overlayHeaderPadding > 0.dp) rememberProgressiveHeaderBlur() else null
+                                    val rowRasterCacheAllowed = when (route) {
+                                        Routes.Library, Routes.Search, Routes.HotListening -> {
+                                            rememberAlbumRowRasterCachePolicy {
+                                                rowRasterCacheTarget.value == page
+                                            }
+                                        }
+                                        else -> null
+                                    }
                                     CompositionLocalProvider(
+                                        LocalBottomOverlayPadding provides (if (useTabletRail) tabletBottomPadding else bottomOverlayPadding),
+                                        LocalAlbumRowRasterCacheAllowed provides rowRasterCacheAllowed,
+                                        LocalAlbumCoverShadowCache provides coverShadowCache,
+                                        LocalDeferredPageContent provides deferredPageContent,
                                         LocalMainHeaderPadding provides overlayHeaderPadding,
+                                        LocalPageAnimationsActive provides primaryPageContentVisible,
                                         LocalProgressiveHeaderBlur provides pageHeaderBlur,
                                     ) {
-                                    Box(
+                                    TabletPage(
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .then(
@@ -2231,11 +2100,15 @@ fun MainContainer(
                                         primaryContentStateHolder.SaveableStateProvider("primary_route:$route") {
                                             when (route) {
                                         Routes.Library -> {
+                                            PrimaryPagePreloadEffect(primaryPagePreloadState, route, primaryRouteWarming) {
+                                                initialLibraryContentReady.await()
+                                            }
                                             LibraryScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
                                                 isDataActive = primaryRouteDataActive,
                                                 scrollToTopSignal = libraryScrollToTopSignal,
+                                                onInitialContentReady = { initialLibraryContentReady.complete(Unit) },
                                                 onAlbumClick = { album ->
                                                     AlbumCoverHintStore.recordLocalAlbum(album)
                                                     navigator.openAlbumDetail(
@@ -2264,6 +2137,12 @@ fun MainContainer(
 
                                         Routes.Search -> {
                                             val searchViewModel: SearchViewModel = hiltViewModel(activityViewModelStoreOwner)
+                                            PrimaryPagePreloadEffect(primaryPagePreloadState, route, primaryRouteWarming) {
+                                                searchViewModel.uiState.first {
+                                                    it is com.asmr.player.ui.search.SearchUiState.Success ||
+                                                        it is com.asmr.player.ui.search.SearchUiState.Error
+                                                }
+                                            }
                                             SearchScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
@@ -2299,6 +2178,8 @@ fun MainContainer(
                                                         cv = album.cv,
                                                         coverUrl = album.coverUrl,
                                                         tags = album.tags,
+                                                        tagDetails = album.tagDetails,
+                                                        metadataLocale = album.metadataLocale,
                                                         ratingValue = album.ratingValue,
                                                         ratingCount = album.ratingCount,
                                                         releaseDate = album.releaseDate,
@@ -2321,6 +2202,11 @@ fun MainContainer(
 
                                         Routes.HotListening -> {
                                             val hotListeningViewModel: HotListeningViewModel = hiltViewModel(activityViewModelStoreOwner)
+                                            PrimaryPagePreloadEffect(primaryPagePreloadState, route, primaryRouteWarming) {
+                                                hotListeningViewModel.uiState.first {
+                                                    it !is com.asmr.player.ui.hotlistening.HotListeningUiState.Loading
+                                                }
+                                            }
                                             HotListeningScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
@@ -2335,6 +2221,8 @@ fun MainContainer(
                                                         cv = album.cv,
                                                         coverUrl = album.coverUrl,
                                                         tags = album.tags,
+                                                        tagDetails = album.tagDetails,
+                                                        metadataLocale = album.metadataLocale,
                                                         ratingValue = album.ratingValue,
                                                         ratingCount = album.ratingCount,
                                                         releaseDate = album.releaseDate,
@@ -2353,11 +2241,23 @@ fun MainContainer(
 
                                         "playlist_system/favorites" -> {
                                             val playlistsViewModel: PlaylistsViewModel = hiltViewModel(activityViewModelStoreOwner)
+                                            val playlistDetailViewModel: com.asmr.player.ui.playlists.PlaylistDetailViewModel =
+                                                hiltViewModel(activityViewModelStoreOwner)
+                                            PrimaryPagePreloadEffect(primaryPagePreloadState, route, primaryRouteWarming) {
+                                                playlistsViewModel.awaitInitialContent()
+                                                playlistDetailViewModel.awaitInitialContent()
+                                            }
                                             SystemPlaylistScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
                                                 isDataActive = primaryRouteDataActive,
                                                 scrollToTopSignal = favoritesScrollToTopSignal,
+                                                playback = playerViewModel.playlistPlayback,
+                                                onResumeAll = { items, startItem, positionMs ->
+                                                    playerViewModel.resumePlaylistItems(items, startItem, positionMs)
+                                                    if (startItem.isVideoPlaybackItem()) openNowPlaying()
+                                                    else requestMiniPlayerPlayFeedback()
+                                                },
                                                 onPlayAll = { items, startItem ->
                                                     playerViewModel.playPlaylistItems(items, startItem)
                                                     if (startItem.isVideoPlaybackItem()) {
@@ -2366,12 +2266,16 @@ fun MainContainer(
                                                         requestMiniPlayerPlayFeedback()
                                                     }
                                                 },
-                                                viewModel = playlistsViewModel
+                                                viewModel = playlistsViewModel,
+                                                playlistDetailViewModel = playlistDetailViewModel,
                                             )
                                         }
 
                                         "playlists" -> {
                                             val playlistsViewModel: PlaylistsViewModel = hiltViewModel(activityViewModelStoreOwner)
+                                            PrimaryPagePreloadEffect(primaryPagePreloadState, route, primaryRouteWarming) {
+                                                playlistsViewModel.awaitInitialContent()
+                                            }
                                             PlaylistsScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
@@ -2381,12 +2285,36 @@ fun MainContainer(
                                                     val encoded = URLEncoder.encode(playlist.name, "UTF-8")
                                                     navController.navigateSingleTop("playlist/${playlist.id}/$encoded")
                                                 },
+                                                detailContent = { playlist ->
+                                                    val detailViewModel: com.asmr.player.ui.playlists.PlaylistDetailViewModel =
+                                                        hiltViewModel(activityViewModelStoreOwner, key = "tablet_playlist_detail")
+                                                    PlaylistDetailScreen(
+                                                        windowSizeClass = windowSizeClass,
+                                                        playlistId = playlist.id,
+                                                        title = playlist.name,
+                                                        isActive = primaryRouteActive,
+                                                        isDataActive = primaryRouteDataActive,
+                                                        viewModel = detailViewModel,
+                                                        playback = playerViewModel.playlistPlayback,
+                                                        onPlayAll = { items, startItem ->
+                                                            playerViewModel.playPlaylistItems(items, startItem)
+                                                            if (startItem.isVideoPlaybackItem()) openNowPlaying() else requestMiniPlayerPlayFeedback()
+                                                        },
+                                                        onResumeAll = { items, startItem, positionMs ->
+                                                            playerViewModel.resumePlaylistItems(items, startItem, positionMs)
+                                                            if (startItem.isVideoPlaybackItem()) openNowPlaying() else requestMiniPlayerPlayFeedback()
+                                                        },
+                                                    )
+                                                },
                                                 viewModel = playlistsViewModel
                                             )
                                         }
 
                                         "groups" -> {
                                             val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel(activityViewModelStoreOwner)
+                                            PrimaryPagePreloadEffect(primaryPagePreloadState, route, primaryRouteWarming) {
+                                                albumGroupsViewModel.awaitInitialContent()
+                                            }
                                             com.asmr.player.ui.groups.AlbumGroupsScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
@@ -2396,11 +2324,27 @@ fun MainContainer(
                                                     val encoded = encodeRouteArg(group.name)
                                                     navController.navigateSingleTop("group/${group.id}/$encoded")
                                                 },
+                                                detailContent = { group ->
+                                                    val detailViewModel: com.asmr.player.ui.groups.AlbumGroupDetailViewModel =
+                                                        hiltViewModel(activityViewModelStoreOwner, key = "tablet_group_detail")
+                                                    com.asmr.player.ui.groups.AlbumGroupDetailScreen(
+                                                        windowSizeClass = windowSizeClass,
+                                                        groupId = group.id,
+                                                        title = group.name,
+                                                        isDataActive = primaryRouteDataActive,
+                                                        viewModel = detailViewModel,
+                                                        onPlayMediaItems = { items, startIndex ->
+                                                            playerViewModel.playMediaItems(items, startIndex)
+                                                            if (items.getOrNull(startIndex).isVideoPlaybackItem()) openNowPlaying() else requestMiniPlayerPlayFeedback()
+                                                        },
+                                                    )
+                                                },
                                                 viewModel = albumGroupsViewModel
                                             )
                                         }
 
                                         "settings" -> {
+                                            PrimaryPagePreloadEffect(primaryPagePreloadState, route, primaryRouteWarming)
                                             SettingsScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
@@ -2420,6 +2364,9 @@ fun MainContainer(
                                         "listening_calendar" -> {
                                             val listeningCalendarViewModel: com.asmr.player.ui.calendar.ListeningCalendarViewModel =
                                                 hiltViewModel(activityViewModelStoreOwner)
+                                            PrimaryPagePreloadEffect(primaryPagePreloadState, route, primaryRouteWarming) {
+                                                listeningCalendarViewModel.awaitInitialContent()
+                                            }
                                             com.asmr.player.ui.calendar.ListeningCalendarScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
@@ -2488,6 +2435,7 @@ fun MainContainer(
                                 },
                                 modifier = Modifier
                                     .fillMaxSize()
+                                    .padding(start = tabletRailInset)
                             ) {
 
                 composable("library") {
@@ -2663,9 +2611,9 @@ fun MainContainer(
                             albumDetailStackPopTargetEntryId = targetEntryId
                             navController.popBackStack()
                         },
-                        onPageOffsetReader = { reader ->
+                        onPageProgressReader = { reader ->
                             if (navController.currentBackStackEntry?.id == backStackEntry.id) {
-                                albumDetailPageOffsetReader = reader
+                                albumDetailPageProgressReader = reader
                             }
                         },
                         onExitStateChanged = { albumDetailExitInProgress = it },
@@ -2752,9 +2700,9 @@ fun MainContainer(
                             albumDetailStackPopTargetEntryId = targetEntryId
                             navController.popBackStack()
                         },
-                        onPageOffsetReader = { reader ->
+                        onPageProgressReader = { reader ->
                             if (navController.currentBackStackEntry?.id == backStackEntry.id) {
-                                albumDetailPageOffsetReader = reader
+                                albumDetailPageProgressReader = reader
                             }
                         },
                         onExitStateChanged = { albumDetailExitInProgress = it },
@@ -2837,9 +2785,9 @@ fun MainContainer(
                             albumDetailStackPopTargetEntryId = targetEntryId
                             navController.popBackStack()
                         },
-                        onPageOffsetReader = { reader ->
+                        onPageProgressReader = { reader ->
                             if (navController.currentBackStackEntry?.id == backStackEntry.id) {
-                                albumDetailPageOffsetReader = reader
+                                albumDetailPageProgressReader = reader
                             }
                         },
                         onExitStateChanged = { albumDetailExitInProgress = it },
@@ -2959,6 +2907,12 @@ fun MainContainer(
                             windowSizeClass = windowSizeClass,
                             playlistId = playlistId,
                             title = playlistName,
+                            playback = playerViewModel.playlistPlayback,
+                            onResumeAll = { items, startItem, positionMs ->
+                                playerViewModel.resumePlaylistItems(items, startItem, positionMs)
+                                if (startItem.isVideoPlaybackItem()) openNowPlaying()
+                                else requestMiniPlayerPlayFeedback()
+                            },
                             onPlayAll = { items, startItem ->
                                 playerViewModel.playPlaylistItems(items, startItem)
                                 if (startItem.isVideoPlaybackItem()) {
@@ -2979,6 +2933,12 @@ fun MainContainer(
                         SecondaryPageBackground(topPadding = secondaryPageTopPadding) {
                             SystemPlaylistScreen(
                                 windowSizeClass = windowSizeClass,
+                                playback = playerViewModel.playlistPlayback,
+                                onResumeAll = { items, startItem, positionMs ->
+                                    playerViewModel.resumePlaylistItems(items, startItem, positionMs)
+                                    if (startItem.isVideoPlaybackItem()) openNowPlaying()
+                                    else requestMiniPlayerPlayFeedback()
+                                },
                                 onPlayAll = { items, startItem ->
                                     playerViewModel.playPlaylistItems(items, startItem)
                                     if (startItem.isVideoPlaybackItem()) {
@@ -3055,11 +3015,11 @@ fun MainContainer(
                 val albumDetailViewModel: AlbumDetailViewModel = hiltViewModel(navBackStackEntry!!)
                 FlatTextFieldDialog(
                     onDismissRequest = { showManualRjDialog = false },
-                    message = "请输入 DLsite 作品编号，支持 RJ、BJ、VJ；保存后将自动执行云同步。",
+                    message = appString(R.string.ui_please_enter_the_dlsite_work_number_support_rj),
                     value = manualRjInput,
                     onValueChange = { manualRjInput = it },
-                    placeholder = "作品编号（如 BJ02370869）",
-                    confirmText = "同步",
+                    placeholder = appString(R.string.ui_work_number_such_as_bj02370869),
+                    confirmText = appString(R.string.ui_synchronous),
                     confirmEnabled = manualRjInput.trim().isNotBlank(),
                     onConfirm = {
                         showManualRjDialog = false
@@ -3090,38 +3050,45 @@ fun MainContainer(
                 )
             }
 
-        if (bottomChromeVisible) {
-            BoxWithConstraints(
-                modifier = Modifier.fillMaxSize()
-            ) {
-                val bottomChromeHorizontalPadding = if (useLargeBottomChrome) 16.dp else 12.dp
-                val isCompactWidth = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
-                val canUseRightPanel = !isCompactWidth &&
-                    !isPhone &&
-                    isLandscape &&
-                    (currentRoute == "library" || currentRoute == "search")
-                val rightPanelExpanded = rightPanelExpandedState.value
-                val rightPanelWidth = (maxWidth - 560.dp).coerceAtMost(420.dp)
-                val showRightPanel = canUseRightPanel && rightPanelWidth >= 300.dp
-                val reservedRightTarget = if (!showRightPanel) {
-                    0.dp
-                } else if (rightPanelExpanded) {
-                    rightPanelWidth + 12.dp
-                } else {
-                    36.dp + 12.dp
-                }
-                val reservedRight by animateDpAsState(
-                    targetValue = reservedRightTarget,
-                    animationSpec = tween(durationMillis = if (rightPanelExpanded) 220 else 180),
-                    label = "miniPlayerReservedRight"
+        if (useTabletRail && !nowPlayingVisible) {
+            TabletNavigationRail(
+                activeRoute = visualPrimaryRoute,
+                onNavigate = { route ->
+                    if (route == visualPrimaryRoute && currentPrimaryRoute != null) triggerPrimaryRouteScrollToTop(route)
+                    else openPrimaryRoute(route)
+                },
+                modifier = Modifier.align(Alignment.CenterStart),
+            )
+            if (miniPlayerVisible) {
+                MiniPlayer(
+                    displayMode = MiniPlayerDisplayMode.Expanded,
+                    onDisplayModeChange = {},
+                    allowCollapse = false,
+                    onOpenNowPlaying = openNowPlaying,
+                    onOpenQueue = onShowQueue,
+                    playFeedbackSignal = miniPlayerPlayFeedbackSignal,
+                    largeLayout = true,
+                    viewModel = playerViewModel,
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                        .padding(start = tabletRailInset + 16.dp, end = 16.dp, bottom = 16.dp + navigationBarBottomPadding)
+                        .fillMaxWidth(),
                 )
-                val chromeWidth = (maxWidth - reservedRight - (bottomChromeHorizontalPadding * 2)).coerceAtLeast(0.dp)
+            }
+        }
+
+        if (bottomChromeVisible && !useTabletRail) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                val bottomChromeHorizontalPadding = if (useLargeBottomChrome) 16.dp else 12.dp
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .graphicsLayer { clip = false }
-                        .padding(start = bottomChromeHorizontalPadding, bottom = bottomChromeBottomPadding)
-                        .width(chromeWidth)
+                        .padding(
+                            start = bottomChromeHorizontalPadding,
+                            end = bottomChromeHorizontalPadding,
+                            bottom = bottomChromeBottomPadding
+                        )
+                        .fillMaxWidth()
                 ) {
                     PrimaryBottomChrome(
                         activeRoute = visualPrimaryRoute,
@@ -3162,6 +3129,12 @@ fun MainContainer(
         }
 
         if (nowPlayingVisible) {
+            val playerBackdropColors = remember(colorScheme, playerBackgroundMode, coverBackgroundEnabled) {
+                playerSurfaceColors(colorScheme, playerBackgroundMode, coverBackgroundEnabled)
+            }
+            val backdropIsPlaying by remember(playerViewModel) {
+                playerViewModel.playback.map { it.isPlaying }.distinctUntilChanged()
+            }.collectAsStateWithLifecycle(initialValue = false)
             Box(
                 modifier = Modifier.fillMaxSize()
             ) {
@@ -3178,15 +3151,8 @@ fun MainContainer(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(colorScheme.background)
+                            .background(playerBackdropColors.background)
                     )
-                    if (!colorScheme.isDark) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(colorScheme.primarySoft.copy(alpha = 0.14f))
-                        )
-                    }
                 }
                 Box(
                     modifier = Modifier
@@ -3195,13 +3161,16 @@ fun MainContainer(
                 ) {
                     PlayerSharedBackdrop(
                         mediaItem = sharedPlayerItem,
-                        enabled = coverBackgroundEnabled,
+                        backgroundMode = playerBackgroundMode,
+                        coverEnabled = coverBackgroundEnabled,
                         clarity = coverBackgroundClarity,
-                        artworkAlignment = sharedPlayerBackdropAlignment
+                        artworkAlignment = sharedPlayerBackdropAlignment,
+                        isPlaying = backdropIsPlaying,
+                        isActive = nowPlayingBackdropActive,
+                        dynamicEnabled = dynamicFlowingBackgroundEnabled
                     )
                 }
                 NowPlayingScreen(
-                    windowSizeClass = windowSizeClass,
                     hardwareVolumeEventTick = nowPlayingVolumeEventTick,
                     onInlineVolumeControlVisibilityChanged = { nowPlayingUsesInlineVolumeControl = it },
                     onEqualizerVisibilityChanged = { nowPlayingEqualizerVisible = it },
@@ -3222,7 +3191,9 @@ fun MainContainer(
                         nowPlayingPlaylistPickerRequest = PlaylistPickerRequest(items = listOf(item))
                     },
                     viewModel = playerViewModel,
+                    playerBackgroundMode = playerBackgroundMode,
                     coverBackgroundEnabled = coverBackgroundEnabled,
+                    dynamicFlowingBackgroundEnabled = dynamicFlowingBackgroundEnabled,
                     coverBackgroundClarity = coverBackgroundClarity,
                     coverPreviewMode = coverPreviewMode,
                     nowPlayingHomeLayoutMode = nowPlayingHomeLayoutMode,
@@ -3371,30 +3342,30 @@ fun MainContainer(
         automaticUpdateAvailable?.let { available ->
             val release = available.release
             FlatActionDialog(
-                message = "发现新版本：${release.tagName}",
+                message = appString(R.string.ui_new_version_found, release.tagName),
                 onDismissRequest = { automaticUpdateDialogDismissed = true },
                 actions = listOf(
                     FlatDialogAction(
-                        text = "立即更新",
+                        text = appString(R.string.ui_update_now),
                         tone = FlatDialogActionTone.Primary,
                         onClick = {
                             automaticUpdateDialogDismissed = true
                             automaticUpdateInstallRequested = true
                             settingsViewModel.downloadLatestApk()
-                            messageManager.showInfo("开始下载更新…")
+                            messageManager.showInfo(appString(R.string.ui_start_downloading_updates))
                         }
                     ),
                     FlatDialogAction(
-                        text = "不再提醒",
+                        text = appString(R.string.ui_don_t_remind_again),
                         tone = FlatDialogActionTone.Danger,
                         onClick = {
                             automaticUpdateDialogDismissed = true
                             settingsViewModel.disableAutoUpdateCheck()
-                            messageManager.showInfo("已关闭启动时自动检查更新")
+                            messageManager.showInfo(appString(R.string.ui_automatically_checking_for_updates_on_startup_is_turned))
                         }
                     ),
                     FlatDialogAction(
-                        text = "详情",
+                        text = appString(R.string.ui_details),
                         leadingIcon = {
                             Icon(
                                 painter = painterResource(R.drawable.ic_github),
@@ -3405,7 +3376,7 @@ fun MainContainer(
                         onClick = {
                             automaticUpdateDialogDismissed = true
                             if (!openUpdateReleasePage(context, release)) {
-                                messageManager.showError("无法打开 GitHub 发布页")
+                                messageManager.showError(appString(R.string.ui_unable_to_open_github_releases_page))
                             }
                         }
                     )
@@ -3413,7 +3384,7 @@ fun MainContainer(
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        text = "当前版本：${BuildConfig.VERSION_NAME}",
+                        text = appString(R.string.ui_current_version, BuildConfig.VERSION_NAME),
                         style = MaterialTheme.typography.bodySmall,
                         color = colorScheme.textSecondary
                     )
@@ -3428,7 +3399,7 @@ fun MainContainer(
                     }
                     if (release.apkName.isNotBlank()) {
                         Text(
-                            text = "安装包：${release.apkName}",
+                            text = appString(R.string.ui_installation_package, release.apkName),
                             style = MaterialTheme.typography.bodySmall,
                             color = colorScheme.textSecondary,
                             maxLines = 1,

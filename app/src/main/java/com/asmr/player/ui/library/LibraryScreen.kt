@@ -1,26 +1,31 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
+import com.asmr.player.ui.common.AlbumRowRasterCacheScope
+import com.asmr.player.ui.common.rememberLightweightVerticalOverscrollState
+
 import com.asmr.player.ui.common.formatCvNames
+import com.asmr.player.ui.common.LocalTabletLayout
 import com.asmr.player.ui.common.LocalMainHeaderPadding
+import com.asmr.player.ui.common.LocalPageAnimationsActive
 import com.asmr.player.ui.common.progressiveHeaderContent
 
 import com.asmr.player.translation.PageTranslationHost
 import com.asmr.player.translation.translatedPageText
 
-import android.content.Intent
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.gestures.stopScroll
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,31 +40,20 @@ import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.items as staggeredItems
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CreateNewFolder
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.FilterList
-import androidx.compose.material.icons.rounded.GridView
-import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material.icons.rounded.Sync
-import androidx.compose.material.icons.rounded.MoreVert
-import androidx.compose.material.icons.rounded.ViewList
-import androidx.compose.material.icons.rounded.Audiotrack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.foundation.layout.fillMaxHeight
 import com.asmr.player.util.Formatting
 import com.asmr.player.util.isOnlineTrackPath
-import com.asmr.player.data.local.db.entities.titleForDisplay
-import com.asmr.player.ui.common.SubtitleStamp
-import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.AudioItemMenuAction
 import com.asmr.player.ui.common.AudioItemRow
@@ -70,6 +64,7 @@ import com.asmr.player.ui.common.FlatActionDialog
 import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.interruptScrollableFlingOnPointerDown
+import com.asmr.player.ui.common.interruptOngoingScroll
 import com.asmr.player.ui.common.lightweightVerticalStretchOverscroll
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.queryCachedTrackFileSize
@@ -82,29 +77,24 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.Surface
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.State
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -134,8 +124,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.lerp
 import com.asmr.player.ui.theme.AsmrTheme
-import com.asmr.player.ui.sidepanel.LandscapeRightPanelHost
-import com.asmr.player.ui.sidepanel.RecentAlbumsPanel
 import com.asmr.player.cache.ImageCacheEntryPoint
 import com.asmr.player.cache.LazyListPreloader
 import com.asmr.player.cache.LazyStaggeredGridPreloader
@@ -145,26 +133,20 @@ import com.asmr.player.ui.settings.SettingsViewModel
 import dagger.hilt.android.EntryPointAccessors
 
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.automirrored.rounded.Label
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Label
-import androidx.compose.material3.Card
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.style.TextOverflow
 import com.asmr.player.ui.common.AsmrAsyncImage
 import androidx.paging.LoadState
-import androidx.paging.compose.collectAsLazyPagingItems
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.graphics.graphicsLayer
@@ -182,7 +164,10 @@ import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.common.shouldFadeInCover
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.common.rememberSaveablePrefetchedLazyListState
+import com.asmr.player.ui.library.prepared.PreparedAlbumParagraphItem
+import com.asmr.player.ui.library.prepared.PreparedAlbumParagraphs
 import com.asmr.player.ui.common.collectAsStateWhileActive
+import com.asmr.player.ui.common.collectAsLazyPagingItemsWhileActive
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.playback.MediaItemFactory
 
@@ -200,51 +185,12 @@ private val LibraryTrackListHeaderCornerRadius = 10.dp
 private val LibraryTrackListItemCornerRadius = 10.dp
 private const val LibraryTrackPagingHintDistance = 10
 
+private fun libraryAlbumListItemKey(album: Album?, index: Int): Any =
+    album?.id?.takeIf { it > 0L } ?: index
+
 private fun Album.withUserTags(userTags: List<String>): Album {
     if (userTags.isEmpty()) return this
     return copy(tags = (tags + userTags).distinct())
-}
-
-@Composable
-private fun LibraryActionItem(
-    title: String,
-    icon: ImageVector,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    subtitle: String? = null
-) {
-    val colorScheme = AsmrTheme.colorScheme
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(colorScheme.surface.copy(alpha = 0.5f))
-            .clickable(onClick = onClick)
-            .padding(16.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = colorScheme.primary,
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = colorScheme.textPrimary
-                )
-                if (subtitle != null) {
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colorScheme.textSecondary
-                    )
-                }
-            }
-        }
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -253,6 +199,7 @@ fun LibraryScreen(
     windowSizeClass: WindowSizeClass,
     isActive: Boolean = true,
     isDataActive: Boolean = isActive,
+    onInitialContentReady: () -> Unit = {},
     onAlbumClick: (Album) -> Unit,
     onPlayTracks: (Album, List<Track>, Track) -> Unit,
     onOpenPlaylistPicker: (MediaItem) -> Unit = {},
@@ -267,6 +214,7 @@ fun LibraryScreen(
             windowSizeClass = windowSizeClass,
             isActive = isActive,
             isDataActive = isDataActive,
+            onInitialContentReady = onInitialContentReady,
             onAlbumClick = onAlbumClick,
             onPlayTracks = onPlayTracks,
             onOpenPlaylistPicker = onOpenPlaylistPicker,
@@ -285,6 +233,7 @@ private fun LibraryScreenContent(
     windowSizeClass: WindowSizeClass,
     isActive: Boolean = true,
     isDataActive: Boolean = isActive,
+    onInitialContentReady: () -> Unit = {},
     onAlbumClick: (Album) -> Unit,
     onPlayTracks: (Album, List<Track>, Track) -> Unit,
     onOpenPlaylistPicker: (MediaItem) -> Unit = {},
@@ -328,9 +277,9 @@ private fun LibraryScreenContent(
         val exists = searchBlockedKeywords.any { it.equals(keyword, ignoreCase = true) }
         settingsViewModel.addSearchBlockedKeyword(keyword)
         if (exists) {
-            viewModel.messageManager.showInfo("屏蔽词已存在：$keyword")
+            viewModel.messageManager.showInfo(appString(R.string.ui_blocked_word_already_exists, keyword))
         } else {
-            viewModel.messageManager.showSuccess("已添加屏蔽词：$keyword")
+            viewModel.messageManager.showSuccess(appString(R.string.ui_blocked_word_added, keyword))
         }
     }
 
@@ -345,16 +294,27 @@ private fun LibraryScreenContent(
     }
 
     val mode = (viewMode ?: 0).coerceIn(0, 2)
-    val isGrid = mode == 1
+    val tabletList = LocalTabletLayout.current.landscape && mode == 0
+    val isGrid = mode == 1 || tabletList
+    val activeScroll: ScrollableState = if (isGrid) gridState else listState
     val isTrackList = mode == 2
     var lastChromeResetMode by rememberSaveable { mutableStateOf(mode) }
-    val pagedAlbums = viewModel.pagedAlbums.collectAsLazyPagingItems()
-    val pagedTrackAlbumHeaders = viewModel.pagedTrackAlbumHeaders.collectAsLazyPagingItems()
+    val pagedAlbums = viewModel.pagedAlbums.collectAsLazyPagingItemsWhileActive(isDataActive)
+    val pagedTrackAlbumHeaders = viewModel.pagedTrackAlbumHeaders.collectAsLazyPagingItemsWhileActive(isDataActive)
+    val latestOnInitialContentReady = rememberUpdatedState(onInitialContentReady)
+    LaunchedEffect(isDataActive, viewMode, pagedAlbums, pagedTrackAlbumHeaders) {
+        if (!isDataActive || viewMode == null) return@LaunchedEffect
+        snapshotFlow {
+            val refresh = if (isTrackList) pagedTrackAlbumHeaders.loadState.refresh else pagedAlbums.loadState.refresh
+            refresh !is LoadState.Loading
+        }.first { it }
+        latestOnInitialContentReady.value()
+    }
     val pagedAlbumSnapshot = pagedAlbums.itemSnapshotList
     val pagedAlbumIndices = remember(pagedAlbumSnapshot.items.size) { List(pagedAlbumSnapshot.items.size) { it } }
     val loadedTrackAlbumHeaders = pagedTrackAlbumHeaders.itemSnapshotList.items
-    val expandedAlbumTracks by (if (isTrackList) viewModel.expandedTrackAlbumTracks else flowOf(emptyMap()))
-        .collectAsStateWithLifecycle(initialValue = emptyMap())
+    val expandedAlbumTracks by viewModel.expandedTrackAlbumTracks
+        .collectAsStateWhileActive(isDataActive && isTrackList)
     val expandedAlbumIds by viewModel.expandedTrackAlbumIds.collectAsStateWhileActive(isDataActive)
     var actionAlbum by remember { mutableStateOf<Album?>(null) }
     var showAlbumActions by remember { mutableStateOf(false) }
@@ -362,12 +322,7 @@ private fun LibraryScreenContent(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val chromeState = rememberCollapsibleHeaderState()
     fun stopActiveScroll() {
-        scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            when (mode) {
-                1 -> runCatching { gridState.stopScroll(MutatePriority.UserInput) }
-                else -> runCatching { listState.stopScroll(MutatePriority.UserInput) }
-            }
-        }
+        activeScroll.interruptOngoingScroll(scope)
     }
     val chromeReservedHeightPx = if (chromeState.heightPx > 0f) {
         chromeState.heightPx
@@ -392,8 +347,8 @@ private fun LibraryScreenContent(
             lastChromeResetMode = mode
         }
     }
-    LaunchedEffect(listState, mode) {
-        if (mode != 0 && mode != 2) return@LaunchedEffect
+    LaunchedEffect(listState, isGrid) {
+        if (isGrid) return@LaunchedEffect
         snapshotFlow {
             listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
         }
@@ -402,8 +357,8 @@ private fun LibraryScreenContent(
                 if (atTop) chromeState.expand()
             }
     }
-    LaunchedEffect(gridState, mode) {
-        if (mode != 1) return@LaunchedEffect
+    LaunchedEffect(gridState, isGrid) {
+        if (!isGrid) return@LaunchedEffect
         snapshotFlow {
             gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset == 0
         }
@@ -414,22 +369,13 @@ private fun LibraryScreenContent(
     }
     LaunchedEffect(scrollToTopSignal) {
         if (scrollToTopSignal == 0L) return@LaunchedEffect
-        when (mode) {
-            1 -> gridState.stopScroll(MutatePriority.PreventUserInput)
-            else -> listState.stopScroll(MutatePriority.PreventUserInput)
-        }
-        when (mode) {
-            1 -> gridState.scrollToItem(0)
-            else -> listState.scrollToItem(0)
-        }
+        activeScroll.stopScroll(MutatePriority.PreventUserInput)
+        if (isGrid) gridState.scrollToItem(0) else listState.scrollToItem(0)
         chromeState.expand()
     }
-    LaunchedEffect(isActive, mode) {
+    LaunchedEffect(isActive, isGrid) {
         if (isActive) return@LaunchedEffect
-        when (mode) {
-            1 -> gridState.stopScroll(MutatePriority.PreventUserInput)
-            else -> listState.stopScroll(MutatePriority.PreventUserInput)
-        }
+        activeScroll.interruptOngoingScroll(this, MutatePriority.PreventUserInput)
     }
 
     Scaffold(
@@ -441,54 +387,91 @@ private fun LibraryScreenContent(
         // 屏幕尺寸判断
         val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
 
-        LandscapeRightPanelHost(
-            windowSizeClass = windowSizeClass,
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize(),
-            topPanel = {
-                RecentAlbumsPanel(
-                    onOpenAlbum = { a ->
-                        onAlbumClick(
-                            Album(
-                                id = a.id,
-                                title = a.titleForDisplay,
-                                path = a.path,
-                                localPath = a.localPath,
-                                downloadPath = a.downloadPath,
-                                circle = a.circle,
-                                cv = a.cv,
-                                coverUrl = a.coverUrl,
-                                coverPath = a.coverPath,
-                                coverThumbPath = a.coverThumbPath,
-                                workId = a.workId,
-                                rjCode = a.rjCode,
-                                description = a.description
-                            )
-                        )
-                    },
-                    modifier = Modifier.fillMaxHeight()
-                )
-            },
-        ) { contentModifier, hasRightPanel, rightPanelToggle ->
-            Box(
-                modifier = contentModifier,
-                contentAlignment = if (hasRightPanel) Alignment.TopStart else Alignment.TopCenter
+        Box(
+            modifier = Modifier.padding(padding).fillMaxSize(),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            Column(
+                modifier = if (isCompact || LocalTabletLayout.current.isTablet) {
+                    Modifier.fillMaxSize()
+                } else {
+                    Modifier
+                        .fillMaxHeight()
+                        .widthIn(max = 760.dp)
+                        .fillMaxWidth()
+                }
             ) {
-                Column(
-                    modifier = if (isCompact) {
-                        Modifier.fillMaxSize()
-                    } else if (hasRightPanel) {
-                        Modifier.fillMaxSize()
-                    } else {
-                        Modifier
-                            .fillMaxHeight()
-                            .widthIn(max = 760.dp)
-                            .fillMaxWidth()
+                when (val state = uiState) {
+                is LibraryUiState.Loading -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clearFocusOnTapOutside(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        EaraLogoLoadingIndicator(tint = colorScheme.primary)
                     }
-                ) {
-                    when (val state = uiState) {
-                    is LibraryUiState.Loading -> {
+                }
+                is LibraryUiState.BulkInProgress -> {
+                    val progress = state.progress
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = when (progress.phase) {
+                                com.asmr.player.ui.library.BulkPhase.ScanningLocal -> appString(R.string.ui_scanning_local_library)
+                                com.asmr.player.ui.library.BulkPhase.SyncingCloud -> appString(R.string.ui_cloud_sync_in_progress)
+                            },
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = colorScheme.textPrimary
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        if (progress.total > 0) {
+                            LinearProgressIndicator(
+                                progress = { progress.fraction },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        } else if (LocalPageAnimationsActive.current) {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        } else {
+                            LinearProgressIndicator(progress = { 0f }, modifier = Modifier.fillMaxWidth())
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = appString(R.string.ui_progress, progress.current, progress.total),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colorScheme.textSecondary
+                        )
+                        if (progress.currentAlbumTitle.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = progress.currentAlbumTitle,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = colorScheme.textPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        if (progress.currentFile.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = appString(R.string.ui_scanning, progress.currentFile),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colorScheme.textSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(18.dp))
+                        Button(onClick = { viewModel.cancelBulkTask() }) { Text(androidx.compose.ui.res.stringResource(R.string.ui_cancel)) }
+                    }
+                }
+                is LibraryUiState.Success -> {
+                    if (viewMode == null) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -497,513 +480,468 @@ private fun LibraryScreenContent(
                         ) {
                             EaraLogoLoadingIndicator(tint = colorScheme.primary)
                         }
-                    }
-                    is LibraryUiState.BulkInProgress -> {
-                        val progress = state.progress
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Text(
-                                text = when (progress.phase) {
-                                    com.asmr.player.ui.library.BulkPhase.ScanningLocal -> "正在扫描本地库"
-                                    com.asmr.player.ui.library.BulkPhase.SyncingCloud -> "正在云同步"
-                                },
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = colorScheme.textPrimary
-                            )
-                            Spacer(modifier = Modifier.height(14.dp))
-                            if (progress.total > 0) {
-                                LinearProgressIndicator(
-                                    progress = { progress.fraction },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            } else {
-                                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                            }
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Text(
-                                text = "进度 ${progress.current}/${progress.total}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = colorScheme.textSecondary
-                            )
-                            if (progress.currentAlbumTitle.isNotBlank()) {
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = progress.currentAlbumTitle,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = colorScheme.textPrimary,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                            if (progress.currentFile.isNotBlank()) {
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = "正在扫描：${progress.currentFile}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = colorScheme.textSecondary,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(18.dp))
-                            Button(onClick = { viewModel.cancelBulkTask() }) { Text("取消") }
-                        }
-                    }
-                    is LibraryUiState.Success -> {
-                        if (viewMode == null) {
+                    } else {
+                        // Main content area
+                        CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .clearFocusOnTapOutside(),
-                                contentAlignment = Alignment.Center
+                                    .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
+                                    .progressiveHeaderContent()
                             ) {
-                                EaraLogoLoadingIndicator(tint = colorScheme.primary)
+                            val isTrackListLoading = isTrackList &&
+                                (pagedTrackAlbumHeaders.loadState.refresh is LoadState.Loading) &&
+                                pagedTrackAlbumHeaders.itemCount == 0
+                            val isAlbumListLoading = !isTrackList &&
+                                (pagedAlbums.loadState.refresh is LoadState.Loading) &&
+                                pagedAlbums.itemCount == 0
+                            val isLoading = isTrackListLoading || isAlbumListLoading
+                            val isEmpty = if (isTrackList) {
+                                (pagedTrackAlbumHeaders.loadState.refresh is LoadState.NotLoading) && pagedTrackAlbumHeaders.itemCount == 0
+                            } else {
+                                (pagedAlbums.loadState.refresh is LoadState.NotLoading) && pagedAlbums.itemCount == 0
                             }
-                        } else {
-                            // Main content area
-                            CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
+                            if (isLoading) {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
-                                        .progressiveHeaderContent()
+                                        .clearFocusOnTapOutside(),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                val isTrackListLoading = isTrackList &&
-                                    (pagedTrackAlbumHeaders.loadState.refresh is LoadState.Loading) &&
-                                    pagedTrackAlbumHeaders.itemCount == 0
-                                val isAlbumListLoading = !isTrackList &&
-                                    (pagedAlbums.loadState.refresh is LoadState.Loading) &&
-                                    pagedAlbums.itemCount == 0
-                                val isLoading = isTrackListLoading || isAlbumListLoading
-                                val isEmpty = if (isTrackList) {
-                                    (pagedTrackAlbumHeaders.loadState.refresh is LoadState.NotLoading) && pagedTrackAlbumHeaders.itemCount == 0
-                                } else {
-                                    (pagedAlbums.loadState.refresh is LoadState.NotLoading) && pagedAlbums.itemCount == 0
+                                    EaraLogoLoadingIndicator(tint = colorScheme.primary)
                                 }
-                                if (isLoading) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .clearFocusOnTapOutside(),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        EaraLogoLoadingIndicator(tint = colorScheme.primary)
+                            } else if (isEmpty) {
+                                val hasAnyQuery =
+                                    !querySpec.textQuery.isNullOrBlank() ||
+                                        querySpec.includeTagIds.isNotEmpty() ||
+                                        querySpec.excludeTagIds.isNotEmpty() ||
+                                        querySpec.circles.isNotEmpty() ||
+                                        querySpec.cvs.isNotEmpty() ||
+                                        querySpec.source != null
+
+                                EaraBrandedEmptyState(
+                                    sectionTitle = if (hasAnyQuery) appString(R.string.ui_local_library_results) else appString(R.string.ui_library),
+                                    headline = if (hasAnyQuery) appString(R.string.ui_no_matching_local_content) else appString(R.string.ui_the_local_album_has_not_been_scanned_yet),
+                                    sectionIcon = if (hasAnyQuery) Icons.Rounded.Search else Icons.Rounded.FolderOpen,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clearFocusOnTapOutside(),
+                                    contentPadding = PaddingValues(
+                                        top = topPadding,
+                                        bottom = LocalBottomOverlayPadding.current + 24.dp
+                                    ),
+                                    footer = if (hasAnyQuery) {
+                                        {
+                                            FilledTonalButton(
+                                                onClick = {
+                                                    searchText = ""
+                                                    viewModel.setSearchQuery("")
+                                                    viewModel.clearFilters()
+                                                },
+                                                colors = ButtonDefaults.filledTonalButtonColors(
+                                                    containerColor = colorScheme.primaryContainer,
+                                                    contentColor = colorScheme.onPrimaryContainer
+                                                )
+                                            ) {
+                                                Text(androidx.compose.ui.res.stringResource(R.string.ui_reset_filter))
+                                            }
+                                        }
+                                    } else {
+                                        null
                                     }
-                                } else if (isEmpty) {
-                                    val hasAnyQuery =
-                                        !querySpec.textQuery.isNullOrBlank() ||
-                                            querySpec.includeTagIds.isNotEmpty() ||
-                                            querySpec.excludeTagIds.isNotEmpty() ||
-                                            querySpec.circles.isNotEmpty() ||
-                                            querySpec.cvs.isNotEmpty() ||
-                                            querySpec.source != null
-
-                                    EaraBrandedEmptyState(
-                                        sectionTitle = if (hasAnyQuery) "本地库结果" else "本地库",
-                                        headline = if (hasAnyQuery) "没有匹配的本地内容" else "还没有扫描到本地专辑",
-                                        sectionIcon = if (hasAnyQuery) Icons.Rounded.Search else Icons.Rounded.FolderOpen,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .clearFocusOnTapOutside(),
-                                        contentPadding = PaddingValues(
-                                            top = topPadding,
-                                            bottom = LocalBottomOverlayPadding.current + 24.dp
-                                        ),
-                                        footer = if (hasAnyQuery) {
-                                            {
-                                                FilledTonalButton(
-                                                    onClick = {
-                                                        searchText = ""
-                                                        viewModel.setSearchQuery("")
-                                                        viewModel.clearFilters()
-                                                    },
-                                                    colors = ButtonDefaults.filledTonalButtonColors(
-                                                        containerColor = colorScheme.primaryContainer,
-                                                        contentColor = colorScheme.onPrimaryContainer
-                                                    )
-                                                ) {
-                                                    Text("重置筛选")
-                                                }
-                                            }
-                                        } else {
-                                            null
-                                        }
-                                    )
-                                } else if (isTrackList) {
-                                    LazyColumn(
-                                        state = listState,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .lightweightVerticalStretchOverscroll(
-                                                isAtStart = { !listState.canScrollBackward },
-                                                isAtEnd = { !listState.canScrollForward },
-                                            )
-                                            .clearFocusOnTapOutside()
-                                            .nestedScroll(chromeState.nestedScrollConnection),
-                                        flingBehavior = rememberCalmScrollableFlingBehavior(),
-                                        contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
-                                            .withAddedBottomPadding(LocalBottomOverlayPadding.current)
-                                    ) {
-                                        val headerCount = loadedTrackAlbumHeaders.size
-                                        val lastLoadedHeader = loadedTrackAlbumHeaders.lastOrNull()
-                                        val appendState = pagedTrackAlbumHeaders.loadState.append
-                                        val pagingHintHeaderIndex =
-                                            (headerCount - LibraryTrackPagingHintDistance).coerceAtLeast(0)
-                                        val pagingHintHeader = lastLoadedHeader?.takeIf {
-                                            appendState is LoadState.NotLoading &&
-                                                !appendState.endOfPaginationReached
-                                        }
-                                        for (headerIndex in 0 until headerCount) {
-                                            if (pagingHintHeader != null && headerIndex == pagingHintHeaderIndex) {
-                                                item(
-                                                    key = "trackPagingHint:${pagingHintHeader.albumId}:$headerCount",
-                                                    contentType = "trackPagingHint"
-                                                ) {
-                                                    LaunchedEffect(pagingHintHeader.albumId, headerCount, querySpec) {
-                                                        val hintIndex = headerCount - 1
-                                                        if (hintIndex in 0 until pagedTrackAlbumHeaders.itemCount) {
-                                                            pagedTrackAlbumHeaders[hintIndex]
-                                                        }
+                                )
+                            } else if (isTrackList) {
+                                LazyColumn(
+                                    state = listState,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .lightweightVerticalStretchOverscroll(
+                                            isAtStart = { !listState.canScrollBackward },
+                                            isAtEnd = { !listState.canScrollForward },
+                                        )
+                                        .clearFocusOnTapOutside()
+                                        .nestedScroll(chromeState.nestedScrollConnection),
+                                    flingBehavior = rememberCalmScrollableFlingBehavior(),
+                                    contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
+                                        .withAddedBottomPadding(LocalBottomOverlayPadding.current)
+                                ) {
+                                    val headerCount = loadedTrackAlbumHeaders.size
+                                    val lastLoadedHeader = loadedTrackAlbumHeaders.lastOrNull()
+                                    val appendState = pagedTrackAlbumHeaders.loadState.append
+                                    val pagingHintHeaderIndex =
+                                        (headerCount - LibraryTrackPagingHintDistance).coerceAtLeast(0)
+                                    val pagingHintHeader = lastLoadedHeader?.takeIf {
+                                        appendState is LoadState.NotLoading &&
+                                            !appendState.endOfPaginationReached
+                                    }
+                                    for (headerIndex in 0 until headerCount) {
+                                        if (pagingHintHeader != null && headerIndex == pagingHintHeaderIndex) {
+                                            item(
+                                                key = "trackPagingHint:${pagingHintHeader.albumId}:$headerCount",
+                                                contentType = "trackPagingHint"
+                                            ) {
+                                                LaunchedEffect(pagingHintHeader.albumId, headerCount, querySpec, isDataActive) {
+                                                    if (!isDataActive) return@LaunchedEffect
+                                                    val hintIndex = headerCount - 1
+                                                    if (hintIndex in 0 until pagedTrackAlbumHeaders.itemCount) {
+                                                        pagedTrackAlbumHeaders[hintIndex]
                                                     }
-                                                    Spacer(
-                                                        modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .height(1.dp)
-                                                    )
                                                 }
-                                            }
-                                            val header = loadedTrackAlbumHeaders[headerIndex]
-
-                                            val albumId = header.albumId
-                                            val expanded = expandedAlbumIds.contains(albumId)
-                                            val rows = expandedAlbumTracks[albumId].orEmpty()
-                                            val isFirstAlbumHeader = headerIndex == 0
-                                            val isLastAlbumHeader = headerIndex == headerCount - 1
-
-                                            item(key = "album:$albumId", contentType = "albumHeader") {
-                                                Column(
+                                                Spacer(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
-                                                        .background(colorScheme.background)
+                                                        .height(1.dp)
+                                                )
+                                            }
+                                        }
+                                        val header = loadedTrackAlbumHeaders[headerIndex]
+
+                                        val albumId = header.albumId
+                                        val expanded = expandedAlbumIds.contains(albumId)
+                                        val rows = expandedAlbumTracks[albumId].orEmpty()
+                                        val isFirstAlbumHeader = headerIndex == 0
+                                        val isLastAlbumHeader = headerIndex == headerCount - 1
+
+                                        item(key = "album:$albumId", contentType = "albumHeader") {
+                                            Column(modifier = Modifier.fillMaxWidth()) {
+                                                if (headerIndex > 0) {
+                                                    HorizontalDivider(
+                                                        modifier = Modifier.padding(horizontal = LibraryPageHorizontalPadding),
+                                                        thickness = 0.5.dp,
+                                                        color = colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+                                                    )
+                                                }
+                                                TrackAlbumHeader(
+                                                    albumTitle = header.albumTitle,
+                                                    rjCode = header.rjCode.ifBlank { header.workId },
+                                                    trackCount = header.trackCount,
+                                                    totalDurationSeconds = header.totalDuration,
+                                                    totalSizeBytes = header.totalSizeBytes.takeIf { it > 0L }
+                                                        ?: rememberAlbumTrackListTotalSizeBytes(
+                                                            rows = rows,
+                                                            loadFileSizes = !listState.isScrollInProgress
+                                                        ),
+                                                    coverModel = albumCoverImageModel(
+                                                        coverThumbPath = "",
+                                                        coverPath = header.coverPath.takeIf { it != "null" }.orEmpty(),
+                                                        coverUrl = header.coverUrl
+                                                    ),
+                                                    expanded = expanded,
+                                                    isFirstInList = isFirstAlbumHeader,
+                                                    isLastInList = isLastAlbumHeader,
+                                                    onToggle = { viewModel.toggleExpandedTrackAlbum(albumId) }
+                                                )
+                                            }
+                                        }
+
+                                        if (expanded) {
+                                            val album = Album(
+                                                id = header.albumId,
+                                                title = header.albumTitle,
+                                                path = "",
+                                                circle = header.circle,
+                                                cv = header.cv,
+                                                tags = emptyList(),
+                                                coverUrl = header.coverUrl,
+                                                coverPath = header.coverPath,
+                                                workId = header.workId,
+                                                rjCode = header.rjCode.ifBlank { header.workId }
+                                            )
+                                            itemsIndexed(
+                                                items = rows,
+                                                key = { _, row -> row.trackId },
+                                                contentType = { _, _ -> "albumTrackRow" }
+                                            ) { index, row ->
+                                                val track = remember(
+                                                    row.trackId,
+                                                    row.albumId,
+                                                    row.trackTitle,
+                                                    row.trackPath,
+                                                    row.duration,
+                                                    row.trackGroup
                                                 ) {
-                                                    if (headerIndex > 0) {
+                                                    Track(
+                                                        id = row.trackId,
+                                                        albumId = row.albumId,
+                                                        title = row.trackTitle,
+                                                        path = row.trackPath,
+                                                        duration = row.duration,
+                                                        group = row.trackGroup
+                                                    )
+                                                }
+                                                val cvText = remember(row.cv) { formatCvNames(row.cv) }
+                                                val durationText = remember(row.duration) { Formatting.formatTrackSeconds(row.duration) }
+
+                                                Column {
+                                                    TrackListRow(
+                                                        title = track.title,
+                                                        sourcePath = track.path,
+                                                        loadAudioMetadata = isActive && isDataActive && !listState.isScrollInProgress,
+                                                        subtitle = cvText,
+                                                        fixedTrailingSubtitle = durationText,
+                                                        showSubtitleStamp = row.hasSubtitles,
+                                                        isLastInSection = index == rows.lastIndex,
+                                                        onClick = {
+                                                            scope.launch {
+                                                                val tracksForAlbum = withContext(Dispatchers.Default) {
+                                                                    rows.map { r ->
+                                                                        Track(
+                                                                            id = r.trackId,
+                                                                            albumId = r.albumId,
+                                                                            title = r.trackTitle,
+                                                                            path = r.trackPath,
+                                                                            duration = r.duration,
+                                                                            group = r.trackGroup
+                                                                        )
+                                                                    }
+                                                                }
+                                                                onPlayTracks(album, tracksForAlbum, track)
+                                                            }
+                                                        },
+                                                        onAddToQueue = {
+                                                            playerViewModel.addTrackToQueue(album, track)
+                                                        },
+                                                        onAddToPlaylist = {
+                                                            onOpenPlaylistPicker(MediaItemFactory.fromTrack(album, track))
+                                                        },
+                                                        onManageTags = if (!isOnlineTrackPath(track.path)) {{
+                                                            scope.launch {
+                                                                val inherited = withContext(Dispatchers.IO) {
+                                                                    viewModel.loadInheritedTagsForAlbum(album.id)
+                                                                }
+                                                                val user = userTagsByTrackId[track.id].orEmpty()
+                                                                tagAssignTarget = TagAssignTarget.Track(
+                                                                    trackId = track.id,
+                                                                    title = track.title,
+                                                                    inheritedTags = inherited,
+                                                                    userTags = user
+                                                                )
+                                                            }
+                                                        }} else null,
+                                                        onRemove = {
+                                                            viewModel.removeTrackFromAlbum(track.id)
+                                                        }
+                                                    )
+                                                    if (index < rows.size - 1) {
                                                         HorizontalDivider(
                                                             modifier = Modifier.padding(horizontal = LibraryPageHorizontalPadding),
                                                             thickness = 0.5.dp,
                                                             color = colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
                                                         )
                                                     }
-                                                    TrackAlbumHeader(
-                                                        albumTitle = header.albumTitle,
-                                                        rjCode = header.rjCode.ifBlank { header.workId },
-                                                        trackCount = header.trackCount,
-                                                        totalDurationSeconds = header.totalDuration,
-                                                        totalSizeBytes = header.totalSizeBytes.takeIf { it > 0L }
-                                                            ?: rememberAlbumTrackListTotalSizeBytes(
-                                                                rows = rows,
-                                                                loadFileSizes = !listState.isScrollInProgress
-                                                            ),
-                                                        coverModel = albumCoverImageModel(
-                                                            coverThumbPath = "",
-                                                            coverPath = header.coverPath.takeIf { it != "null" }.orEmpty(),
-                                                            coverUrl = header.coverUrl
-                                                        ),
-                                                        expanded = expanded,
-                                                        isFirstInList = isFirstAlbumHeader,
-                                                        isLastInList = isLastAlbumHeader,
-                                                        onToggle = { viewModel.toggleExpandedTrackAlbum(albumId) }
-                                                    )
                                                 }
                                             }
-
-                                            if (expanded) {
-                                                val album = Album(
-                                                    id = header.albumId,
-                                                    title = header.albumTitle,
-                                                    path = "",
-                                                    circle = header.circle,
-                                                    cv = header.cv,
-                                                    tags = emptyList(),
-                                                    coverUrl = header.coverUrl,
-                                                    coverPath = header.coverPath,
-                                                    workId = header.workId,
-                                                    rjCode = header.rjCode.ifBlank { header.workId }
-                                                )
-                                                itemsIndexed(
-                                                    items = rows,
-                                                    key = { _, row -> row.trackId },
-                                                    contentType = { _, _ -> "albumTrackRow" }
-                                                ) { index, row ->
-                                                    val track = remember(
-                                                        row.trackId,
-                                                        row.albumId,
-                                                        row.trackTitle,
-                                                        row.trackPath,
-                                                        row.duration,
-                                                        row.trackGroup
-                                                    ) {
-                                                        Track(
-                                                            id = row.trackId,
-                                                            albumId = row.albumId,
-                                                            title = row.trackTitle,
-                                                            path = row.trackPath,
-                                                            duration = row.duration,
-                                                            group = row.trackGroup
-                                                        )
-                                                    }
-                                                    val cvText = remember(row.cv) { formatCvNames(row.cv) }
-                                                    val durationText = remember(row.duration) { Formatting.formatTrackSeconds(row.duration) }
-
-                                                    Column {
-                                                        TrackListRow(
-                                                            title = track.title,
-                                                            sourcePath = track.path,
-                                                            loadAudioMetadata = isActive && isDataActive && !listState.isScrollInProgress,
-                                                            subtitle = cvText,
-                                                            fixedTrailingSubtitle = durationText,
-                                                            showSubtitleStamp = row.hasSubtitles,
-                                                            isLastInSection = index == rows.lastIndex,
-                                                            onClick = {
-                                                                scope.launch {
-                                                                    val tracksForAlbum = withContext(Dispatchers.Default) {
-                                                                        rows.map { r ->
-                                                                            Track(
-                                                                                id = r.trackId,
-                                                                                albumId = r.albumId,
-                                                                                title = r.trackTitle,
-                                                                                path = r.trackPath,
-                                                                                duration = r.duration,
-                                                                                group = r.trackGroup
-                                                                            )
-                                                                        }
-                                                                    }
-                                                                    onPlayTracks(album, tracksForAlbum, track)
-                                                                }
-                                                            },
-                                                            onAddToQueue = {
-                                                                playerViewModel.addTrackToQueue(album, track)
-                                                            },
-                                                            onAddToPlaylist = {
-                                                                onOpenPlaylistPicker(MediaItemFactory.fromTrack(album, track))
-                                                            },
-                                                            onManageTags = if (!isOnlineTrackPath(track.path)) {{
-                                                                scope.launch {
-                                                                    val inherited = withContext(Dispatchers.IO) {
-                                                                        viewModel.loadInheritedTagsForAlbum(album.id)
-                                                                    }
-                                                                    val user = userTagsByTrackId[track.id].orEmpty()
-                                                                    tagAssignTarget = TagAssignTarget.Track(
-                                                                        trackId = track.id,
-                                                                        title = track.title,
-                                                                        inheritedTags = inherited,
-                                                                        userTags = user
-                                                                    )
-                                                                }
-                                                            }} else null,
-                                                            onRemove = {
-                                                                viewModel.removeTrackFromAlbum(track.id)
-                                                            }
-                                                        )
-                                                        if (index < rows.size - 1) {
-                                                            HorizontalDivider(
-                                                                modifier = Modifier.padding(horizontal = LibraryPageHorizontalPadding),
-                                                                thickness = 0.5.dp,
-                                                                color = colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                } else if (isGrid) {
-                                    val app = LocalContext.current.applicationContext
-                                    val cacheManager = remember(app) {
-                                        EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java)
-                                            .imageCacheManager()
-                                    }
-                                    val density = LocalDensity.current
-                                    val gridCellSize = if (isCompact) 150.dp else 200.dp
-                                    val gridCoverPx = remember(gridCellSize, density) { with(density) { gridCellSize.roundToPx() } }
-                                    val gridPreloadSize = remember(gridCoverPx) { IntSize(gridCoverPx, gridCoverPx) }
-                                    val coverFadeInState = remember(gridState) {
-                                        derivedStateOf {
-                                            shouldFadeInCover(gridState.isScrollInProgress)
-                                        }
-                                    }
-                                    LazyStaggeredGridPreloader(
-                                        state = gridState,
-                                        itemCount = pagedAlbums.itemCount,
-                                        enabled = isActive,
-                                        preloadNext = 24,
-                                        preloadSize = gridPreloadSize,
-                                        cacheManagerProvider = { cacheManager },
-                                        modelAt = { idx ->
-                                            pagedAlbums.itemSnapshotList.getOrNull(idx)?.let { albumCoverImageModel(it) }
-                                        }
-                                    )
-                                    LazyVerticalStaggeredGrid(
-                                        columns = StaggeredGridCells.Adaptive(gridCellSize),
-                                        state = gridState,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .lightweightVerticalStretchOverscroll(
-                                                isAtStart = { !gridState.canScrollBackward },
-                                                isAtEnd = { !gridState.canScrollForward },
-                                            )
-                                            .clearFocusOnTapOutside()
-                                            .nestedScroll(chromeState.nestedScrollConnection),
-                                        flingBehavior = rememberCalmScrollableFlingBehavior(),
-                                        contentPadding = PaddingValues(top = topPadding, start = LibraryPageHorizontalPadding, end = LibraryPageHorizontalPadding, bottom = 16.dp)
-                                            .withAddedBottomPadding(LocalBottomOverlayPadding.current),
-                                        verticalItemSpacing = AlbumGridItemSpacing,
-                                        horizontalArrangement = Arrangement.spacedBy(AlbumGridItemSpacing)
-                                    ) {
-                                        staggeredItems(
-                                            pagedAlbumIndices,
-                                            key = { idx -> pagedAlbumSnapshot.items.getOrNull(idx)?.id?.takeIf { it > 0L } ?: idx },
-                                            contentType = { "albumGridItem" },
-                                        ) { idx ->
-                                            val album = pagedAlbums[idx] ?: return@staggeredItems
-                                            val userTags = userTagsByAlbumId[album.id].orEmpty()
-                                            val mergedAlbum = remember(album, userTags) {
-                                                album.withUserTags(userTags)
-                                            }
-                                            AlbumGridItem(
-                                                album = mergedAlbum,
-                                                onClick = { onAlbumClick(mergedAlbum) },
-                                                onLongClick = {
-                                                    actionAlbum = mergedAlbum
-                                                    showAlbumActions = true
-                                                },
-                                                onRjLongClick = ::openMetaActions,
-                                                onCircleLongClick = ::openMetaActions,
-                                                onCvLongClick = ::openMetaActions,
-                                                onTagLongClick = ::openMetaActions,
-                                                coverFadeInState = coverFadeInState,
-                                                showCollectedIndicator = false,
-                                                coverOverlay = {
-                                                    AlbumSyncStatusOverlay(
-                                                        syncStatus = state.syncingAlbums[album.id] ?: SyncStatus.Idle,
-                                                        indicatorSize = 24.dp,
-                                                        blurRadius = 4.dp,
-                                                    )
-                                                },
-                                            )
-                                        }
-                                    }
-                                } else {
-                                    val app = LocalContext.current.applicationContext
-                                    val cacheManager = remember(app) {
-                                        EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java)
-                                            .imageCacheManager()
-                                    }
-                                    val density = LocalDensity.current
-                                    val screenWidthDp = LocalConfiguration.current.screenWidthDp
-                                    val listItemHeight = albumListCoverSize(screenWidthDp)
-                                    val coverPx = remember(listItemHeight, density) { with(density) { listItemHeight.roundToPx() } }
-                                    val preloadSize = remember(coverPx) { IntSize(coverPx, coverPx) }
-                                    val coverFadeInState = remember(listState) {
-                                        derivedStateOf {
-                                            shouldFadeInCover(listState.isScrollInProgress)
-                                        }
-                                    }
-                                    LazyListPreloader(
-                                        state = listState,
-                                        itemCount = pagedAlbums.itemCount,
-                                        enabled = isActive,
-                                        preloadNext = 24,
-                                        preloadSize = preloadSize,
-                                        cacheManagerProvider = { cacheManager },
-                                        modelAt = { idx ->
-                                            pagedAlbums.itemSnapshotList.getOrNull(idx)?.let { albumCoverImageModel(it) }
-                                        }
-                                    )
-                                    LazyColumn(
-                                        state = listState,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .lightweightVerticalStretchOverscroll(
-                                                isAtStart = { !listState.canScrollBackward },
-                                                isAtEnd = { !listState.canScrollForward },
-                                            )
-                                            .clearFocusOnTapOutside()
-                                            .nestedScroll(chromeState.nestedScrollConnection),
-                                        flingBehavior = rememberCalmScrollableFlingBehavior(),
-                                        contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
-                                            .withAddedBottomPadding(LocalBottomOverlayPadding.current)
-                                    ) {
-                                        items(
-                                            count = pagedAlbums.itemCount,
-                                            key = { idx -> pagedAlbums.itemSnapshotList.getOrNull(idx)?.id?.takeIf { it > 0L } ?: idx },
-                                            contentType = { "albumListItem" }
-                                        ) { idx ->
-                                            val album = pagedAlbums[idx] ?: return@items
-                                            val userTags = userTagsByAlbumId[album.id].orEmpty()
-                                            val mergedAlbum = remember(album, userTags) {
-                                                album.withUserTags(userTags)
-                                            }
-                                            AlbumItem(
-                                                album = mergedAlbum,
-                                                onClick = { onAlbumClick(mergedAlbum) },
-                                                onLongClick = {
-                                                    actionAlbum = mergedAlbum
-                                                    showAlbumActions = true
-                                                },
-                                                onRjLongClick = ::openMetaActions,
-                                                onCircleLongClick = ::openMetaActions,
-                                                onCvLongClick = ::openMetaActions,
-                                                onTagLongClick = ::openMetaActions,
-                                                coverFadeInState = coverFadeInState,
-                                                showCollectedIndicator = false,
-                                                coverOverlay = {
-                                                    AlbumSyncStatusOverlay(
-                                                        syncStatus = state.syncingAlbums[album.id] ?: SyncStatus.Idle,
-                                                        indicatorSize = 16.dp,
-                                                        blurRadius = 2.dp,
-                                                    )
-                                                },
-                                            )
                                         }
                                     }
                                 }
-
-                                LibraryChrome(
-                                    modifier = Modifier.align(Alignment.TopCenter).padding(top = LocalMainHeaderPadding.current),
-                                    searchText = searchText,
-                                    onSearchTextChange = {
-                                        searchText = it
-                                        viewModel.setSearchQuery(it)
-                                    },
-                                    onClearSearch = {
-                                        searchText = ""
-                                        viewModel.setSearchQuery("")
-                                    },
-                                    currentSort = querySpec.sort,
-                                    sortMenuExpanded = sortMenuExpanded,
-                                    onSortMenuExpandedChange = { sortMenuExpanded = it },
-                                    onSortLastPlayed = { viewModel.setSort(LibrarySort.LastPlayedDesc) },
-                                    onSortAdded = { viewModel.setSort(LibrarySort.AddedDesc) },
-                                    onSortTitle = { viewModel.setSort(LibrarySort.TitleAsc) },
-                                    onOpenFilterScreen = onOpenFilterScreen,
-                                    filterActive = hasActiveFilters,
-                                    rightPanelToggle = rightPanelToggle,
-                                    materialColorScheme = materialColorScheme,
-                                    chromeState = chromeState,
-                                    onMeasured = { chromeState.updateHeight(it.height.toFloat()) }
+                            } else if (isGrid) {
+                                val app = LocalContext.current.applicationContext
+                                val cacheManager = remember(app) {
+                                    EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java)
+                                        .imageCacheManager()
+                                }
+                                val density = LocalDensity.current
+                                val gridCellSize = if (tabletList) 360.dp else if (LocalTabletLayout.current.isTablet) 176.dp else if (isCompact) 150.dp else 200.dp
+                                val gridCoverPx = remember(gridCellSize, density) { with(density) { (if (tabletList) 152.dp else gridCellSize).roundToPx() } }
+                                val gridPreloadSize = remember(gridCoverPx) { IntSize(gridCoverPx, gridCoverPx) }
+                                val coverFadeInState = remember(gridState) {
+                                    derivedStateOf {
+                                        shouldFadeInCover(gridState.isScrollInProgress)
+                                    }
+                                }
+                                LazyStaggeredGridPreloader(
+                                    state = gridState,
+                                    itemCount = pagedAlbums.itemCount,
+                                    enabled = isActive,
+                                    preloadNext = 24,
+                                    preloadSize = gridPreloadSize,
+                                    cacheManagerProvider = { cacheManager },
+                                    modelAt = { idx ->
+                                        pagedAlbums.itemSnapshotList.getOrNull(idx)?.let { albumCoverImageModel(it) }
+                                    }
                                 )
+                                LazyVerticalStaggeredGrid(
+                                    columns = StaggeredGridCells.Adaptive(gridCellSize),
+                                    state = gridState,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .lightweightVerticalStretchOverscroll(
+                                            isAtStart = { !gridState.canScrollBackward },
+                                            isAtEnd = { !gridState.canScrollForward },
+                                        )
+                                        .clearFocusOnTapOutside()
+                                        .nestedScroll(chromeState.nestedScrollConnection),
+                                    flingBehavior = rememberCalmScrollableFlingBehavior(),
+                                    contentPadding = PaddingValues(top = topPadding, start = LibraryPageHorizontalPadding, end = LibraryPageHorizontalPadding, bottom = 16.dp)
+                                        .withAddedBottomPadding(LocalBottomOverlayPadding.current),
+                                    verticalItemSpacing = AlbumGridItemSpacing,
+                                    horizontalArrangement = Arrangement.spacedBy(AlbumGridItemSpacing)
+                                ) {
+                                    staggeredItems(
+                                        pagedAlbumIndices,
+                                        key = { idx -> pagedAlbumSnapshot.items.getOrNull(idx)?.id?.takeIf { it > 0L } ?: idx },
+                                        contentType = { "albumGridItem" },
+                                    ) { idx ->
+                                        val album = (if (isDataActive) pagedAlbums[idx] else pagedAlbums.peek(idx))
+                                            ?: return@staggeredItems
+                                        val userTags = userTagsByAlbumId[album.id].orEmpty()
+                                        val mergedAlbum = remember(album, userTags) {
+                                            album.withUserTags(userTags)
+                                        }
+                                        AlbumGridItem(
+                                            horizontal = tabletList,
+                                            album = mergedAlbum,
+                                            onClick = { onAlbumClick(mergedAlbum) },
+                                            onLongClick = {
+                                                actionAlbum = mergedAlbum
+                                                showAlbumActions = true
+                                            },
+                                            onRjLongClick = ::openMetaActions,
+                                            onCircleLongClick = ::openMetaActions,
+                                            onCvLongClick = ::openMetaActions,
+                                            onTagLongClick = ::openMetaActions,
+                                            coverFadeInState = coverFadeInState,
+                                            showCollectedIndicator = false,
+                                            coverOverlay = {
+                                                AlbumSyncStatusOverlay(
+                                                    syncStatus = state.syncingAlbums[album.id] ?: SyncStatus.Idle,
+                                                    indicatorSize = 24.dp,
+                                                    blurRadius = 4.dp,
+                                                )
+                                            },
+                                        )
+                                    }
+                                }
+                            } else {
+                                val app = LocalContext.current.applicationContext
+                                val cacheManager = remember(app) {
+                                    EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java)
+                                        .imageCacheManager()
+                                }
+                                val density = LocalDensity.current
+                                val screenWidthDp = LocalConfiguration.current.screenWidthDp
+                                val listItemHeight = albumListCoverSize(screenWidthDp)
+                                val coverPx = remember(listItemHeight, density) { with(density) { listItemHeight.roundToPx() } }
+                                val preloadSize = remember(coverPx) { IntSize(coverPx, coverPx) }
+                                val coverFadeInState = remember(listState) {
+                                    derivedStateOf {
+                                        shouldFadeInCover(listState.isScrollInProgress)
+                                    }
+                                }
+                                LazyListPreloader(
+                                    state = listState,
+                                    itemCount = pagedAlbums.itemCount,
+                                    enabled = isActive,
+                                    preloadNext = 24,
+                                    preloadSize = preloadSize,
+                                    cacheManagerProvider = { cacheManager },
+                                    modelAt = { idx ->
+                                        pagedAlbums.itemSnapshotList.getOrNull(idx)?.let { albumCoverImageModel(it) }
+                                    }
+                                )
+                                val rowStretch = rememberLightweightVerticalOverscrollState()
+                                AlbumRowRasterCacheScope(
+                                    transformIsIdentity = { rowStretch.isTransformIdentity },
+                                ) {
+                                    AlbumListIconScope {
+                                        PreparedAlbumParagraphs(
+                                            listState = listState,
+                                            active = isActive && isDataActive,
+                                            dataKey = pagedAlbums.itemSnapshotList to userTagsByAlbumId,
+                                            itemAtLazyIndex = { index ->
+                                                pagedAlbums.itemSnapshotList.getOrNull(index)?.let { album ->
+                                                    PreparedAlbumParagraphItem(
+                                                        libraryAlbumListItemKey(album, index),
+                                                        album.withUserTags(userTagsByAlbumId[album.id].orEmpty()),
+                                                    )
+                                                }
+                                            },
+                                        ) {
+                                            LazyColumn(
+                                                state = listState,
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .lightweightVerticalStretchOverscroll(
+                                                        state = rowStretch,
+                                                        isAtStart = { !listState.canScrollBackward },
+                                                        isAtEnd = { !listState.canScrollForward },
+                                                    )
+                                                    .clearFocusOnTapOutside()
+                                                    .nestedScroll(chromeState.nestedScrollConnection),
+                                                flingBehavior = rememberCalmScrollableFlingBehavior(),
+                                                contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
+                                                    .withAddedBottomPadding(LocalBottomOverlayPadding.current)
+                                            ) {
+                                                items(
+                                                    count = pagedAlbums.itemCount,
+                                                    key = { idx -> libraryAlbumListItemKey(pagedAlbums.itemSnapshotList.getOrNull(idx), idx) },
+                                                    contentType = { "albumListItem" }
+                                                ) { idx ->
+                                                    val album = (if (isDataActive) pagedAlbums[idx] else pagedAlbums.peek(idx))
+                                                        ?: return@items
+                                                    val userTags = userTagsByAlbumId[album.id].orEmpty()
+                                                    val mergedAlbum = remember(album, userTags) {
+                                                        album.withUserTags(userTags)
+                                                    }
+                                                    val preparedItemKey = libraryAlbumListItemKey(mergedAlbum, idx)
+                                                    AlbumItem(
+                                                        album = mergedAlbum,
+                                                        preparedItemKey = remember(preparedItemKey) { preparedItemKey },
+                                                        onClick = { onAlbumClick(mergedAlbum) },
+                                                        onLongClick = {
+                                                            actionAlbum = mergedAlbum
+                                                            showAlbumActions = true
+                                                        },
+                                                        onRjLongClick = ::openMetaActions,
+                                                        onCircleLongClick = ::openMetaActions,
+                                                        onCvLongClick = ::openMetaActions,
+                                                        onTagLongClick = ::openMetaActions,
+                                                        coverFadeInState = coverFadeInState,
+                                                        showCollectedIndicator = false,
+                                                        coverOverlay = {
+                                                            AlbumSyncStatusOverlay(
+                                                                syncStatus = state.syncingAlbums[album.id] ?: SyncStatus.Idle,
+                                                                indicatorSize = 16.dp,
+                                                                blurRadius = 2.dp,
+                                                            )
+                                                        },
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
-                            }
+
+                            LibraryChrome(
+                                modifier = Modifier.align(Alignment.TopCenter).padding(top = LocalMainHeaderPadding.current),
+                                searchText = searchText,
+                                onSearchTextChange = {
+                                    searchText = it
+                                    viewModel.setSearchQuery(it)
+                                },
+                                onClearSearch = {
+                                    searchText = ""
+                                    viewModel.setSearchQuery("")
+                                },
+                                currentSort = querySpec.sort,
+                                sortMenuExpanded = sortMenuExpanded,
+                                onSortMenuExpandedChange = { sortMenuExpanded = it },
+                                onSortLastPlayed = { viewModel.setSort(LibrarySort.LastPlayedDesc) },
+                                onSortAdded = { viewModel.setSort(LibrarySort.AddedDesc) },
+                                onSortTitle = { viewModel.setSort(LibrarySort.TitleAsc) },
+                                onOpenFilterScreen = onOpenFilterScreen,
+                                filterActive = hasActiveFilters,
+                                materialColorScheme = materialColorScheme,
+                                chromeState = chromeState,
+                                onMeasured = { chromeState.updateHeight(it.height.toFloat()) }
+                            )
+                        }
                         }
                     }
                 }
             }
-            }
+        }
         }
     }
 
@@ -1043,7 +981,7 @@ private fun LibraryScreenContent(
                 val isSyncing = syncStatus is SyncStatus.Syncing
                 val hasLocalPaths = remember(album) { album.getAllLocalPaths().isNotEmpty() }
                 ListItem(
-                    headlineContent = { Text("删除") },
+                    headlineContent = { Text(androidx.compose.ui.res.stringResource(R.string.ui_delete)) },
                     leadingContent = { Icon(Icons.Rounded.Delete, contentDescription = null) },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1054,7 +992,7 @@ private fun LibraryScreenContent(
                         }
                 )
                 ListItem(
-                    headlineContent = { Text("标签管理") },
+                    headlineContent = { Text(androidx.compose.ui.res.stringResource(R.string.ui_tag_management)) },
                     leadingContent = { Icon(Icons.AutoMirrored.Rounded.Label, contentDescription = null) },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1072,7 +1010,7 @@ private fun LibraryScreenContent(
                         }
                 )
                 ListItem(
-                    headlineContent = { Text("添加到分组") },
+                    headlineContent = { Text(androidx.compose.ui.res.stringResource(R.string.ui_add_to_group)) },
                     leadingContent = { Icon(Icons.Rounded.CreateNewFolder, contentDescription = null) },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1083,7 +1021,7 @@ private fun LibraryScreenContent(
                         }
                 )
                 ListItem(
-                    headlineContent = { Text("本地同步") },
+                    headlineContent = { Text(androidx.compose.ui.res.stringResource(R.string.ui_local_sync)) },
                     leadingContent = { Icon(Icons.Rounded.Sync, contentDescription = null) },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1094,7 +1032,7 @@ private fun LibraryScreenContent(
                         }
                 )
                 ListItem(
-                    headlineContent = { Text("云同步") },
+                    headlineContent = { Text(androidx.compose.ui.res.stringResource(R.string.ui_cloud_sync)) },
                     leadingContent = { Icon(Icons.Rounded.CloudSync, contentDescription = null) },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1106,7 +1044,7 @@ private fun LibraryScreenContent(
                 )
                 if (isSyncing) {
                     ListItem(
-                        headlineContent = { Text("取消同步") },
+                        headlineContent = { Text(androidx.compose.ui.res.stringResource(R.string.ui_cancel_synchronization)) },
                         leadingContent = { Icon(Icons.Rounded.Close, contentDescription = null) },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1130,11 +1068,11 @@ private fun LibraryScreenContent(
         if (album != null) {
             FlatActionDialog(
                 onDismissRequest = { showDeleteConfirm = false },
-                message = "将从本地库中移除该专辑，并尝试删除本地文件。",
+                message = appString(R.string.ui_the_album_will_be_removed_from_the_local),
                 actions = listOf(
-                    FlatDialogAction("取消", onClick = { showDeleteConfirm = false }),
+                    FlatDialogAction(appString(R.string.ui_cancel), onClick = { showDeleteConfirm = false }),
                     FlatDialogAction(
-                        text = "删除",
+                        text = appString(R.string.ui_delete),
                         tone = FlatDialogActionTone.Danger,
                         onClick = {
                             showDeleteConfirm = false
@@ -1187,7 +1125,7 @@ private fun LibraryScreenContent(
             onCreatePlaylist = playlistsViewModel::createPlaylist,
             onCreateGroup = albumGroupsViewModel::createGroup,
             onAddBlockedKeyword = ::addMetaBlockedKeyword,
-            onCopy = { copyMeta("内容", it) },
+            onCopy = { copyMeta(appString(R.string.ui_content), it) },
         )
     }
 
@@ -1207,7 +1145,6 @@ internal fun LibraryChrome(
     onSortTitle: () -> Unit,
     onOpenFilterScreen: () -> Unit,
     filterActive: Boolean = false,
-    rightPanelToggle: (@Composable (Modifier) -> Unit)?,
     materialColorScheme: androidx.compose.material3.ColorScheme,
     chromeState: CollapsibleHeaderState,
     onMeasured: (IntSize) -> Unit
@@ -1242,7 +1179,7 @@ internal fun LibraryChrome(
         CustomSearchBar(
             value = searchText,
             onValueChange = onSearchTextChange,
-            placeholder = "社团 / CV / 标签...",
+            placeholder = appString(R.string.ui_societies_cv_tags),
             modifier = Modifier
                 .weight(1f),
             inputTestTag = LIBRARY_SEARCH_INPUT_TAG,
@@ -1291,7 +1228,7 @@ internal fun LibraryChrome(
                     modifier = Modifier.background(chromeActionContainerColor)
                 ) {
                     ActiveDropdownMenuItem(
-                        label = "最近播放",
+                        label = appString(R.string.ui_recently_played),
                         selected = currentSort == LibrarySort.LastPlayedDesc,
                         testTag = LIBRARY_SORT_LAST_PLAYED_ITEM_TAG,
                         activeColor = materialColorScheme.primary,
@@ -1307,7 +1244,7 @@ internal fun LibraryChrome(
                         color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
                     )
                     ActiveDropdownMenuItem(
-                        label = "最近加入",
+                        label = appString(R.string.ui_recently_joined),
                         selected = currentSort == LibrarySort.AddedDesc,
                         testTag = LIBRARY_SORT_ADDED_ITEM_TAG,
                         activeColor = materialColorScheme.primary,
@@ -1323,7 +1260,7 @@ internal fun LibraryChrome(
                         color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
                     )
                     ActiveDropdownMenuItem(
-                        label = "专辑标题",
+                        label = appString(R.string.ui_album_title),
                         selected = currentSort == LibrarySort.TitleAsc,
                         testTag = LIBRARY_SORT_TITLE_ITEM_TAG,
                         activeColor = materialColorScheme.primary,
@@ -1342,13 +1279,9 @@ internal fun LibraryChrome(
             onClick = onOpenFilterScreen,
             modifier = Modifier
                 .testTag(LIBRARY_FILTER_BUTTON_TAG)
-                .semantics { stateDescription = if (filterActive) "筛选已启用" else "筛选未启用" },
+                .semantics { stateDescription = if (filterActive) appString(R.string.ui_filtering_is_enabled) else appString(R.string.ui_filtering_is_not_enabled) },
             active = filterActive
         )
-        if (rightPanelToggle != null) {
-            Spacer(modifier = Modifier.width(8.dp))
-            rightPanelToggle(Modifier.size(50.dp))
-        }
     }
 }
 
@@ -1401,7 +1334,6 @@ private fun TrackAlbumHeader(
         modifier = Modifier
             .fillMaxWidth()
             .clip(containerShape)
-            .background(colorScheme.surface)
             .clickable { onToggle() }
             .padding(horizontal = LibraryPageHorizontalPadding, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -1420,7 +1352,7 @@ private fun TrackAlbumHeader(
         Spacer(modifier = Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
-                text = translatedPageText(albumTitle).ifBlank { rjCode.ifBlank { "专辑" } },
+                text = translatedPageText(albumTitle).ifBlank { rjCode.ifBlank { appString(R.string.ui_album) } },
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                 color = colorScheme.textPrimary,
                 maxLines = 2,
@@ -1429,7 +1361,7 @@ private fun TrackAlbumHeader(
 
             val footerSegments = buildList {
                 if (rjCode.isNotBlank()) add(rjCode)
-                add("$trackCount 音频")
+                add(appString(R.string.ui_audio, trackCount))
                 Formatting.formatTrackSeconds(totalDurationSeconds).takeIf { it.isNotBlank() }?.let(::add)
                 totalSizeBytes?.takeIf { it > 0L }?.let(Formatting::formatFileSize)?.let(::add)
             }
@@ -1480,7 +1412,6 @@ private fun TrackListRow(
     onManageTags: (() -> Unit)? = null,
     onRemove: () -> Unit
 ) {
-    val colorScheme = AsmrTheme.colorScheme
     val rowShape = if (isLastInSection) {
         RoundedCornerShape(
             topStart = 0.dp,
@@ -1507,19 +1438,18 @@ private fun TrackListRow(
         subtitleTextStyle = MaterialTheme.typography.labelSmall.copy(lineHeight = 14.sp),
         modifier = Modifier
             .fillMaxWidth()
-            .clip(rowShape)
-            .background(colorScheme.surface),
+            .clip(rowShape),
         actions = buildList {
             add(
                 AudioItemMenuAction(
-                    label = "添加到播放队列",
+                    label = appString(R.string.ui_add_to_play_queue),
                     onClick = onAddToQueue,
                     icon = Icons.AutoMirrored.Rounded.QueueMusic
                 )
             )
             add(
                 AudioItemMenuAction(
-                    label = "添加到播放列表",
+                    label = appString(R.string.ui_add_to_playlist),
                     onClick = onAddToPlaylist,
                     icon = Icons.AutoMirrored.Rounded.PlaylistAdd,
                     showDividerBefore = true
@@ -1528,7 +1458,7 @@ private fun TrackListRow(
             if (onManageTags != null) {
                 add(
                     AudioItemMenuAction(
-                        label = "标签管理",
+                        label = appString(R.string.ui_tag_management),
                         onClick = onManageTags,
                         icon = Icons.AutoMirrored.Rounded.Label,
                         showDividerBefore = true
@@ -1537,7 +1467,7 @@ private fun TrackListRow(
             }
             add(
                 AudioItemMenuAction(
-                    label = "从专辑移除",
+                    label = appString(R.string.ui_remove_from_album),
                     onClick = onRemove,
                     icon = Icons.Rounded.Delete,
                     showDividerBefore = true
@@ -1577,7 +1507,7 @@ private fun AlbumSyncStatusOverlay(
         ) {
             Icon(
                 imageVector = Icons.Rounded.ErrorOutline,
-                contentDescription = "同步失败",
+                contentDescription = appString(R.string.ui_sync_failed),
                 tint = Color.White,
                 modifier = Modifier.size(indicatorSize),
             )

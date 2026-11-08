@@ -246,10 +246,6 @@ class SettingsRepository private constructor(
         prefs[SettingsKeys.SFW_HIDE_SYSTEM_CONTROLS] ?: false
     }
 
-    val showMiniPlayerBar: Flow<Boolean> = context.settingsDataStore.data.map { prefs ->
-        prefs[SettingsKeys.SHOW_MINI_PLAYER_BAR] ?: true
-    }
-
     val deepSeekTranslationSettings: Flow<DeepSeekTranslationSettings> =
         context.settingsDataStore.data.map { prefs ->
             DeepSeekTranslationSettings(
@@ -339,12 +335,6 @@ class SettingsRepository private constructor(
     suspend fun setSfwHideSystemControls(enabled: Boolean) {
         withContext(Dispatchers.IO) {
             context.settingsDataStore.edit { it[SettingsKeys.SFW_HIDE_SYSTEM_CONTROLS] = enabled }
-        }
-    }
-
-    suspend fun setShowMiniPlayerBar(enabled: Boolean) {
-        withContext(Dispatchers.IO) {
-            context.settingsDataStore.edit { it[SettingsKeys.SHOW_MINI_PLAYER_BAR] = enabled }
         }
     }
 
@@ -445,12 +435,6 @@ class SettingsRepository private constructor(
                 current.removeAll { it.name == name }
                 prefs[SettingsKeys.CUSTOM_EQ_PRESETS] = EqualizerPresets.encodeCustomPresets(current)
             }
-        }
-    }
-
-    suspend fun setEqEnabled(enabled: Boolean) {
-        withContext(Dispatchers.IO) {
-            context.settingsDataStore.edit { it[SettingsKeys.EQ_ENABLED] = enabled }
         }
     }
 

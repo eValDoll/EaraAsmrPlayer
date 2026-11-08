@@ -43,11 +43,19 @@ class LocalAlbumMergeService @Inject constructor(
                 val mergedDownloadPath = sequenceOf(canonical.downloadPath, downloadPath)
                     .plus(matches.asSequence().map { it.downloadPath })
                     .firstOrNull { !it.isNullOrBlank() }
+                val mergedManualCoverPath = canonical.manualCoverPath.ifBlank {
+                    matches.firstOrNull { it.manualCoverPath.isNotBlank() }?.manualCoverPath.orEmpty()
+                }
                 val merged = canonical.copy(
+                    tagDetailsJson = com.asmr.player.domain.model.AlbumTagCodec.encode(matches.fold(emptyList<com.asmr.player.domain.model.AlbumTag>()) { tags, album -> com.asmr.player.domain.model.mergeAlbumTags(tags, com.asmr.player.domain.model.AlbumTagCodec.decode(album.tagDetailsJson)) }),
                     title = canonical.title.ifBlank { fallbackTitle },
                     path = mergedLocalPath ?: mergedDownloadPath ?: canonical.path.ifBlank { fallbackPath },
                     localPath = mergedLocalPath,
                     downloadPath = mergedDownloadPath,
+                    manualCoverPath = mergedManualCoverPath,
+                    coverThumbPath = canonical.coverThumbPath.takeIf {
+                        mergedManualCoverPath == canonical.manualCoverPath
+                    }.orEmpty(),
                     workId = canonical.workId.ifBlank { normalizedRj },
                     rjCode = normalizedRj,
                 )

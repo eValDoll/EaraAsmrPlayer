@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.room.Room
 import com.asmr.player.data.local.db.AppDatabase
 import com.asmr.player.data.local.db.AppDatabaseMigrations
+import com.asmr.player.data.local.db.removeManualCoverColumnForLegacySchema
 import com.asmr.player.data.local.db.dao.AudioMetadataDao
 import com.asmr.player.data.local.db.entities.AudioMetadataEntity
 import com.asmr.player.data.local.db.entities.PlaylistEntity
@@ -23,7 +24,7 @@ import org.robolectric.annotation.Config
 import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [34])
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [34])
 class AudioMetadataPersistenceTest {
     private val hq = AudioTechnicalMetadata(44100, 320000, 2, 0, "audio/mpeg", 123.0)
     private val sq = AudioTechnicalMetadata(48000, 0, 2, 24, "audio/flac", 234.0)
@@ -58,6 +59,9 @@ class AudioMetadataPersistenceTest {
                 db.playlistItemDao().upsertItems(listOf(favorite))
                 // Recreate the previous schema; reopening exercises Room's actual upgrade and validation.
                 db.openHelper.writableDatabase.execSQL("DROP TABLE audio_metadata")
+                db.openHelper.writableDatabase.execSQL("DROP TABLE subtitle_import_blocks")
+                db.openHelper.writableDatabase.execSQL("DROP INDEX index_tracks_path")
+                removeManualCoverColumnForLegacySchema(db.openHelper.writableDatabase)
                 db.openHelper.writableDatabase.version = 33
             }
             open().useDatabase { db ->
@@ -145,7 +149,7 @@ class AudioMetadataPersistenceTest {
         try {
             block {
                 Room.databaseBuilder(context, AppDatabase::class.java, name)
-                    .addMigrations(AppDatabaseMigrations.MIGRATION_33_34)
+                    .addMigrations(AppDatabaseMigrations.MIGRATION_33_34, AppDatabaseMigrations.MIGRATION_34_35, AppDatabaseMigrations.MIGRATION_35_36, AppDatabaseMigrations.MIGRATION_36_37, AppDatabaseMigrations.MIGRATION_37_38)
                     .allowMainThreadQueries()
                     .build()
             }

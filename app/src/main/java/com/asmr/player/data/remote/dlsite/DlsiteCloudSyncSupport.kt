@@ -1,29 +1,26 @@
 package com.asmr.player.data.remote.dlsite
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.i18n.AppLanguage
+import com.asmr.player.R
+
 import com.asmr.player.domain.model.Album
 import com.asmr.player.util.DlsiteWorkNo
+import kotlinx.coroutines.CancellationException
 
 internal const val CLOUD_SYNC_LOCALE_ZH_CN = "zh_CN"
 internal const val CLOUD_SYNC_LOCALE_ZH_TW = "zh_TW"
 internal const val CLOUD_SYNC_LOCALE_JA_JP = "ja_JP"
 
-private val CLOUD_SYNC_LANGUAGE_PRIORITY = listOf(
-    "CHI_HANS" to CLOUD_SYNC_LOCALE_ZH_CN,
-    "CHI_HANT" to CLOUD_SYNC_LOCALE_ZH_TW,
-    "JPN" to CLOUD_SYNC_LOCALE_JA_JP
+private val CLOUD_SYNC_LOCALE_PRIORITY = listOf(
+    CLOUD_SYNC_LOCALE_ZH_CN,
+    CLOUD_SYNC_LOCALE_ZH_TW,
+    CLOUD_SYNC_LOCALE_JA_JP
 )
 private val CLOUD_SYNC_TITLE_BLOCK_REGEX = Regex("\u3010[^\u3010\u3011]*\u3011")
 
-internal data class DlsiteCloudSyncAttempt(
-    val workno: String,
-    val locale: String
-)
-
-internal data class DlsiteCloudSyncResolvedDetails(
-    val workno: String,
-    val locale: String,
-    val details: Album
-)
+private fun cloudSyncLocales(preferredLocale: String): List<String> =
+    (listOf(preferredLocale) + CLOUD_SYNC_LOCALE_PRIORITY).distinct()
 
 internal data class DlsiteCloudSyncCandidate(
     val workno: String,
@@ -62,43 +59,18 @@ internal fun sanitizeDlsiteCloudSyncKeyword(raw: String): String {
         .trim()
 }
 
-internal fun buildDlsiteCloudSyncAttempts(
-    baseWorkno: String,
-    editions: List<DlsiteLanguageEdition>?
-): List<DlsiteCloudSyncAttempt> {
-    val normalizedBase = baseWorkno.trim().uppercase()
-    if (normalizedBase.isBlank()) return emptyList()
-
-    val editionByLang = editions.orEmpty()
-        .asSequence()
-        .mapNotNull { edition ->
-            val lang = edition.lang.trim().uppercase()
-            val workno = edition.workno.trim().uppercase()
-            if (lang.isBlank() || workno.isBlank()) null else lang to workno
-        }
-        .toMap()
-
-    val attempts = CLOUD_SYNC_LANGUAGE_PRIORITY.mapNotNull { (lang, locale) ->
-        val workno = editionByLang[lang] ?: return@mapNotNull null
-        DlsiteCloudSyncAttempt(workno = workno, locale = locale)
-    }
-
-    if (attempts.isNotEmpty()) return attempts.distinct()
-
-    return CLOUD_SYNC_LANGUAGE_PRIORITY.map { (_, locale) ->
-        DlsiteCloudSyncAttempt(workno = normalizedBase, locale = locale)
-    }
-}
-
 internal suspend fun searchDlsiteWorknoWithLocaleFallback(
     keyword: String,
+    preferredLocale: String = AppLanguage.metadataLocale(),
     search: suspend (keyword: String, locale: String) -> List<Album>
 ): DlsiteCloudSyncSearchResult {
     val normalizedKeyword = sanitizeDlsiteCloudSyncKeyword(keyword)
     if (normalizedKeyword.isBlank()) return DlsiteCloudSyncSearchResult.NotFound
 
-    for ((_, locale) in CLOUD_SYNC_LANGUAGE_PRIORITY) {
-        val results = runCatching { search(normalizedKeyword, locale) }.getOrNull() ?: continue
+    for (locale in cloudSyncLocales(preferredLocale)) {
+        val results = try { search(normalizedKeyword, locale) }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { continue }
         val candidates = results.toDlsiteCloudSyncCandidates()
         when {
             candidates.size > 1 -> {
@@ -120,10 +92,8 @@ internal suspend fun searchDlsiteWorknoWithLocaleFallback(
 private fun List<Album>.toDlsiteCloudSyncCandidates(): List<DlsiteCloudSyncCandidate> {
     return asSequence()
         .mapNotNull { album ->
-            val workno = album.rjCode
-                .trim()
-                .uppercase()
-                .ifBlank { album.workId.trim().uppercase() }
+            val workno = DlsiteWorkNo.normalizeWorkNo(album.rjCode)
+                .ifBlank { DlsiteWorkNo.normalizeWorkNo(album.workId) }
             if (workno.isBlank()) return@mapNotNull null
             DlsiteCloudSyncCandidate(
                 workno = workno,
@@ -136,76 +106,18 @@ private fun List<Album>.toDlsiteCloudSyncCandidates(): List<DlsiteCloudSyncCandi
         .toList()
 }
 
-internal suspend fun fetchDlsiteDetailsWithLocaleFallback(
-    baseWorkno: String,
-    fetchLanguageEditions: suspend (productId: String) -> List<DlsiteLanguageEdition>,
-    fetchDetails: suspend (workno: String, locale: String) -> Album?
-): DlsiteCloudSyncResolvedDetails? {
-    val normalizedBase = baseWorkno.trim().uppercase()
-    if (normalizedBase.isBlank()) return null
-
-    val editions = runCatching { fetchLanguageEditions(normalizedBase) }.getOrNull()
-    val attempts = buildDlsiteCloudSyncAttempts(normalizedBase, editions)
-
-    for (attempt in attempts) {
-        val details = runCatching { fetchDetails(attempt.workno, attempt.locale) }.getOrNull() ?: continue
-        return DlsiteCloudSyncResolvedDetails(
-            workno = attempt.workno,
-            locale = attempt.locale,
-            details = details
-        )
-    }
-
-    return null
-}
-
 internal suspend fun resolveDlsiteCloudSync(
     keyword: String,
     baseWorkno: String,
+    preferredLocale: String = AppLanguage.metadataLocale(),
     search: suspend (keyword: String, locale: String) -> List<Album>,
-    fetchLanguageEditions: suspend (productId: String) -> List<DlsiteLanguageEdition>,
     fetchDetails: suspend (workno: String, locale: String) -> Album?
 ): DlsiteCloudSyncResolveResult {
-    val normalizedKeyword = keyword.trim()
-    var workno = baseWorkno.trim().uppercase()
+    val workno = DlsiteWorkNo.normalizeWorkNo(baseWorkno)
+    if (workno.isNotBlank()) return resolveSelectedDlsiteCloudSync(workno, preferredLocale, fetchDetails)
 
-    if (workno.isBlank()) {
-        when (val searchResult = searchDlsiteWorknoWithLocaleFallback(normalizedKeyword, search)) {
-            is DlsiteCloudSyncSearchResult.Unique -> workno = searchResult.workno
-            is DlsiteCloudSyncSearchResult.Ambiguous -> {
-                return DlsiteCloudSyncResolveResult.Ambiguous(
-                    locale = searchResult.locale,
-                    candidates = searchResult.candidates
-                )
-            }
-            DlsiteCloudSyncSearchResult.NotFound -> return DlsiteCloudSyncResolveResult.NotFound
-        }
-    }
-
-    resolveSelectedDlsiteCloudSync(workno, fetchLanguageEditions, fetchDetails).let { resolved ->
-        if (resolved is DlsiteCloudSyncResolveResult.Success) return resolved
-    }
-
-    if (normalizedKeyword.isBlank()) return DlsiteCloudSyncResolveResult.NotFound
-
-    return when (val searchResult = searchDlsiteWorknoWithLocaleFallback(normalizedKeyword, search)) {
-        is DlsiteCloudSyncSearchResult.Unique -> {
-            if (searchResult.workno.equals(workno, ignoreCase = true)) {
-                DlsiteCloudSyncResolveResult.NotFound
-            } else {
-                val resolved = fetchDlsiteDetailsWithLocaleFallback(searchResult.workno, fetchLanguageEditions, fetchDetails)
-                if (resolved != null) {
-                    DlsiteCloudSyncResolveResult.Success(
-                        workno = resolved.workno,
-                        locale = resolved.locale,
-                        details = resolved.details
-                    )
-                } else {
-                    DlsiteCloudSyncResolveResult.NotFound
-                }
-            }
-        }
-
+    return when (val searchResult = searchDlsiteWorknoWithLocaleFallback(keyword, preferredLocale, search)) {
+        is DlsiteCloudSyncSearchResult.Unique -> resolveSelectedDlsiteCloudSync(searchResult.workno, preferredLocale, fetchDetails)
         is DlsiteCloudSyncSearchResult.Ambiguous -> DlsiteCloudSyncResolveResult.Ambiguous(
             locale = searchResult.locale,
             candidates = searchResult.candidates
@@ -216,17 +128,52 @@ internal suspend fun resolveDlsiteCloudSync(
 
 internal suspend fun resolveSelectedDlsiteCloudSync(
     workno: String,
-    fetchLanguageEditions: suspend (productId: String) -> List<DlsiteLanguageEdition>,
+    preferredLocale: String = AppLanguage.metadataLocale(),
     fetchDetails: suspend (workno: String, locale: String) -> Album?
 ): DlsiteCloudSyncResolveResult {
-    fetchDlsiteDetailsWithLocaleFallback(workno, fetchLanguageEditions, fetchDetails)?.let { resolved ->
+    val normalizedWorkno = DlsiteWorkNo.normalizeWorkNo(workno)
+    if (normalizedWorkno.isBlank()) return DlsiteCloudSyncResolveResult.NotFound
+
+    for (locale in cloudSyncLocales(preferredLocale)) {
+        val details = try { fetchDetails(normalizedWorkno, locale) }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { continue } ?: continue
+        val hasMismatchedWorkno = sequenceOf(details.rjCode, details.workId)
+            .map { DlsiteWorkNo.normalizeWorkNo(it) }
+            .any { it.isNotBlank() && it != normalizedWorkno }
+        if (hasMismatchedWorkno) continue
+        // Keep the established canonical tag names when fetching English display metadata.
+        val canonical = if (locale == "en_US") {
+            try {
+                fetchDetails(normalizedWorkno, CLOUD_SYNC_LOCALE_ZH_CN)?.takeIf { candidate ->
+                    sequenceOf(candidate.rjCode, candidate.workId).all {
+                        val id = DlsiteWorkNo.normalizeWorkNo(it)
+                        id.isBlank() || id == normalizedWorkno
+                    }
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { null }
+        } else null
         return DlsiteCloudSyncResolveResult.Success(
-            workno = resolved.workno,
-            locale = resolved.locale,
-            details = resolved.details
+            workno = normalizedWorkno,
+            locale = locale,
+            details = if (canonical == null) details else details.copy(
+                tags = canonical.tags.ifEmpty { details.tags },
+                tagDetails = com.asmr.player.domain.model.mergeAlbumTags(canonical.tagDetails, details.tagDetails)
+            )
         )
     }
     return DlsiteCloudSyncResolveResult.NotFound
+}
+
+internal fun resolveCloudSyncRjCode(existingRjCode: String, existingWorkId: String, resolvedWorkno: String): String {
+    val normalizedResolved = DlsiteWorkNo.normalizeWorkNo(resolvedWorkno)
+    require(normalizedResolved.isNotBlank()) { appString(R.string.ui_invalid_work_number) }
+    val normalizedExistingRj = DlsiteWorkNo.normalizeWorkNo(existingRjCode)
+    val currentWorkno = normalizedExistingRj
+        .ifBlank { DlsiteWorkNo.normalizeWorkNo(existingWorkId) }
+    require(currentWorkno.isBlank() || currentWorkno == normalizedResolved) { appString(R.string.ui_the_work_number_changed_try_syncing_again) }
+    return if (normalizedExistingRj.isNotBlank()) existingRjCode else normalizedResolved
 }
 
 internal fun resolveCloudSyncWorkId(existingWorkId: String, resolvedWorkno: String): String {
