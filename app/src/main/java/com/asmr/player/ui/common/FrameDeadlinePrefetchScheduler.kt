@@ -20,6 +20,7 @@ import android.os.Build
 import android.view.Choreographer
 import android.view.View
 import android.view.ViewTreeObserver
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.lazy.layout.PrefetchRequest
 import androidx.compose.foundation.lazy.layout.PrefetchRequestScope
@@ -68,15 +69,16 @@ internal class PrefetchFrameBudget(
 
 // 基于 Foundation 1.7.8 AndroidPrefetchScheduler；避免其静态缓存启动时的刷新率。
 @OptIn(ExperimentalFoundationApi::class)
-private class FrameDeadlinePrefetchScheduler(
+internal class FrameDeadlinePrefetchScheduler(
     private val view: View,
 ) : PrefetchScheduler, RememberObserver, Runnable, Choreographer.FrameCallback,
-    View.OnAttachStateChangeListener, ViewTreeObserver.OnWindowVisibilityChangeListener,
+    View.OnAttachStateChangeListener, ViewTreeObserver.OnPreDrawListener,
     ViewTreeObserver.OnGlobalLayoutListener {
     private val requests = ArrayDeque<PrefetchRequest>()
     private val choreographer = Choreographer.getInstance()
     private val budget = PrefetchFrameBudget()
     private var observedTree: ViewTreeObserver? = null
+    private var stopWindowVisibilityObservation: (() -> Unit)? = null
     private var remembered = false
     private var pageActive = true
     private var frameCallbackScheduled = false
@@ -149,7 +151,11 @@ private class FrameDeadlinePrefetchScheduler(
         if (canPrefetch) scheduleNextFrame() else cancelCallbacks()
     }
 
-    override fun onWindowVisibilityChanged(visibility: Int) = updateVisibility()
+    override fun onPreDraw(): Boolean {
+        // 旧系统窗口重新可见时不一定发生布局，通过下一次绘制恢复待处理的预取。
+        scheduleNextFrame()
+        return true
+    }
 
     override fun onGlobalLayout() = updateVisibility()
 
@@ -157,14 +163,20 @@ private class FrameDeadlinePrefetchScheduler(
         val tree = view.viewTreeObserver
         if (observedTree === tree || !tree.isAlive) return
         stopObservingTree()
-        tree.addOnWindowVisibilityChangeListener(this)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            stopWindowVisibilityObservation = WindowVisibilityObservation.observe(tree, ::updateVisibility)
+        } else {
+            tree.addOnPreDrawListener(this)
+        }
         tree.addOnGlobalLayoutListener(this)
         observedTree = tree
     }
 
     private fun stopObservingTree() {
+        stopWindowVisibilityObservation?.invoke()
+        stopWindowVisibilityObservation = null
         observedTree?.takeIf { it.isAlive }?.let { tree ->
-            tree.removeOnWindowVisibilityChangeListener(this)
+            tree.removeOnPreDrawListener(this)
             tree.removeOnGlobalLayoutListener(this)
         }
         observedTree = null
@@ -196,6 +208,17 @@ private class FrameDeadlinePrefetchScheduler(
     }
 
     override fun onAbandoned() = onForgotten()
+}
+
+@RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+private object WindowVisibilityObservation {
+    fun observe(tree: ViewTreeObserver, onChanged: () -> Unit): () -> Unit {
+        val listener = ViewTreeObserver.OnWindowVisibilityChangeListener { onChanged() }
+        tree.addOnWindowVisibilityChangeListener(listener)
+        return {
+            if (tree.isAlive) tree.removeOnWindowVisibilityChangeListener(listener)
+        }
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)

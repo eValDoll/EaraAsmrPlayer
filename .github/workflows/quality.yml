@@ -24,13 +24,13 @@ jobs:
           distribution: temurin
           java-version: 17
           cache: gradle
-      - name: Run release unit tests
+      - name: Check API compatibility and run release unit tests
         shell: bash
         run: |
           set -euo pipefail
           sed -i 's/\r$//' gradlew
           chmod +x gradlew
-          ./gradlew :app:testReleaseUnitTest
+          ./gradlew :app:lintVitalRelease :app:testReleaseUnitTest
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -40,3 +40,4 @@ jobs:
           path: |
             .build_asmr_player_android/app/reports/tests/testReleaseUnitTest/
             .build_asmr_player_android/app/test-results/testReleaseUnitTest/
+            .build_asmr_player_android/app/reports/lint-results-*

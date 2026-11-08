@@ -28,6 +28,8 @@ class DlsiteTagParserTest {
         assertEquals("2026-11-08", parseEnglishReleaseDate("Nov. 08, 2026"))
         assertEquals("2026-11-08", parseEnglishReleaseDate("November 8, 2026"))
         assertNull(parseEnglishReleaseDate("not a date"))
+        assertNull(parseEnglishReleaseDate("Feb 29, 2023"))
+        assertEquals("2024-02-29", parseEnglishReleaseDate("February 29, 2024"))
         val doc = Jsoup.parse("""<table id="work_outline"><tr><th>Voice Actor</th><td><a>Actor A</a><a>Actor B</a></td></tr></table>""")
         assertEquals(listOf("Actor A", "Actor B"), parseCvNames(doc))
     }

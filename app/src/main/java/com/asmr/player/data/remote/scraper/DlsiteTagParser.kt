@@ -1,6 +1,10 @@
 package com.asmr.player.data.remote.scraper
 
 import com.asmr.player.domain.model.AlbumTag
+import java.text.ParsePosition
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
 import org.jsoup.nodes.Element
 
 private val genreIdentity = Regex("(?:genre|genre_id)(?:/=/|/|=)([0-9]+)")
@@ -23,9 +27,13 @@ internal fun parseDlsiteTags(links: Iterable<Element>): List<AlbumTag> =
 internal fun parseEnglishReleaseDate(value: String): String? {
     val date = Regex("[A-Za-z]+\\.?[ /]+\\d{1,2},?[ /]+\\d{4}").find(value)?.value ?: return null
     val normalized = date.replace(".", "").replace(",", "").replace("/", " ").replace(Regex("\\s+"), " ")
-    return sequenceOf("MMM d uuuu", "MMMM d uuuu").mapNotNull { pattern ->
-        runCatching {
-            java.time.LocalDate.parse(normalized, java.time.format.DateTimeFormatter.ofPattern(pattern, java.util.Locale.ENGLISH))
-        }.getOrNull()
-    }.firstOrNull()?.toString()
+    val utc = TimeZone.getTimeZone("UTC")
+    val parser = SimpleDateFormat("MMM d yyyy", Locale.ENGLISH).apply {
+        isLenient = false
+        timeZone = utc
+    }
+    val position = ParsePosition(0)
+    val parsed = parser.parse(normalized, position)
+        ?.takeIf { position.index == normalized.length } ?: return null
+    return SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).apply { timeZone = utc }.format(parsed)
 }
