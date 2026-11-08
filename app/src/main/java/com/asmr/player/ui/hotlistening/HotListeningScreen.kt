@@ -389,64 +389,86 @@ private fun HotListeningScreenContent(
                                     isAtEnd = { !gridState.canScrollForward },
                                 )
                         ) {
-                            LazyVerticalStaggeredGrid(
-                                columns = StaggeredGridCells.Adaptive(adaptiveCellSize),
-                                state = gridState,
-                                modifier = Modifier
-                                    .fillMaxSize(),
-                                flingBehavior = rememberCalmScrollableFlingBehavior(),
-                                contentPadding = PaddingValues(
-                                    top = contentTopPadding,
-                                    start = 8.dp,
-                                    end = 8.dp,
-                                    bottom = 16.dp
-                                ).withAddedBottomPadding(LocalBottomOverlayPadding.current),
-                                horizontalArrangement = Arrangement.spacedBy(AlbumGridItemSpacing),
-                                verticalItemSpacing = AlbumGridItemSpacing
-                            ) {
-                                items(
-                                    state.entries.size,
-                                    key = { index -> hotListeningItemKey("visible", state.entries[index].album) },
-                                    contentType = { "albumGrid" }
-                                ) { index ->
-                                    HotListeningGridItem(
-                                        horizontal = tabletList,
-                                        entry = state.entries[index],
-                                        onAlbumClick = onAlbumClick,
-                                        onMetaLongClick = ::openMetaActions,
-                                        coverFadeInState = gridCoverFadeInState,
-                                    )
-                                }
-                                if (state.blockedEntries.isNotEmpty()) {
-                                    item(
-                                        key = "blocked-footer",
-                                        contentType = "blockedFooter",
-                                        span = StaggeredGridItemSpan.FullLine
+                            AlbumListIconScope {
+                                PreparedAlbumParagraphs(
+                                    gridState = gridState,
+                                    horizontal = tabletList,
+                                    active = isActive && isDataActive.value,
+                                    dataKey = Triple(state.entries, state.blockedEntries, showBlockedEntries),
+                                    itemAtLazyIndex = { index ->
+                                        if (index < state.entries.size) {
+                                            state.entries.getOrNull(index)?.album?.let { album ->
+                                                PreparedAlbumParagraphItem(hotListeningItemKey("visible", album), album)
+                                            }
+                                        } else if (showBlockedEntries) {
+                                            state.blockedEntries.getOrNull(index - state.entries.size - 1)?.album?.let { album ->
+                                                PreparedAlbumParagraphItem(hotListeningItemKey("blocked", album), album)
+                                            }
+                                        } else null
+                                    },
+                                ) {
+                                    LazyVerticalStaggeredGrid(
+                                        columns = StaggeredGridCells.Adaptive(adaptiveCellSize),
+                                        state = gridState,
+                                        modifier = Modifier
+                                            .fillMaxSize(),
+                                        flingBehavior = rememberCalmScrollableFlingBehavior(),
+                                        contentPadding = PaddingValues(
+                                            top = contentTopPadding,
+                                            start = 8.dp,
+                                            end = 8.dp,
+                                            bottom = 16.dp
+                                        ).withAddedBottomPadding(LocalBottomOverlayPadding.current),
+                                        horizontalArrangement = Arrangement.spacedBy(AlbumGridItemSpacing),
+                                        verticalItemSpacing = AlbumGridItemSpacing
                                     ) {
-                                        BlockedHotListeningFooter(
-                                            blockedCount = state.blockedEntries.size,
-                                            expanded = showBlockedEntries,
-                                            onToggle = { showBlockedEntries = !showBlockedEntries }
-                                        )
-                                    }
-                                    if (showBlockedEntries) {
                                         items(
-                                            state.blockedEntries.size,
-                                            key = { index ->
-                                                hotListeningItemKey(
-                                                    "blocked",
-                                                    state.blockedEntries[index].album
-                                                )
-                                            },
+                                            state.entries.size,
+                                            key = { index -> hotListeningItemKey("visible", state.entries[index].album) },
                                             contentType = { "albumGrid" }
                                         ) { index ->
                                             HotListeningGridItem(
+                                                itemKey = hotListeningItemKey("visible", state.entries[index].album),
                                                 horizontal = tabletList,
-                                                entry = state.blockedEntries[index],
+                                                entry = state.entries[index],
                                                 onAlbumClick = onAlbumClick,
                                                 onMetaLongClick = ::openMetaActions,
                                                 coverFadeInState = gridCoverFadeInState,
                                             )
+                                        }
+                                        if (state.blockedEntries.isNotEmpty()) {
+                                            item(
+                                                key = "blocked-footer",
+                                                contentType = "blockedFooter",
+                                                span = StaggeredGridItemSpan.FullLine
+                                            ) {
+                                                BlockedHotListeningFooter(
+                                                    blockedCount = state.blockedEntries.size,
+                                                    expanded = showBlockedEntries,
+                                                    onToggle = { showBlockedEntries = !showBlockedEntries }
+                                                )
+                                            }
+                                            if (showBlockedEntries) {
+                                                items(
+                                                    state.blockedEntries.size,
+                                                    key = { index ->
+                                                        hotListeningItemKey(
+                                                            "blocked",
+                                                            state.blockedEntries[index].album
+                                                        )
+                                                    },
+                                                    contentType = { "albumGrid" }
+                                                ) { index ->
+                                                    HotListeningGridItem(
+                                                        itemKey = hotListeningItemKey("blocked", state.blockedEntries[index].album),
+                                                        horizontal = tabletList,
+                                                        entry = state.blockedEntries[index],
+                                                        onAlbumClick = onAlbumClick,
+                                                        onMetaLongClick = ::openMetaActions,
+                                                        coverFadeInState = gridCoverFadeInState,
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -535,6 +557,7 @@ private fun HotListeningListItem(
 
 @Composable
 private fun HotListeningGridItem(
+    itemKey: String,
     horizontal: Boolean = false,
     entry: HotListeningEntry,
     onAlbumClick: (Album) -> Unit,
@@ -550,6 +573,7 @@ private fun HotListeningGridItem(
         val album = entry.album
         val coverBadge = remember(entry) { entry.toCoverBadge() }
         AlbumGridItem(
+            preparedItemKey = itemKey,
             horizontal = horizontal,
             album = album,
             onClick = { onAlbumClick(album) },

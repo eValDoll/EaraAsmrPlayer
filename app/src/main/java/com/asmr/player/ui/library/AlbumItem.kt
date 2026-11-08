@@ -108,7 +108,7 @@ private val AlbumItemBottomPadding = 8.dp
 private val AlbumItemCoverContentSpacing = 10.dp
 private val AlbumListCoverShadowBlurRadius = 10.dp
 private val AlbumGridCoverShadowBlurRadius = 13.dp
-private val AlbumGridInfoHorizontalPadding = 2.dp
+internal val AlbumGridInfoHorizontalPadding = 2.dp
 private val AlbumGridInfoVerticalPadding = 8.dp
 private val AlbumGridInfoMinHeight = 128.dp
 private val AlbumDetailSkeletonHeight = 18.dp
@@ -545,6 +545,7 @@ fun AlbumGridItem(
     coverFadeInState: State<Boolean>? = null,
     coverReloadKey: Any? = null,
     coverRetainPainterDuringReload: Boolean = false,
+    preparedItemKey: Any? = null,
     coverOverlay: @Composable BoxScope.() -> Unit = {},
     showCollectedIndicator: Boolean = true,
     showStatsPlaceholders: Boolean = false,
@@ -569,6 +570,7 @@ fun AlbumGridItem(
             coverFadeInState = coverFadeInState,
             coverReloadKey = coverReloadKey,
             coverRetainPainterDuringReload = coverRetainPainterDuringReload,
+            preparedItemKey = preparedItemKey,
             coverOverlay = coverOverlay,
             showCollectedIndicator = showCollectedIndicator,
             showStatsPlaceholders = showStatsPlaceholders,
@@ -701,6 +703,7 @@ fun AlbumGridItem(
             ) {
                 AlbumItemCvLightweight(
                     cvText = album.cv,
+                    preparedItemKey = preparedItemKey,
                     modifier = Modifier.fillMaxWidth(),
                     layout = AlbumInlineValuesLayout.Flow,
                     onClick = onClick,
@@ -735,6 +738,7 @@ fun AlbumGridItem(
             ) {
                 AlbumItemTagsLightweight(
                     tags = displayTags,
+                    preparedItemKey = preparedItemKey,
                     modifier = Modifier.fillMaxWidth(),
                     layout = AlbumInlineValuesLayout.Flow,
                     onClick = onClick,

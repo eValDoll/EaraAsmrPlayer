@@ -47,7 +47,20 @@ class RealListScrollPerformanceBenchmark {
     @Test
     fun hotListeningScroll() = measureList("hot_listening")
 
-    private fun measureList(route: String) {
+    @Test
+    fun searchScrollWithoutPrecompilation() {
+        assumeTrue(
+            "Compilation reset is limited to an explicitly selected isolated test device",
+            InstrumentationRegistry.getArguments().getString("eara.isolatedTestDevice") == "true",
+        )
+        measureList("search", compilationMode = CompilationMode.None(), iterations = 1)
+    }
+
+    private fun measureList(
+        route: String,
+        compilationMode: CompilationMode = CompilationMode.Ignore(),
+        iterations: Int? = null,
+    ) {
         val arguments = InstrumentationRegistry.getArguments()
         val reuseLoadedHotList = route == "hot_listening" &&
             arguments.getString("eara.hotWarmScroll") == "true"
@@ -67,9 +80,9 @@ class RealListScrollPerformanceBenchmark {
                         add(FrameTimingMetric())
                     }
                 },
-                compilationMode = CompilationMode.Ignore(),
+                compilationMode = compilationMode,
                 startupMode = null,
-                iterations = arguments.getString("eara.scrollIterations")?.toIntOrNull()
+                iterations = iterations ?: arguments.getString("eara.scrollIterations")?.toIntOrNull()
                     ?.coerceIn(1, 20) ?: 5,
                 setupBlock = {
                     check(!realListFocusLost) { "Previous gesture lost the target window; ending this capture" }

@@ -4,6 +4,9 @@ package com.asmr.player.ui.library.prepared
 
 import android.app.Application
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -22,6 +25,7 @@ import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
@@ -64,7 +68,7 @@ class PreparedParagraphAdoptionTest {
                     LocalLayoutDirection provides LayoutDirection.Ltr,
                 ) {
                     Column {
-                        UnconstrainedText {
+                        ParagraphTestLayout {
                             Text(
                                 text.value,
                                 modifier = Modifier.testTag("reference"),
@@ -74,7 +78,7 @@ class PreparedParagraphAdoptionTest {
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
-                        if (visible.value) UnconstrainedText {
+                        if (visible.value) ParagraphTestLayout {
                             AlbumInlineText(
                                 text.value,
                                 preparedOccurrence = initial.occurrence,
@@ -131,9 +135,84 @@ class PreparedParagraphAdoptionTest {
         }
     }
 
-    private fun assertPairGeometryAndStyle() {
-        val reference = textLayout("reference")
-        val prepared = textLayout("prepared")
+    @Test
+    @OptIn(ExperimentalLayoutApi::class)
+    fun flowRowAdoptsBoundedParagraphsWithoutChangingWrappingOrEllipsis() {
+        val resolver = createFontFamilyResolver(RuntimeEnvironment.getApplication())
+        val executor = QueuedParagraphExecutor()
+        val session = PreparedParagraphSession(resolver, executor)
+        val requests = listOf("短标签", "另一个标签", "很长的标签用于核对窄栏中的省略号和换行位置").mapIndexed { index, text ->
+            paragraphRequest(resolver).let {
+                it.copy(
+                    occurrence = it.occurrence.copy(index = index),
+                    text = text,
+                    constraints = Constraints(maxWidth = 176),
+                )
+            }
+        }
+        session.setAheadWindow(requests)
+        executor.runNext()
+        try {
+            compose.setContent {
+                CompositionLocalProvider(
+                    LocalPreparedParagraphSession provides session,
+                    LocalFontFamilyResolver provides resolver,
+                    LocalDensity provides Density(1f, 1f),
+                    LocalLayoutDirection provides LayoutDirection.Ltr,
+                ) {
+                    Column {
+                        ParagraphTestLayout(maxWidth = 180) {
+                            FlowRow(Modifier.testTag("reference-flow")) {
+                                requests.forEachIndexed { index, request ->
+                                    Text(
+                                        request.text,
+                                        modifier = Modifier.testTag("reference-$index").padding(horizontal = 2.dp),
+                                        style = request.layoutStyle.value,
+                                        color = Color.Blue,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        }
+                        ParagraphTestLayout(maxWidth = 180) {
+                            FlowRow(Modifier.testTag("prepared-flow")) {
+                                requests.forEachIndexed { index, request ->
+                                    AlbumInlineText(
+                                        request.text,
+                                        preparedOccurrence = request.occurrence,
+                                        modifier = Modifier.testTag("prepared-$index").padding(horizontal = 2.dp),
+                                        style = request.layoutStyle.value,
+                                        color = Color.Blue,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            compose.waitForIdle()
+            assertEquals(requests.size.toLong(), session.stats().adopted)
+            assertEquals(0L, session.stats().staleAdoptions)
+            val referenceBounds = compose.onNodeWithTag("reference-flow").fetchSemanticsNode().boundsInRoot
+            val preparedBounds = compose.onNodeWithTag("prepared-flow").fetchSemanticsNode().boundsInRoot
+            assertEquals(referenceBounds.size, preparedBounds.size)
+            requests.indices.forEach { index ->
+                assertPairGeometryAndStyle("reference-$index", "prepared-$index")
+                val reference = compose.onNodeWithTag("reference-$index").fetchSemanticsNode().boundsInRoot
+                val prepared = compose.onNodeWithTag("prepared-$index").fetchSemanticsNode().boundsInRoot
+                assertEquals(reference.topLeft - referenceBounds.topLeft, prepared.topLeft - preparedBounds.topLeft)
+            }
+        } finally {
+            session.close()
+        }
+    }
+
+    private fun assertPairGeometryAndStyle(referenceTag: String = "reference", preparedTag: String = "prepared") {
+        val reference = textLayout(referenceTag)
+        val prepared = textLayout(preparedTag)
         assertEquals(reference.layoutInput.text, prepared.layoutInput.text)
         assertEquals(reference.layoutInput.style, prepared.layoutInput.style)
         assertEquals(reference.layoutInput.constraints, prepared.layoutInput.constraints)
@@ -158,9 +237,9 @@ class PreparedParagraphAdoptionTest {
 }
 
 @Composable
-private fun UnconstrainedText(content: @Composable () -> Unit) {
+private fun ParagraphTestLayout(maxWidth: Int = Constraints.Infinity, content: @Composable () -> Unit) {
     Layout(content = content) { measurables, _ ->
-        val child = measurables.single().measure(Constraints())
+        val child = measurables.single().measure(Constraints(maxWidth = maxWidth))
         layout(child.width, child.height) { child.place(0, 0) }
     }
 }

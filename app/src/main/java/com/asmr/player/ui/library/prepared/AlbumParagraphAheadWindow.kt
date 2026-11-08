@@ -28,11 +28,17 @@ internal data class AlbumParagraphEnvironment(
     val density: Float,
     val fontScale: Float,
     val layoutDirection: LayoutDirection,
+    val textConstraints: Constraints = Constraints(),
 )
 
 internal data class PreparedAlbumParagraphItem(val key: Any, val album: Album)
 
-internal data class AlbumParagraphViewport(val first: Int, val last: Int, val total: Int)
+internal data class AlbumParagraphViewport(
+    val first: Int,
+    val last: Int,
+    val total: Int,
+    val textMaxWidth: Int = Constraints.Infinity,
+)
 
 internal data class PreparedTagSource(
     val original: String,
@@ -77,8 +83,8 @@ internal class AlbumParagraphAheadWindow(
                         density = window.environment.density,
                         fontScale = window.environment.fontScale,
                         layoutDirection = window.environment.layoutDirection,
-                        // 横向 Scrollable Row 内的文字不使用 viewport 宽度；节点仍核对真实约束。
-                        constraints = Constraints(),
+                        // 网格使用实际栏宽，横向滚动标签保持无界；节点仍核对真实约束。
+                        constraints = window.environment.textConstraints,
                     )
                 }
                 synchronized(gate) {

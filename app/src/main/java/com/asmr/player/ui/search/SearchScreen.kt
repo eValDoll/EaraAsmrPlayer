@@ -1250,67 +1250,82 @@ private fun SearchScreenContent(
                                         state.results.getOrNull(idx)?.let { albumCoverImageModel(it) }
                                     }
                                 )
-                                LazyVerticalStaggeredGrid(
-                                    columns = StaggeredGridCells.Adaptive(gridCellSize),
-                                    state = gridState,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .nestedScroll(chromeState.nestedScrollConnection),
-                                    flingBehavior = rememberCalmScrollableFlingBehavior(),
-                                    contentPadding = PaddingValues(
-                                        top = topPadding,
-                                        start = SearchPageHorizontalPadding,
-                                        end = SearchPageHorizontalPadding,
-                                        bottom = 16.dp
-                                    ).withAddedBottomPadding(LocalBottomOverlayPadding.current),
-                                    horizontalArrangement = Arrangement.spacedBy(AlbumGridItemSpacing),
-                                    verticalItemSpacing = AlbumGridItemSpacing
-                                ) {
-                                    items(
-                                        state.results.size,
-                                        key = { index -> searchResultItemKey(state.results[index]) },
-                                        contentType = { "albumGrid" }
-                                    ) { index ->
-                                        DeferredPageItem(placeholder = {
-                                            Column {
-                                                Spacer(Modifier.fillMaxWidth().aspectRatio(1f))
-                                                Spacer(Modifier.height(168.dp))
+                                AlbumListIconScope {
+                                    PreparedAlbumParagraphs(
+                                        gridState = gridState,
+                                        horizontal = tabletList,
+                                        active = isActive && isDataActive,
+                                        dataKey = state.results,
+                                        itemAtLazyIndex = { index ->
+                                            state.results.getOrNull(index)?.let { album ->
+                                                PreparedAlbumParagraphItem(searchResultItemKey(album), album)
                                             }
-                                        }) {
-                                            val album = state.results[index]
-                                            val onlineDetailLoading = onlineDetailLoadingFor(album, state)
-                                            val skeletonMode = searchResultSkeletonMode(
-                                                onlineDetailLoading = onlineDetailLoading,
-                                                isRefreshingLocalizedText = state.isRefreshingLocalizedText
-                                            )
-                                            val rj = album.rjCode.ifBlank { album.workId }.trim().uppercase()
-                                            val hasResolvedDetail = rj.isNotBlank() && rj in state.enrichedDetailRjCodes
-                                            val itemPurchasedOnly = state.purchasedOnly
-                                            AlbumGridItem(
-                                                horizontal = tabletList,
-                                                album = album,
-                                                onClick = { onAlbumClick(album, itemPurchasedOnly, hasResolvedDetail) },
-                                                modifier = Modifier.animateItem(
-                                                    fadeInSpec = null,
-                                                    placementSpec = if (LocalPageAnimationsActive.current) SearchResultPlacementSpring else null,
-                                                    fadeOutSpec = null,
-                                                ),
-                                                onlineDetailLoading =
-                                                    skeletonMode == SearchResultSkeletonMode.DetailMetadata,
-                                                onlineTitleLoading =
-                                                    skeletonMode == SearchResultSkeletonMode.LocalizedText,
-                                                onlineCvLoading =
-                                                    skeletonMode == SearchResultSkeletonMode.DetailMetadata,
-                                                onlineTagsLoading = skeletonMode != SearchResultSkeletonMode.None,
-                                                showCollectedIndicator = !state.collectedOnly,
-                                                showStatsPlaceholders = true,
-                                                coverFadeInState = coverFadeInState,
-                                                coverReloadKey = state.resultRevision,
-                                                onRjLongClick = ::openMetaActions,
-                                                onCircleLongClick = ::openMetaActions,
-                                                onCvLongClick = ::openMetaActions,
-                                                onTagLongClick = ::openMetaActions,
-                                            )
+                                        },
+                                    ) {
+                                        LazyVerticalStaggeredGrid(
+                                            columns = StaggeredGridCells.Adaptive(gridCellSize),
+                                            state = gridState,
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .nestedScroll(chromeState.nestedScrollConnection),
+                                            flingBehavior = rememberCalmScrollableFlingBehavior(),
+                                            contentPadding = PaddingValues(
+                                                top = topPadding,
+                                                start = SearchPageHorizontalPadding,
+                                                end = SearchPageHorizontalPadding,
+                                                bottom = 16.dp
+                                            ).withAddedBottomPadding(LocalBottomOverlayPadding.current),
+                                            horizontalArrangement = Arrangement.spacedBy(AlbumGridItemSpacing),
+                                            verticalItemSpacing = AlbumGridItemSpacing
+                                        ) {
+                                            items(
+                                                state.results.size,
+                                                key = { index -> searchResultItemKey(state.results[index]) },
+                                                contentType = { "albumGrid" }
+                                            ) { index ->
+                                                DeferredPageItem(placeholder = {
+                                                    Column {
+                                                        Spacer(Modifier.fillMaxWidth().aspectRatio(1f))
+                                                        Spacer(Modifier.height(168.dp))
+                                                    }
+                                                }) {
+                                                    val album = state.results[index]
+                                                    val onlineDetailLoading = onlineDetailLoadingFor(album, state)
+                                                    val skeletonMode = searchResultSkeletonMode(
+                                                        onlineDetailLoading = onlineDetailLoading,
+                                                        isRefreshingLocalizedText = state.isRefreshingLocalizedText
+                                                    )
+                                                    val rj = album.rjCode.ifBlank { album.workId }.trim().uppercase()
+                                                    val hasResolvedDetail = rj.isNotBlank() && rj in state.enrichedDetailRjCodes
+                                                    val itemPurchasedOnly = state.purchasedOnly
+                                                    AlbumGridItem(
+                                                        preparedItemKey = searchResultItemKey(album),
+                                                        horizontal = tabletList,
+                                                        album = album,
+                                                        onClick = { onAlbumClick(album, itemPurchasedOnly, hasResolvedDetail) },
+                                                        modifier = Modifier.animateItem(
+                                                            fadeInSpec = null,
+                                                            placementSpec = if (LocalPageAnimationsActive.current) SearchResultPlacementSpring else null,
+                                                            fadeOutSpec = null,
+                                                        ),
+                                                        onlineDetailLoading =
+                                                            skeletonMode == SearchResultSkeletonMode.DetailMetadata,
+                                                        onlineTitleLoading =
+                                                            skeletonMode == SearchResultSkeletonMode.LocalizedText,
+                                                        onlineCvLoading =
+                                                            skeletonMode == SearchResultSkeletonMode.DetailMetadata,
+                                                        onlineTagsLoading = skeletonMode != SearchResultSkeletonMode.None,
+                                                        showCollectedIndicator = !state.collectedOnly,
+                                                        showStatsPlaceholders = true,
+                                                        coverFadeInState = coverFadeInState,
+                                                        coverReloadKey = state.resultRevision,
+                                                        onRjLongClick = ::openMetaActions,
+                                                        onCircleLongClick = ::openMetaActions,
+                                                        onCvLongClick = ::openMetaActions,
+                                                        onTagLongClick = ::openMetaActions,
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }

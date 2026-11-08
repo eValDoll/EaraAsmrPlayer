@@ -49,10 +49,21 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.asmr.player.R
 import com.asmr.player.ui.theme.AsmrTheme
+
+private val AlbumMetaIconSize = 13.dp
+private val AlbumMetaIconSpacing = 6.dp
+private val AlbumMetaValueHorizontalPadding = 2.dp
+
+internal fun albumGridMetadataTextWidth(itemWidth: Int, density: Density): Int = with(density) {
+    (itemWidth - 2 * AlbumGridInfoHorizontalPadding.roundToPx() -
+        AlbumMetaIconSize.roundToPx() - AlbumMetaIconSpacing.roundToPx() -
+        2 * AlbumMetaValueHorizontalPadding.roundToPx()).coerceAtLeast(0)
+}
 
 private val AlbumItemMetaCenterLine = HorizontalAlignmentLine { old, new -> minOf(old, new) }
 
@@ -397,8 +408,8 @@ private fun RowScope.AlbumItemMetaIcon(
         tint = tint,
         modifier = Modifier
             .alignBy { it.measuredHeight / 2 }
-            .padding(end = 6.dp)
-            .size(13.dp),
+            .padding(end = AlbumMetaIconSpacing)
+            .size(AlbumMetaIconSize),
     )
 }
 
@@ -425,16 +436,17 @@ private fun AlbumItemInlineValueItems(
     onClick: (() -> Unit)?,
     onValueLongClick: ((String) -> Unit)?,
 ) {
+    val style = MaterialTheme.typography.labelSmall.copy(
+        fontSize = if (prominent) 13.sp else 12.sp,
+        fontWeight = if (prominent) FontWeight.SemiBold else FontWeight.Medium,
+    )
     values.forEachIndexed { index, value ->
         AlbumInlineText(
             preparedOccurrence = preparedItemKey?.let {
                 PreparedParagraphOccurrence(it, if (prominent) PreparedParagraphLabel.Cv else PreparedParagraphLabel.Tag, index)
             },
             text = valuePrefix + if (valuePrefix == "#") translatedPageText(value.removePrefix(valuePrefix)) else value,
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = if (prominent) 13.sp else 12.sp,
-                fontWeight = if (prominent) FontWeight.SemiBold else FontWeight.Medium,
-            ),
+            style = style,
             color = valueColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -453,7 +465,7 @@ private fun AlbumItemInlineValueItems(
                         Modifier
                     }
                 )
-                .padding(horizontal = 2.dp, vertical = 2.dp)
+                .padding(horizontal = AlbumMetaValueHorizontalPadding, vertical = 2.dp)
         )
     }
 }

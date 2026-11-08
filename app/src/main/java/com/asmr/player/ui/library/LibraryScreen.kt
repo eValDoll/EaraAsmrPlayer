@@ -760,56 +760,74 @@ private fun LibraryScreenContent(
                                         pagedAlbums.itemSnapshotList.getOrNull(idx)?.let { albumCoverImageModel(it) }
                                     }
                                 )
-                                LazyVerticalStaggeredGrid(
-                                    columns = StaggeredGridCells.Adaptive(gridCellSize),
-                                    state = gridState,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .lightweightVerticalStretchOverscroll(
-                                            isAtStart = { !gridState.canScrollBackward },
-                                            isAtEnd = { !gridState.canScrollForward },
-                                        )
-                                        .clearFocusOnTapOutside()
-                                        .nestedScroll(chromeState.nestedScrollConnection),
-                                    flingBehavior = rememberCalmScrollableFlingBehavior(),
-                                    contentPadding = PaddingValues(top = topPadding, start = LibraryPageHorizontalPadding, end = LibraryPageHorizontalPadding, bottom = 16.dp)
-                                        .withAddedBottomPadding(LocalBottomOverlayPadding.current),
-                                    verticalItemSpacing = AlbumGridItemSpacing,
-                                    horizontalArrangement = Arrangement.spacedBy(AlbumGridItemSpacing)
-                                ) {
-                                    staggeredItems(
-                                        pagedAlbumIndices,
-                                        key = { idx -> pagedAlbumSnapshot.items.getOrNull(idx)?.id?.takeIf { it > 0L } ?: idx },
-                                        contentType = { "albumGridItem" },
-                                    ) { idx ->
-                                        val album = (if (isDataActive) pagedAlbums[idx] else pagedAlbums.peek(idx))
-                                            ?: return@staggeredItems
-                                        val userTags = userTagsByAlbumId[album.id].orEmpty()
-                                        val mergedAlbum = remember(album, userTags) {
-                                            album.withUserTags(userTags)
-                                        }
-                                        AlbumGridItem(
-                                            horizontal = tabletList,
-                                            album = mergedAlbum,
-                                            onClick = { onAlbumClick(mergedAlbum) },
-                                            onLongClick = {
-                                                actionAlbum = mergedAlbum
-                                                showAlbumActions = true
-                                            },
-                                            onRjLongClick = ::openMetaActions,
-                                            onCircleLongClick = ::openMetaActions,
-                                            onCvLongClick = ::openMetaActions,
-                                            onTagLongClick = ::openMetaActions,
-                                            coverFadeInState = coverFadeInState,
-                                            showCollectedIndicator = false,
-                                            coverOverlay = {
-                                                AlbumSyncStatusOverlay(
-                                                    syncStatus = state.syncingAlbums[album.id] ?: SyncStatus.Idle,
-                                                    indicatorSize = 24.dp,
-                                                    blurRadius = 4.dp,
+                                AlbumListIconScope {
+                                    PreparedAlbumParagraphs(
+                                        gridState = gridState,
+                                        horizontal = tabletList,
+                                        active = isActive && isDataActive,
+                                        dataKey = pagedAlbums.itemSnapshotList to userTagsByAlbumId,
+                                        itemAtLazyIndex = { index ->
+                                            pagedAlbums.itemSnapshotList.getOrNull(index)?.let { album ->
+                                                PreparedAlbumParagraphItem(
+                                                    libraryAlbumListItemKey(album, index),
+                                                    album.withUserTags(userTagsByAlbumId[album.id].orEmpty()),
                                                 )
-                                            },
-                                        )
+                                            }
+                                        },
+                                    ) {
+                                        LazyVerticalStaggeredGrid(
+                                            columns = StaggeredGridCells.Adaptive(gridCellSize),
+                                            state = gridState,
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .lightweightVerticalStretchOverscroll(
+                                                    isAtStart = { !gridState.canScrollBackward },
+                                                    isAtEnd = { !gridState.canScrollForward },
+                                                )
+                                                .clearFocusOnTapOutside()
+                                                .nestedScroll(chromeState.nestedScrollConnection),
+                                            flingBehavior = rememberCalmScrollableFlingBehavior(),
+                                            contentPadding = PaddingValues(top = topPadding, start = LibraryPageHorizontalPadding, end = LibraryPageHorizontalPadding, bottom = 16.dp)
+                                                .withAddedBottomPadding(LocalBottomOverlayPadding.current),
+                                            verticalItemSpacing = AlbumGridItemSpacing,
+                                            horizontalArrangement = Arrangement.spacedBy(AlbumGridItemSpacing)
+                                        ) {
+                                            staggeredItems(
+                                                pagedAlbumIndices,
+                                                key = { idx -> pagedAlbumSnapshot.items.getOrNull(idx)?.id?.takeIf { it > 0L } ?: idx },
+                                                contentType = { "albumGridItem" },
+                                            ) { idx ->
+                                                val album = (if (isDataActive) pagedAlbums[idx] else pagedAlbums.peek(idx))
+                                                    ?: return@staggeredItems
+                                                val userTags = userTagsByAlbumId[album.id].orEmpty()
+                                                val mergedAlbum = remember(album, userTags) {
+                                                    album.withUserTags(userTags)
+                                                }
+                                                AlbumGridItem(
+                                                    preparedItemKey = libraryAlbumListItemKey(mergedAlbum, idx),
+                                                    horizontal = tabletList,
+                                                    album = mergedAlbum,
+                                                    onClick = { onAlbumClick(mergedAlbum) },
+                                                    onLongClick = {
+                                                        actionAlbum = mergedAlbum
+                                                        showAlbumActions = true
+                                                    },
+                                                    onRjLongClick = ::openMetaActions,
+                                                    onCircleLongClick = ::openMetaActions,
+                                                    onCvLongClick = ::openMetaActions,
+                                                    onTagLongClick = ::openMetaActions,
+                                                    coverFadeInState = coverFadeInState,
+                                                    showCollectedIndicator = false,
+                                                    coverOverlay = {
+                                                        AlbumSyncStatusOverlay(
+                                                            syncStatus = state.syncingAlbums[album.id] ?: SyncStatus.Idle,
+                                                            indicatorSize = 24.dp,
+                                                            blurRadius = 4.dp,
+                                                        )
+                                                    },
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             } else {

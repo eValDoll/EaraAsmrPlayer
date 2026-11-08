@@ -25,6 +25,30 @@ import org.junit.Test
 
 class AlbumParagraphAheadWindowTest {
     @Test
+    fun gridResizeReplacesPreparedConstraintsWithoutChangingLabelIdentity() = runBlocking {
+        val published = Channel<List<PreparedParagraphRequest>>(Channel.UNLIMITED)
+        val controller = AlbumParagraphAheadWindow(
+            this, resolver, { flowOf(emptyMap()) }, { published.trySend(it) }, {}, Dispatchers.Unconfined,
+        )
+        try {
+            controller.setActive(true)
+            val viewport = AlbumParagraphViewport(0, 1, 3)
+            val item = album(key = 2, cv = "声优")
+            controller.submit(viewport, true, environment.copy(textConstraints = Constraints(maxWidth = 180))) { item }
+            val narrow = withTimeout(5_000) { published.receive() }
+            controller.submit(viewport, true, environment.copy(textConstraints = Constraints(maxWidth = 360))) { item }
+            val wide = withTimeout(5_000) { published.receive() }
+            assertTrue(narrow.isNotEmpty())
+            assertTrue(narrow.all { it.constraints == Constraints(maxWidth = 180) })
+            assertTrue(wide.all { it.constraints == Constraints(maxWidth = 360) })
+            assertEquals(narrow.map { it.occurrence }, wide.map { it.occurrence })
+            assertEquals(narrow.map { it.text }, wide.map { it.text })
+        } finally {
+            controller.close()
+        }
+    }
+
+    @Test
     fun reverseWindowSurvivesCollectorRestartAndZeroDelta() = runBlocking {
         val direction = AlbumParagraphScrollDirection()
         val lookedUp = mutableListOf<Int>()
