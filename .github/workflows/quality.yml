@@ -4,9 +4,16 @@ on:
   workflow_dispatch:
     inputs:
       signed_apk:
-        description: Build a signed Release APK for device verification
+        description: Build a signed APK for device verification
         type: boolean
         default: false
+      verification_variant:
+        description: APK variant for device verification
+        type: choice
+        options:
+          - release
+          - benchmark
+        default: release
   pull_request:
   push:
     branches:
@@ -47,7 +54,7 @@ jobs:
             .build_asmr_player_android/app/reports/tests/testReleaseUnitTest/
             .build_asmr_player_android/app/test-results/testReleaseUnitTest/
 
-  signed-release-apk:
+  signed-verification-apk:
     if: github.event_name == 'workflow_dispatch' && inputs.signed_apk
     runs-on: ubuntu-latest
     steps:
@@ -65,6 +72,7 @@ jobs:
           EARA_RELEASE_STORE_PASSWORD: ${{ secrets.EARA_RELEASE_STORE_PASSWORD }}
           EARA_RELEASE_KEY_ALIAS: ${{ secrets.EARA_RELEASE_KEY_ALIAS }}
           EARA_RELEASE_KEY_PASSWORD: ${{ secrets.EARA_RELEASE_KEY_PASSWORD }}
+          VERIFICATION_VARIANT: ${{ inputs.verification_variant || 'release' }}
         run: |
           set -euo pipefail
           test -n "$EARA_RELEASE_JKS_BASE64"
@@ -76,12 +84,16 @@ jobs:
           chmod 600 eara-release.jks
           sed -i 's/\r$//' gradlew
           chmod +x gradlew
-          ./gradlew :app:assembleRelease
+          case "$VERIFICATION_VARIANT" in
+            release) ./gradlew :app:assembleRelease ;;
+            benchmark) ./gradlew :app:assembleBenchmark ;;
+            *) exit 1 ;;
+          esac
       - uses: actions/upload-artifact@v4
         with:
-          name: signed-release-${{ github.sha }}
+          name: signed-${{ inputs.verification_variant || 'release' }}-${{ github.sha }}
           include-hidden-files: true
           if-no-files-found: error
           path: |
-            .build_asmr_player_android/app/outputs/apk/release/*.apk
-            .build_asmr_player_android/app/outputs/mapping/release/mapping.txt
+            .build_asmr_player_android/app/outputs/apk/*/*.apk
+            .build_asmr_player_android/app/outputs/mapping/*/mapping.txt
