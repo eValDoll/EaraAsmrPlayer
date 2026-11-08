@@ -17,7 +17,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: quality-${{ github.ref }}
+  group: quality-${{ github.ref }}-${{ inputs.signed_apk || false }}
   cancel-in-progress: true
 
 jobs:
@@ -47,8 +47,17 @@ jobs:
             .build_asmr_player_android/app/reports/tests/testReleaseUnitTest/
             .build_asmr_player_android/app/test-results/testReleaseUnitTest/
 
+  signed-release-apk:
+    if: github.event_name == 'workflow_dispatch' && inputs.signed_apk
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
       - name: Build signed verification APK
-        if: github.event_name == 'workflow_dispatch' && inputs.signed_apk
         shell: bash
         env:
           EARA_RELEASE_JKS_BASE64: ${{ secrets.EARA_RELEASE_JKS_BASE64 }}
@@ -69,7 +78,6 @@ jobs:
           chmod +x gradlew
           ./gradlew :app:assembleRelease
       - uses: actions/upload-artifact@v4
-        if: github.event_name == 'workflow_dispatch' && inputs.signed_apk
         with:
           name: signed-release-${{ github.sha }}
           include-hidden-files: true
