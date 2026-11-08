@@ -1,5 +1,8 @@
 package com.asmr.player.subtitle
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.content.Context
 import android.os.Build
 import com.asmr.player.BuildConfig
@@ -69,7 +72,7 @@ internal class SherpaOnnxRuntimeRepository private constructor(context: Context)
     } ?: throw IllegalStateException(RUNTIME_REQUIRED_MESSAGE)
 
     internal fun ensureDownloadDirectory(): File = downloadDirectory().apply {
-        check(exists() || mkdirs()) { "无法创建字幕运行时下载目录" }
+        check(exists() || mkdirs()) { appString(R.string.ui_unable_to_create_subtitle_runtime_download_directory) }
     }
 
     internal fun partialArchiveFile(): File = File(
@@ -98,7 +101,7 @@ internal class SherpaOnnxRuntimeRepository private constructor(context: Context)
             archive.delete()
             throw error
         }
-        check(archive.delete()) { "无法清理字幕运行时压缩包" }
+        check(archive.delete()) { appString(R.string.ui_unable_to_clean_subtitle_runtime_archive) }
         downloadDirectory().takeIf { it.isDirectory && it.list().isNullOrEmpty() }?.delete()
     }
 
@@ -113,7 +116,7 @@ internal class SherpaOnnxRuntimeRepository private constructor(context: Context)
     )
 
     companion object {
-        const val RUNTIME_REQUIRED_MESSAGE = "请先在设置中下载日语字幕组件"
+        val RUNTIME_REQUIRED_MESSAGE: String get() = appString(R.string.ui_please_download_the_japanese_subtitle_component_in_settings)
         private const val RUNTIME_ROOT_DIRECTORY_NAME = "subtitle-runtimes"
         private const val RUNTIME_DOWNLOAD_DIRECTORY_NAME = "subtitle-runtime-downloads"
 
@@ -144,21 +147,21 @@ internal object SherpaOnnxRuntimeInstaller {
     ) {
         requirePinnedFile(archive, descriptor.archiveBytes, descriptor.archiveSha256)
         val parent = destinationDirectory.parentFile
-            ?: throw IllegalStateException("字幕运行时目录无效")
-        check(parent.exists() || parent.mkdirs()) { "无法创建字幕运行时目录" }
+            ?: throw IllegalStateException(appString(R.string.ui_the_subtitle_runtime_directory_is_invalid))
+        check(parent.exists() || parent.mkdirs()) { appString(R.string.ui_unable_to_create_subtitles_runtime_directory) }
         val stagingDirectory = File(parent, "${destinationDirectory.name}.installing")
         if (stagingDirectory.exists()) {
-            check(stagingDirectory.deleteRecursively()) { "无法清理旧的字幕运行时临时目录" }
+            check(stagingDirectory.deleteRecursively()) { appString(R.string.ui_unable_to_clean_old_subtitles_runtime_temp_directory) }
         }
-        check(stagingDirectory.mkdir()) { "无法创建字幕运行时临时目录" }
+        check(stagingDirectory.mkdir()) { appString(R.string.ui_unable_to_create_subtitle_runtime_temporary_directory) }
 
         try {
             extractPinnedLibraries(archive, stagingDirectory, descriptor)
-            check(isInstalled(stagingDirectory, descriptor)) { "字幕运行时安装结果无效" }
+            check(isInstalled(stagingDirectory, descriptor)) { appString(R.string.ui_the_installation_result_is_invalid_when_subtitles_are) }
             if (destinationDirectory.exists()) {
-                check(destinationDirectory.deleteRecursively()) { "无法替换旧的字幕运行时" }
+                check(destinationDirectory.deleteRecursively()) { appString(R.string.ui_unable_to_replace_old_subtitle_runtime) }
             }
-            check(stagingDirectory.renameTo(destinationDirectory)) { "无法保存字幕运行时" }
+            check(stagingDirectory.renameTo(destinationDirectory)) { appString(R.string.ui_unable_to_save_subtitle_runtime) }
         } catch (error: Throwable) {
             stagingDirectory.deleteRecursively()
             throw error
@@ -169,7 +172,7 @@ internal object SherpaOnnxRuntimeInstaller {
         directory: File,
         descriptor: SherpaOnnxRuntimeDescriptor
     ) {
-        check(isInstalled(directory, descriptor)) { "字幕运行时缺失或仍可写" }
+        check(isInstalled(directory, descriptor)) { appString(R.string.ui_subtitles_are_missing_or_still_writable_during_runtime) }
         descriptor.libraries.forEach { library ->
             requirePinnedFile(File(directory, library.fileName), library.bytes, library.sha256)
         }
@@ -185,19 +188,19 @@ internal object SherpaOnnxRuntimeInstaller {
         ZipInputStream(BufferedInputStream(FileInputStream(archive))).use { input ->
             while (true) {
                 val entry = input.nextEntry ?: break
-                check(!entry.isDirectory) { "字幕运行时压缩包包含多余目录" }
+                check(!entry.isDirectory) { appString(R.string.ui_the_subtitle_runtime_compressed_package_contains_redundant_directories) }
                 val library = expectedByPath[entry.name]
-                    ?: throw IllegalStateException("字幕运行时压缩包包含未知文件：${entry.name}")
-                check(extractedPaths.add(entry.name)) { "字幕运行时压缩包包含重复文件：${entry.name}" }
+                    ?: throw IllegalStateException(appString(R.string.ui_the_subtitle_runtime_archive_contains_unknown_files, entry.name))
+                check(extractedPaths.add(entry.name)) { appString(R.string.ui_subtitle_runtime_archive_contains_duplicate_files, entry.name) }
                 val outputFile = File(stagingDirectory, library.fileName)
                 check(outputFile.canonicalFile.parentFile == stagingDirectory.canonicalFile) {
-                    "字幕运行时文件路径无效"
+                    appString(R.string.ui_invalid_file_path_when_running_subtitles)
                 }
                 writePinnedLibrary(input, outputFile, library)
                 input.closeEntry()
             }
         }
-        check(extractedPaths == expectedByPath.keys) { "字幕运行时压缩包缺少必要文件" }
+        check(extractedPaths == expectedByPath.keys) { appString(R.string.ui_the_subtitle_runtime_compressed_package_is_missing_necessary) }
     }
 
     private fun writePinnedLibrary(
@@ -214,26 +217,26 @@ internal object SherpaOnnxRuntimeInstaller {
                 if (read < 0) break
                 if (read == 0) continue
                 writtenBytes += read.toLong()
-                check(writtenBytes <= library.bytes) { "字幕运行时文件大小异常：${library.fileName}" }
+                check(writtenBytes <= library.bytes) { appString(R.string.ui_file_size_exception_when_running_subtitles, library.fileName) }
                 output.write(buffer, 0, read)
                 digest.update(buffer, 0, read)
             }
             output.flush()
             output.fd.sync()
         }
-        check(writtenBytes == library.bytes) { "字幕运行时文件不完整：${library.fileName}" }
+        check(writtenBytes == library.bytes) { appString(R.string.ui_incomplete_subtitle_runtime_file, library.fileName) }
         check(digest.toHex().equals(library.sha256, ignoreCase = true)) {
-            "字幕运行时文件校验失败：${library.fileName}"
+            appString(R.string.ui_file_verification_failed_when_running_subtitles, library.fileName)
         }
         outputFile.setReadable(true, false)
         outputFile.setExecutable(true, false)
         check(outputFile.setWritable(false, false) && !outputFile.canWrite()) {
-            "无法将字幕运行时文件设为只读：${library.fileName}"
+            appString(R.string.ui_unable_to_make_subtitle_runtime_file_read_only, library.fileName)
         }
     }
 
     private fun requirePinnedFile(file: File, expectedBytes: Long, expectedSha256: String) {
-        check(file.isFile && file.length() == expectedBytes) { "文件大小校验失败：${file.name}" }
+        check(file.isFile && file.length() == expectedBytes) { appString(R.string.ui_file_size_verification_failed, file.name) }
         val digest = MessageDigest.getInstance("SHA-256")
         FileInputStream(file).use { input ->
             val buffer = ByteArray(FILE_BUFFER_BYTES)
@@ -244,7 +247,7 @@ internal object SherpaOnnxRuntimeInstaller {
             }
         }
         check(digest.toHex().equals(expectedSha256, ignoreCase = true)) {
-            "文件校验失败：${file.name}"
+            appString(R.string.ui_file_verification_failed, file.name)
         }
     }
 
@@ -266,7 +269,7 @@ internal object SherpaOnnxNativeLoader {
             val repository = SherpaOnnxRuntimeRepository.get(context)
             val descriptor = repository.descriptor
             check(Build.SUPPORTED_ABIS.any { it == descriptor.abi }) {
-                "当前设备不支持 ${descriptor.abi} 字幕运行时"
+                appString(R.string.ui_the_current_device_does_not_support_the_subtitle, descriptor.abi)
             }
             val directory = repository.requireInstalledDirectory()
             SherpaOnnxRuntimeInstaller.verifyForLoading(directory, descriptor)

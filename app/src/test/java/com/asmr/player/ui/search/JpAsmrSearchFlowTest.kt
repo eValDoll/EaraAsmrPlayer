@@ -52,7 +52,7 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], application = Application::class)
+@Config(sdk = [28], application = com.asmr.player.LocalizedTestApplication::class)
 @LooperMode(LooperMode.Mode.PAUSED)
 class JpAsmrSearchFlowTest {
     @Test

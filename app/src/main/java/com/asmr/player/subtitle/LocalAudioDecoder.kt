@@ -1,5 +1,8 @@
 package com.asmr.player.subtitle
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.content.Context
 import android.media.AudioFormat
 import android.media.MediaCodec
@@ -41,11 +44,11 @@ internal class LocalAudioDecoder(
                 extractor.getTrackFormat(index)
                     .getString(MediaFormat.KEY_MIME)
                     ?.startsWith("audio/") == true
-            } ?: error("文件中没有可解码的音轨")
+            } ?: error(appString(R.string.ui_there_are_no_decodable_audio_tracks_in_the))
             extractor.selectTrack(trackIndex)
             val inputFormat = extractor.getTrackFormat(trackIndex)
             val mime = inputFormat.getString(MediaFormat.KEY_MIME)
-                ?: error("无法识别音频编码")
+                ?: error(appString(R.string.ui_audio_encoding_not_recognized))
             val totalDurationMs = inputFormat.longOrDefault(MediaFormat.KEY_DURATION) / 1_000L
             val normalizedStartMs = startAtMs.coerceIn(0L, totalDurationMs.coerceAtLeast(startAtMs))
             if (normalizedStartMs > 0L) {
@@ -67,7 +70,7 @@ internal class LocalAudioDecoder(
             suspend fun emit(channelSamples: List<FloatArray>) {
                 if (channelSamples.isEmpty() || channelSamples.first().isEmpty()) return
                 val sampleCount = channelSamples.first().size
-                check(channelSamples.all { it.size == sampleCount }) { "音频声道长度不一致" }
+                check(channelSamples.all { it.size == sampleCount }) { appString(R.string.ui_audio_channel_lengths_are_inconsistent) }
                 val startMs = emittedSamples * 1_000L / targetSampleRateHz
                 emittedSamples += sampleCount
                 onChunk(
@@ -86,7 +89,7 @@ internal class LocalAudioDecoder(
                     val inputIndex = decoder.dequeueInputBuffer(CODEC_TIMEOUT_US)
                     if (inputIndex >= 0) {
                         val inputBuffer = decoder.getInputBuffer(inputIndex)
-                            ?: error("无法取得音频解码输入缓冲区")
+                            ?: error(appString(R.string.ui_unable_to_obtain_audio_decoding_input_buffer))
                         inputBuffer.clear()
                         val sampleSize = extractor.readSampleData(inputBuffer, 0)
                         if (sampleSize < 0) {
@@ -120,7 +123,7 @@ internal class LocalAudioDecoder(
                             bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0
                         ) {
                             val outputBuffer = decoder.getOutputBuffer(outputIndex)
-                                ?: error("无法取得音频解码输出缓冲区")
+                                ?: error(appString(R.string.ui_unable_to_obtain_audio_decoding_output_buffer))
                             outputBuffer.position(bufferInfo.offset)
                             outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
                             val sampleRate = outputFormat.intOrDefault(
@@ -162,12 +165,12 @@ internal class LocalAudioDecoder(
                             }.also {
                                 resamplers = it
                             }
-                            check(activeResamplers.size == channels.size) { "音频声道数在解码期间发生变化" }
+                            check(activeResamplers.size == channels.size) { appString(R.string.ui_number_of_audio_channels_changes_during_decoding) }
                             val completed = activeResamplers.zip(channels).map { (resampler, samples) ->
                                 resampler.consume(samples)
                             }
                             val completedCount = completed.firstOrNull()?.size ?: 0
-                            check(completed.all { it.size == completedCount }) { "音频声道重采样不同步" }
+                            check(completed.all { it.size == completedCount }) { appString(R.string.ui_audio_channel_resampling_out_of_sync) }
                             repeat(completedCount) { index ->
                                 emit(completed.map { chunks -> chunks[index] })
                             }
@@ -179,7 +182,7 @@ internal class LocalAudioDecoder(
             }
             resamplers?.map { it.finish() }?.let { finalChunks ->
                 if (finalChunks.any { it != null }) {
-                    check(finalChunks.all { it != null }) { "音频声道尾部不同步" }
+                    check(finalChunks.all { it != null }) { appString(R.string.ui_audio_channel_tail_is_out_of_sync) }
                     emit(finalChunks.map { requireNotNull(it) })
                 }
             }
@@ -207,7 +210,7 @@ internal class LocalAudioDecoder(
             AudioFormat.ENCODING_PCM_16BIT -> 2
             AudioFormat.ENCODING_PCM_24BIT_PACKED -> 3
             AudioFormat.ENCODING_PCM_32BIT, AudioFormat.ENCODING_PCM_FLOAT -> 4
-            else -> error("不支持的 PCM 编码：$encoding")
+            else -> error(appString(R.string.ui_unsupported_pcm_encoding, encoding))
         }
         val frameCount = buffer.remaining() / (bytesPerSample * channels)
         val interleaved = FloatArray(frameCount * channels) {
@@ -234,7 +237,7 @@ internal class LocalAudioDecoder(
             }
             AudioFormat.ENCODING_PCM_32BIT -> buffer.int / 2_147_483_648f
             AudioFormat.ENCODING_PCM_FLOAT -> buffer.float
-            else -> error("不支持的 PCM 编码：$encoding")
+            else -> error(appString(R.string.ui_unsupported_pcm_encoding, encoding))
         }
     }
 

@@ -26,6 +26,7 @@ private data class PendingDownloadItemRequest(
     val albumCircle: String,
     val albumCv: String,
     val albumTagsCsv: String,
+    val albumTagDetailsJson: String,
     val albumCoverUrl: String,
     val albumDescription: String,
     val albumWorkId: String,
@@ -69,6 +70,7 @@ class DownloadManager @Inject constructor(
                 albumCircle = request.albumCircle,
                 albumCv = request.albumCv,
                 albumTagsCsv = request.albumTagsCsv,
+                albumTagDetailsJson = request.albumTagDetailsJson,
                 albumCoverUrl = request.albumCoverUrl,
                 albumDescription = request.albumDescription,
                 albumWorkId = request.albumWorkId,
@@ -184,6 +186,7 @@ class DownloadManager @Inject constructor(
                 albumCircle = safeAlbumCircle,
                 albumCv = safeAlbumCv,
                 albumTagsCsv = safeAlbumTagsCsv,
+                albumTagDetailsJson = request.albumTagDetailsJson,
                 albumCoverUrl = safeAlbumCoverUrl,
                 albumDescription = safeAlbumDescription,
                 albumWorkId = safeAlbumWorkId,
@@ -299,6 +302,7 @@ class DownloadManager @Inject constructor(
         albumCircle: String,
         albumCv: String,
         albumTagsCsv: String,
+        albumTagDetailsJson: String,
         albumCoverUrl: String,
         albumDescription: String,
         albumWorkId: String,
@@ -312,6 +316,7 @@ class DownloadManager @Inject constructor(
             val resolvedAlbumCircle = existing.albumCircle.ifBlank { albumCircle }
             val resolvedAlbumCv = existing.albumCv.ifBlank { albumCv }
             val resolvedAlbumTagsCsv = existing.albumTagsCsv.ifBlank { albumTagsCsv }
+            val resolvedAlbumTagDetailsJson = com.asmr.player.domain.model.AlbumTagCodec.encode(com.asmr.player.domain.model.mergeAlbumTags(com.asmr.player.domain.model.AlbumTagCodec.decode(existing.albumTagDetailsJson), com.asmr.player.domain.model.AlbumTagCodec.decode(albumTagDetailsJson)))
             val resolvedAlbumCoverUrl = existing.albumCoverUrl.ifBlank { albumCoverUrl }
             val resolvedAlbumDescription = existing.albumDescription.ifBlank { albumDescription }
             val resolvedAlbumWorkId = existing.albumWorkId.ifBlank { albumWorkId }
@@ -322,6 +327,7 @@ class DownloadManager @Inject constructor(
                 resolvedAlbumCircle != existing.albumCircle ||
                 resolvedAlbumCv != existing.albumCv ||
                 resolvedAlbumTagsCsv != existing.albumTagsCsv ||
+                resolvedAlbumTagDetailsJson != existing.albumTagDetailsJson ||
                 resolvedAlbumCoverUrl != existing.albumCoverUrl ||
                 resolvedAlbumDescription != existing.albumDescription ||
                 resolvedAlbumWorkId != existing.albumWorkId ||
@@ -335,6 +341,7 @@ class DownloadManager @Inject constructor(
                         albumCircle = resolvedAlbumCircle,
                         albumCv = resolvedAlbumCv,
                         albumTagsCsv = resolvedAlbumTagsCsv,
+                        albumTagDetailsJson = resolvedAlbumTagDetailsJson,
                         albumCoverUrl = resolvedAlbumCoverUrl,
                         albumDescription = resolvedAlbumDescription,
                         albumWorkId = resolvedAlbumWorkId,
@@ -358,6 +365,7 @@ class DownloadManager @Inject constructor(
                 albumCircle = albumCircle,
                 albumCv = albumCv,
                 albumTagsCsv = albumTagsCsv,
+                albumTagDetailsJson = albumTagDetailsJson,
                 albumCoverUrl = albumCoverUrl,
                 albumDescription = albumDescription,
                 albumWorkId = albumWorkId,

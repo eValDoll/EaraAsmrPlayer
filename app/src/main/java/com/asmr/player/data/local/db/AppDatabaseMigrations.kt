@@ -666,6 +666,13 @@ object AppDatabaseMigrations {
         }
     }
 
+    val MIGRATION_37_38: Migration = object : Migration(37, 38) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE albums ADD COLUMN tagDetailsJson TEXT NOT NULL DEFAULT '[]'")
+            db.execSQL("ALTER TABLE download_tasks ADD COLUMN albumTagDetailsJson TEXT NOT NULL DEFAULT '[]'")
+        }
+    }
+
     private fun createItemChildTable(
         db: SupportSQLiteDatabase,
         table: String,

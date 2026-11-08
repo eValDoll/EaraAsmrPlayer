@@ -8,7 +8,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class AsmrOneSiteSelectionTest {
+class AsmrOneSiteSelectionTest : com.asmr.player.LocalizedRobolectricTest() {
     @Test
     fun allAgesSearch_excludesAdultAndKeepsGeneralAndR15() {
         assertEquals("$-age:adult$", appendAsmrOneSearchFilters("", allAges = true))

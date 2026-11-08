@@ -1,5 +1,8 @@
 package com.asmr.player.translation
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
@@ -61,7 +64,7 @@ internal class PageTranslationRepository @Inject constructor(
     }
     private var nextRequestAt = 0L
     private var failureUntil = 0L
-    private var failureMessage = "页面翻译失败，请检查网络后重试"
+    private var failureMessage = appString(R.string.ui_page_translation_failed_please_check_the_network_and)
 
     fun cached(text: String, target: String): String? = synchronized(memory) { memory[text to target] }
 
@@ -96,7 +99,7 @@ internal class PageTranslationRepository @Inject constructor(
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (error: IOException) {
-                    failureMessage = (error as? PageTranslationException)?.message ?: "页面翻译失败，请检查网络后重试"
+                    failureMessage = (error as? PageTranslationException)?.message ?: appString(R.string.ui_page_translation_failed_please_check_the_network_and)
                     failureUntil = System.currentTimeMillis() + ((error as? PageTranslationException)?.cooldownMillis ?: 30_000)
                     // Keep successful earlier chunks; never fan out a failed batch into single requests.
                     return@withLock PageTranslationBatchResult(translated, failureMessage)

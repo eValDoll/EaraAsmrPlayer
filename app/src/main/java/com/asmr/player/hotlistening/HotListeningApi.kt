@@ -1,5 +1,9 @@
 package com.asmr.player.hotlistening
 
+import com.asmr.player.domain.model.localizedTags
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.os.Build
 import com.asmr.player.BuildConfig
 import com.asmr.player.data.remote.NetworkHeaders
@@ -38,6 +42,7 @@ data class HotListeningItem(
     val circle: String = "",
     val cv: String = "",
     val tags: String = "",
+    val tagDetails: List<com.asmr.player.domain.model.AlbumTag>? = emptyList(),
     val coverUrl: String = "",
     val playCount: Int = 0,
     val listenDurationMs: Long = 0L,
@@ -62,8 +67,13 @@ data class HotListeningItem(
 data class SearchSuggestionTerm(
     val value: String = "",
     val count: Int = 0,
-    val rank: Int = 0
-)
+    val rank: Int = 0,
+    val tagDetails: List<com.asmr.player.domain.model.AlbumTag>? = emptyList()
+) {
+    fun localizedValue(locale: String = com.asmr.player.i18n.AppLanguage.metadataLocale()): String =
+        com.asmr.player.domain.model.Album(title = "", path = "", tags = listOf(value), tagDetails = tagDetails)
+            .localizedTags(locale).first()
+}
 
 data class SearchSuggestionsResponse(
     val hotCvs: List<SearchSuggestionTerm> = emptyList(),
@@ -71,9 +81,12 @@ data class SearchSuggestionsResponse(
     val serverTimeEpochMs: Long = 0L
 )
 
-enum class HotListeningSortMode(val wireValue: String, val label: String) {
-    PlayCount("play_count", "按播放次数"),
-    ListenDuration("listen_duration", "按收听时长");
+enum class HotListeningSortMode(val wireValue: String, private val labelProvider: () -> String) {
+    PlayCount("play_count", { appString(R.string.ui_by_plays) }),
+    ListenDuration("listen_duration", { appString(R.string.ui_press_listening_time) });
+
+    val label: String get() = labelProvider()
+
 
     companion object {
         fun fromWireValue(value: String?): HotListeningSortMode {

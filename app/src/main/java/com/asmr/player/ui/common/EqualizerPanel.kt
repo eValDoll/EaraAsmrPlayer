@@ -1,4 +1,7 @@
-﻿package com.asmr.player.ui.common
+package com.asmr.player.ui.common
+
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -380,7 +383,7 @@ fun EqualizerPanel(
                         onCheckedChange = onEnabledChange,
                         modifier = Modifier.scale(0.85f)
                     )
-                    TextButton(onClick = onReset, enabled = resetEnabled) { Text("重置") }
+                    TextButton(onClick = onReset, enabled = resetEnabled) { Text(androidx.compose.ui.res.stringResource(R.string.ui_reset)) }
                     IconButton(onClick = { onExpandedChange(!expanded) }, modifier = Modifier.size(28.dp)) {
                         Icon(
                             imageVector = if (expanded) Icons.Rounded.KeyboardArrowDown else Icons.AutoMirrored.Rounded.KeyboardArrowRight,
@@ -405,7 +408,7 @@ fun EqualizerPanel(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        Text("音效器", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(androidx.compose.ui.res.stringResource(R.string.ui_sound_effector), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
         val vtEnabled = settings.volumeThresholdEnabled
         val vtMode = settings.volumeThresholdMode
@@ -414,7 +417,7 @@ fun EqualizerPanel(
         val defaultVtMaxDb = -6f
         val defaultVtTargetDb = -18f
         ModuleCard(
-            title = "音量阈值",
+            title = appString(R.string.ui_volume_threshold),
             enabled = vtEnabled,
             onEnabledChange = { updateVolumeThreshold(enabled = it) },
             expanded = settings.volumeThresholdExpanded,
@@ -427,12 +430,12 @@ fun EqualizerPanel(
                 settings.volumeLoudnessTargetDb != defaultVtTargetDb
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("模式", style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
+                Text(androidx.compose.ui.res.stringResource(R.string.ui_model), style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
                 Spacer(modifier = Modifier.width(8.dp))
                 InfoTip(
                     key = "vt_mode",
-                    title = "模式",
-                    text = "响度均衡：把整体响度拉向目标值，适合不同音频之间的音量统一；阈值：把响度限制在一个区间，更像自动增益+压制。"
+                    title = appString(R.string.ui_model),
+                    text = appString(R.string.ui_loudness_equalization_pulls_the_overall_loudness_towards_the)
                 )
             }
             val modeChipColors = FilterChipDefaults.filterChipColors(
@@ -441,7 +444,7 @@ fun EqualizerPanel(
                 selectedLeadingIconColor = colorScheme.primary
             )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(1 to "响度均衡", 0 to "阈值").forEach { (m, label) ->
+                listOf(1 to appString(R.string.ui_loudness_equalization), 0 to appString(R.string.ui_threshold)).forEach { (m, label) ->
                     FilterChip(
                         selected = vtMode == m,
                         onClick = { updateVolumeThreshold(mode = m) },
@@ -461,12 +464,12 @@ fun EqualizerPanel(
             if (vtMode == 1) {
                 Column {
                     Row {
-                        Text("目标响度", style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
+                        Text(androidx.compose.ui.res.stringResource(R.string.ui_target_loudness), style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
                         Spacer(modifier = Modifier.width(8.dp))
                         InfoTip(
                             key = "vt_target",
-                            title = "目标响度",
-                            text = "把播放响度逐步拉向该目标值（变化更平滑，更适合不同音频之间的统一）。建议范围：-24 到 -14。"
+                            title = appString(R.string.ui_target_loudness),
+                            text = appString(R.string.ui_gradually_pull_the_playback_loudness_towards_the_target)
                         )
                         Spacer(modifier = Modifier.weight(1f))
                         Text(String.format("%.0f dBFS", settings.volumeLoudnessTargetDb), style = MaterialTheme.typography.labelSmall)
@@ -482,12 +485,12 @@ fun EqualizerPanel(
             } else {
                 Column {
                     Row {
-                        Text("最小阈值", style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
+                        Text(androidx.compose.ui.res.stringResource(R.string.ui_minimum_threshold), style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
                         Spacer(modifier = Modifier.width(8.dp))
                         InfoTip(
                             key = "vt_min",
-                            title = "最小阈值",
-                            text = "当音量低于该值时，会自动放大到接近该阈值。"
+                            title = appString(R.string.ui_minimum_threshold),
+                            text = appString(R.string.ui_when_the_volume_is_lower_than_this_value)
                         )
                         Spacer(modifier = Modifier.weight(1f))
                         Text(String.format("%.0f dBFS", settings.volumeThresholdMinDb), style = MaterialTheme.typography.labelSmall)
@@ -503,12 +506,12 @@ fun EqualizerPanel(
 
                 Column {
                     Row {
-                        Text("最大阈值", style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
+                        Text(androidx.compose.ui.res.stringResource(R.string.ui_maximum_threshold), style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
                         Spacer(modifier = Modifier.width(8.dp))
                         InfoTip(
                             key = "vt_max",
-                            title = "最大阈值",
-                            text = "当音量高于该值时，会自动压制到不超过该阈值。"
+                            title = appString(R.string.ui_maximum_threshold),
+                            text = appString(R.string.ui_when_the_volume_is_higher_than_this_value)
                         )
                         Spacer(modifier = Modifier.weight(1f))
                         Text(String.format("%.0f dBFS", settings.volumeThresholdMaxDb), style = MaterialTheme.typography.labelSmall)
@@ -529,7 +532,7 @@ fun EqualizerPanel(
             SceneEffectPresets.resolve(settings.sceneEffectPresetId)
         }
         ModuleCard(
-            title = "场景效果",
+            title = appString(R.string.ui_scene_effects),
             enabled = sceneEnabled,
             onEnabledChange = { updateSceneEffect(enabled = it) },
             expanded = settings.sceneEffectExpanded,
@@ -547,12 +550,12 @@ fun EqualizerPanel(
             var sceneExpanded by remember { mutableStateOf(false) }
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("场景预设", style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
+                    Text(androidx.compose.ui.res.stringResource(R.string.ui_scene_preset), style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
                     Spacer(modifier = Modifier.width(8.dp))
                     InfoTip(
                         key = "scene_preset",
-                        title = "场景效果",
-                        text = "通过带限、声场收窄和延迟反射来模拟常见空间或传输介质。推荐先选预设，再微调强度。"
+                        title = appString(R.string.ui_scene_effects),
+                        text = appString(R.string.ui_simulate_common_spaces_or_transmission_media_through_band)
                     )
                 }
                 ExposedDropdownMenuBox(
@@ -561,7 +564,7 @@ fun EqualizerPanel(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "预设",
+                        text = appString(R.string.ui_default),
                         style = MaterialTheme.typography.labelSmall,
                         color = materialColorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(start = 6.dp, bottom = 6.dp)
@@ -672,12 +675,12 @@ fun EqualizerPanel(
                 }
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("效果强度", style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
+                        Text(androidx.compose.ui.res.stringResource(R.string.ui_effect_intensity), style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
                         Spacer(modifier = Modifier.width(8.dp))
                         InfoTip(
                             key = "scene_amount",
-                            title = "效果强度",
-                            text = "强度越高，场景特征越明显。像电话音、被窝闷声这类预设在高强度下会更有辨识度。"
+                            title = appString(R.string.ui_effect_intensity),
+                            text = appString(R.string.ui_the_higher_the_intensity_the_more_obvious_the)
                         )
                         Spacer(modifier = Modifier.weight(1f))
                         Text("${settings.sceneEffectAmount}%", style = MaterialTheme.typography.labelSmall)
@@ -700,7 +703,7 @@ fun EqualizerPanel(
         ) {
             val speedPitchEnabled = settings.speedPitchEnabled
             ModuleCard(
-                title = "变速变调",
+                title = appString(R.string.ui_variable_speed_and_pitch),
                 enabled = speedPitchEnabled,
                 onEnabledChange = { enabled ->
                     onSettingsChanged(settings.copy(speedPitchEnabled = enabled))
@@ -717,12 +720,12 @@ fun EqualizerPanel(
             ) {
                 Column {
                     Row {
-                        Text("播放速度", style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
+                        Text(androidx.compose.ui.res.stringResource(R.string.ui_play_speed), style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
                         Spacer(modifier = Modifier.width(8.dp))
                         InfoTip(
                             key = "playback_speed",
-                            title = "播放速度",
-                            text = "越大播放越快（影响节奏与时长）。"
+                            title = appString(R.string.ui_play_speed),
+                            text = appString(R.string.ui_the_bigger_it_is_the_faster_it_plays)
                         )
                         Spacer(modifier = Modifier.weight(1f))
                         Text(String.format("%.2fx", playbackSpeed), style = MaterialTheme.typography.labelSmall)
@@ -738,12 +741,12 @@ fun EqualizerPanel(
 
                 Column {
                     Row {
-                        Text("音调", style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
+                        Text(androidx.compose.ui.res.stringResource(R.string.ui_tone), style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
                         Spacer(modifier = Modifier.width(8.dp))
                         InfoTip(
                             key = "playback_pitch",
-                            title = "音调",
-                            text = "越大音高越高、越小音高越低（不一定改变播放时长）。"
+                            title = appString(R.string.ui_tone),
+                            text = appString(R.string.ui_the_larger_the_pitch_the_higher_the_pitch)
                         )
                         Spacer(modifier = Modifier.weight(1f))
                         Text(String.format("%.2fx", playbackPitch), style = MaterialTheme.typography.labelSmall)
@@ -761,7 +764,7 @@ fun EqualizerPanel(
 
         val stereoEnabled = settings.stereoEnabled
         ModuleCard(
-            title = "立体声",
+            title = appString(R.string.ui_stereo),
             enabled = stereoEnabled,
             onEnabledChange = { onSettingsChanged(settings.copy(stereoEnabled = it)) },
             expanded = settings.stereoExpanded,
@@ -783,12 +786,12 @@ fun EqualizerPanel(
         ) {
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("声源距离", style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
+                    Text(androidx.compose.ui.res.stringResource(R.string.ui_sound_source_distance), style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
                     Spacer(modifier = Modifier.width(8.dp))
                     InfoTip(
                         key = "st_distance",
-                        title = "声源距离",
-                        text = "距离越远，声音会更柔和并略有衰减。"
+                        title = appString(R.string.ui_sound_source_distance),
+                        text = appString(R.string.ui_the_sound_will_be_softer_and_slightly_attenuated)
                     )
                     Spacer(modifier = Modifier.weight(1f))
                     Text(String.format("%.1f", settings.orbitDistance), style = MaterialTheme.typography.labelSmall)
@@ -804,12 +807,12 @@ fun EqualizerPanel(
 
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("声源方向", style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
+                    Text(androidx.compose.ui.res.stringResource(R.string.ui_sound_source_direction), style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
                     Spacer(modifier = Modifier.width(8.dp))
                     InfoTip(
                         key = "st_azimuth",
-                        title = "声源方向",
-                        text = "0°为居中，90°偏右，270°偏左。"
+                        title = appString(R.string.ui_sound_source_direction),
+                        text = appString(R.string.ui_0_is_centered_90_is_to_the_right)
                     )
                     Spacer(modifier = Modifier.weight(1f))
                     Text(String.format("%.0f°", settings.orbitAzimuthDeg), style = MaterialTheme.typography.labelSmall)
@@ -834,12 +837,12 @@ fun EqualizerPanel(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("声源自动环绕", style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
+                Text(androidx.compose.ui.res.stringResource(R.string.ui_sound_source_automatically_surrounds), style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
                 Spacer(modifier = Modifier.width(8.dp))
                 InfoTip(
                     key = "st_orbit",
-                    title = "声源自动环绕",
-                    text = "开启后，声像会按速度自动移动。"
+                    title = appString(R.string.ui_sound_source_automatically_surrounds),
+                    text = appString(R.string.ui_when_turned_on_the_sound_and_image_will)
                 )
                 Spacer(modifier = Modifier.weight(1f))
                 Switch(
@@ -852,12 +855,12 @@ fun EqualizerPanel(
 
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("环绕速度", style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
+                    Text(androidx.compose.ui.res.stringResource(R.string.ui_orbital_speed), style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
                     Spacer(modifier = Modifier.width(8.dp))
                     InfoTip(
                         key = "st_speed",
-                        title = "环绕速度",
-                        text = "速度越大，声像移动越快。"
+                        title = appString(R.string.ui_orbital_speed),
+                        text = appString(R.string.ui_the_higher_the_speed_the_faster_the_sound)
                     )
                     Spacer(modifier = Modifier.weight(1f))
                     Text(String.format("%.0f°/s", settings.orbitSpeed), style = MaterialTheme.typography.labelSmall)
@@ -874,18 +877,18 @@ fun EqualizerPanel(
             val panActive = settings.orbitEnabled || settings.orbitAzimuthDeg != 0f
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("左右平衡", style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
+                    Text(androidx.compose.ui.res.stringResource(R.string.ui_left_and_right_balance), style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
                     Spacer(modifier = Modifier.width(8.dp))
                     InfoTip(
                         key = "ch_balance",
-                        title = "左右平衡",
-                        text = "把整体声音偏向左或右声道。与“声源方向/自动环绕”互斥。"
+                        title = appString(R.string.ui_left_and_right_balance),
+                        text = appString(R.string.ui_shift_the_overall_sound_to_the_left_or)
                     )
                     Spacer(modifier = Modifier.weight(1f))
                     val balText = when {
-                        settings.balance < -0.05f -> "左偏 ${(settings.balance * -100).toInt()}%"
-                        settings.balance > 0.05f -> "右偏 ${(settings.balance * 100).toInt()}%"
-                        else -> "居中"
+                        settings.balance < -0.05f -> appString(R.string.ui_left_bias, (settings.balance * -100).toInt())
+                        settings.balance > 0.05f -> appString(R.string.ui_rightward, (settings.balance * 100).toInt())
+                        else -> appString(R.string.ui_center)
                     }
                     Text(balText, style = MaterialTheme.typography.labelSmall)
                 }
@@ -899,12 +902,12 @@ fun EqualizerPanel(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("声道模式", style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
+                Text(androidx.compose.ui.res.stringResource(R.string.ui_channel_mode), style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
                 Spacer(modifier = Modifier.width(8.dp))
                 InfoTip(
                     key = "ch_mode",
-                    title = "声道模式",
-                    text = "反转：交换左右声道；克隆：把一侧声道复制到另一侧。"
+                    title = appString(R.string.ui_channel_mode),
+                    text = appString(R.string.ui_invert_swap_left_and_right_channels_clone_copy)
                 )
             }
             val channelModeChipColors = FilterChipDefaults.filterChipColors(
@@ -914,10 +917,10 @@ fun EqualizerPanel(
             )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(
-                    0 to "正常",
-                    1 to "反转",
-                    2 to "克隆 L→R",
-                    3 to "克隆 R→L"
+                    0 to appString(R.string.ui_normal),
+                    1 to appString(R.string.ui_reverse),
+                    2 to appString(R.string.ui_clone_l_r),
+                    3 to appString(R.string.ui_clone_r_l)
                 ).forEach { (mode, label) ->
                     FilterChip(
                         selected = settings.channelMode == mode,
@@ -938,7 +941,7 @@ fun EqualizerPanel(
 
         val eqEnabled = settings.enabled
         ModuleCard(
-            title = "均衡器",
+            title = appString(R.string.ui_equalizer),
             enabled = eqEnabled,
             onEnabledChange = { onSettingsChanged(settings.copy(enabled = it, presetName = "自定义")) },
             expanded = settings.equalizerExpanded,
@@ -961,7 +964,7 @@ fun EqualizerPanel(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "预设",
+                    text = appString(R.string.ui_default),
                     style = MaterialTheme.typography.labelSmall,
                     color = materialColorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 6.dp, bottom = 6.dp)
@@ -987,7 +990,7 @@ fun EqualizerPanel(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = settings.presetName,
+                            text = equalizerPresetLabel(settings.presetName),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.bodyMedium
@@ -1020,7 +1023,7 @@ fun EqualizerPanel(
                             DropdownMenuItem(
                                 text = {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(preset.name)
+                                        Text(if (preset.isCustom) preset.name else equalizerPresetLabel(preset.name))
                                         if (preset.isCustom) {
                                             Spacer(modifier = Modifier.weight(1f))
                                             IconButton(onClick = { onDeletePreset(preset) }) {
@@ -1060,12 +1063,12 @@ fun EqualizerPanel(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("频段调节", style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
+                Text(androidx.compose.ui.res.stringResource(R.string.ui_frequency_band_adjustment), style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
                 Spacer(modifier = Modifier.width(8.dp))
                 InfoTip(
                     key = "eq_bands",
-                    title = "频段调节",
-                    text = "每个滑条对应一个中心频段。向上提升、向下削减该频段的能量。"
+                    title = appString(R.string.ui_frequency_band_adjustment),
+                    text = appString(R.string.ui_each_slider_corresponds_to_a_center_frequency_band)
                 )
             }
             // val levels = normalizedLevels()  // 不再使用，改用 currentLevels
@@ -1162,7 +1165,7 @@ fun EqualizerPanel(
             ) {
                 Icon(Icons.Rounded.Save, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("保存为自定义预设")
+                Text(androidx.compose.ui.res.stringResource(R.string.ui_save_as_custom_preset))
             }
         }
     }
@@ -1170,11 +1173,11 @@ fun EqualizerPanel(
     if (showSaveDialog) {
         FlatTextFieldDialog(
             onDismissRequest = { showSaveDialog = false },
-            message = "请输入自定义预设名称。",
+            message = appString(R.string.ui_please_enter_a_custom_preset_name),
             value = newPresetName,
             onValueChange = { newPresetName = it },
-            placeholder = "预设名称",
-            confirmText = "保存",
+            placeholder = appString(R.string.ui_default_name),
+            confirmText = appString(R.string.ui_save),
             confirmEnabled = newPresetName.trim().isNotBlank(),
             onConfirm = {
                 if (newPresetName.isNotBlank()) {
@@ -1185,4 +1188,15 @@ fun EqualizerPanel(
             },
         )
     }
+}
+
+private fun equalizerPresetLabel(name: String): String = when (name) {
+    "默认" -> appString(R.string.ui_default_c8d09c)
+    "自定义" -> appString(R.string.ui_custom)
+    "清亮 (Bright)" -> appString(R.string.eq_bright)
+    "低音增强 (Bass Boost)" -> appString(R.string.eq_bass_boost)
+    "拍打-清脆 (Tapping-Crisp)" -> appString(R.string.eq_tapping_crisp)
+    "拍打-沉闷 (Tapping-Dull)" -> appString(R.string.eq_tapping_dull)
+    "人声增强 (Vocal)" -> appString(R.string.eq_vocal)
+    else -> name
 }

@@ -9,7 +9,7 @@ import org.junit.Before
 import org.junit.Test
 import java.util.TimeZone
 
-class ListeningCalendarViewModelTest {
+class ListeningCalendarViewModelTest : com.asmr.player.LocalizedRobolectricTest() {
 
     private lateinit var originalTz: TimeZone
 

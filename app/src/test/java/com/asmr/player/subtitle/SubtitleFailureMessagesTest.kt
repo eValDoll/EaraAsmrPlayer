@@ -8,7 +8,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class SubtitleFailureMessagesTest {
+class SubtitleFailureMessagesTest : com.asmr.player.LocalizedRobolectricTest() {
     @Test
     fun userActionWarnings_includeMissingModelKeyAndBalance() {
         assertTrue(

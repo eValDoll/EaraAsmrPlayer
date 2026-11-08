@@ -39,7 +39,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [34])
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [34])
 class LyricsPersistenceTest {
     @get:Rule val temporaryFolder = TemporaryFolder()
     private val context get() = RuntimeEnvironment.getApplication()
@@ -334,7 +334,7 @@ class LyricsPersistenceTest {
 
     private fun openDatabase() {
         database = Room.databaseBuilder(context, AppDatabase::class.java, databaseName)
-            .allowMainThreadQueries().addMigrations(AppDatabaseMigrations.MIGRATION_34_35, AppDatabaseMigrations.MIGRATION_35_36, AppDatabaseMigrations.MIGRATION_36_37).build()
+            .allowMainThreadQueries().addMigrations(AppDatabaseMigrations.MIGRATION_34_35, AppDatabaseMigrations.MIGRATION_35_36, AppDatabaseMigrations.MIGRATION_36_37, AppDatabaseMigrations.MIGRATION_37_38).build()
         loader = LyricsLoader(database, database.trackDao(), database.albumDao(), database.remoteSubtitleSourceDao(),
             ManualLyricsSourceRepository(database.manualLyricsSourceDao(), context),
             OkHttpClient.Builder().addInterceptor { error("本地字幕测试不应访问网络") }.build(), context)

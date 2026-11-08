@@ -20,7 +20,7 @@ import org.robolectric.annotation.Config
 import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [34])
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [34])
 class PlaylistPlaybackPersistenceTest {
     @Test
     fun remoteTrackProgressIsIndependentPerPlaylistAndSurvivesReopen() = runBlocking {
@@ -120,6 +120,7 @@ class PlaylistPlaybackPersistenceTest {
             val playlistId = open().useDatabase { database ->
                 val playlistId = addPlaylist(database, "保留的收藏")
                 database.openHelper.writableDatabase.execSQL("DROP TABLE playlist_playback")
+                com.asmr.player.data.local.db.removeTagMetadataColumnsForLegacySchema(database.openHelper.writableDatabase)
                 database.openHelper.writableDatabase.version = 36
                 playlistId
             }
@@ -129,7 +130,7 @@ class PlaylistPlaybackPersistenceTest {
                 assertEquals(listOf("first", "second"), items.map { it.mediaId })
                 assertEquals(listOf(0, 1), items.map { it.itemOrder })
                 assertEquals("ja\thttps://example.com/first.vtt\tvtt", items.first().remoteSubtitleSources)
-                assertEquals(37, database.openHelper.writableDatabase.version)
+                assertEquals(38, database.openHelper.writableDatabase.version)
                 val repository = PlaylistPlaybackRepository(database.playlistPlaybackDao())
                 assertNull(repository.observePlayback(playlistId).first())
                 repository.recordPlayback(playlistId, "first", 1_000L, 20_000L)
@@ -162,7 +163,7 @@ class PlaylistPlaybackPersistenceTest {
         try {
             block {
                 Room.databaseBuilder(context, AppDatabase::class.java, name)
-                    .addMigrations(AppDatabaseMigrations.MIGRATION_36_37)
+                    .addMigrations(AppDatabaseMigrations.MIGRATION_36_37, AppDatabaseMigrations.MIGRATION_37_38)
                     .allowMainThreadQueries()
                     .build()
             }

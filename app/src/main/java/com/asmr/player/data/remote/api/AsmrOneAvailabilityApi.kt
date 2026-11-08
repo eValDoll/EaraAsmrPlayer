@@ -76,6 +76,7 @@ data class AsmrOneCollectedSearchItem(
     val circle: String = "",
     val cvs: List<String>? = emptyList(),
     val tags: List<String>? = emptyList(),
+    val tagDetails: List<com.asmr.player.domain.model.AlbumTag>? = emptyList(),
     @SerializedName(value = "matchedRjs", alternate = ["matched_rjs"])
     val matchedRjs: List<String>? = emptyList(),
     @SerializedName(value = "originalWorkno", alternate = ["original_workno"])
@@ -162,6 +163,20 @@ class AsmrOneAvailabilityApi @Inject constructor(
 
     val isBackendConfigured: Boolean
         get() = backendBaseUrl.isNotBlank()
+
+    suspend fun getTagDictionary(): List<com.asmr.player.domain.model.AlbumTag> = withContext(Dispatchers.IO) {
+        if (backendBaseUrl.isBlank()) return@withContext emptyList()
+        val request = Request.Builder().url(resolveUrl("api/tag-dictionary"))
+            .header("X-Listen-Together-App", appHeaderValue)
+            .header(NetworkHeaders.HEADER_SILENT_IO_ERROR, NetworkHeaders.SILENT_IO_ERROR_ON)
+            .get().build()
+        requestClient.newCall(request).awaitResponse().use { response ->
+            if (!response.isSuccessful) throw IOException("Tag dictionary failed: HTTP ${response.code}")
+            val body = gson.fromJson(response.body?.string().orEmpty(), com.google.gson.JsonObject::class.java)
+            val type = object : TypeToken<List<com.asmr.player.domain.model.AlbumTag>>() {}.type
+            gson.fromJson<List<com.asmr.player.domain.model.AlbumTag>>(body?.get("tags"), type).orEmpty()
+        }
+    }
 
     suspend fun check(rjs: List<String>): Map<String, CollectionAvailability> {
         val normalized = rjs

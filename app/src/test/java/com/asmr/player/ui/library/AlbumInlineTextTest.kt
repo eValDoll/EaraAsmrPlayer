@@ -2,7 +2,6 @@
 
 package com.asmr.player.ui.library
 
-import android.app.Application
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
@@ -66,7 +65,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [33], qualifiers = "w500dp-h900dp-mdpi")
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [33], qualifiers = "w500dp-h900dp-mdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @OptIn(ExperimentalFoundationApi::class)
 class AlbumInlineTextTest {

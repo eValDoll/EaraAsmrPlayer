@@ -1,5 +1,8 @@
 package com.asmr.player.ui.common
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -50,7 +53,7 @@ internal fun AudioMetadataLine(
         if (source != null) {
             Icon(
                 imageVector = if (source == AudioSource.Online) Icons.Rounded.CloudQueue else Icons.Rounded.Smartphone,
-                contentDescription = if (source == AudioSource.Online) "在线" else "本地",
+                contentDescription = if (source == AudioSource.Online) appString(R.string.ui_online) else appString(R.string.ui_local),
                 tint = color,
                 modifier = Modifier.size(14.dp),
             )

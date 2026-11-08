@@ -33,7 +33,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [28], qualifiers = "w480dp-h960dp-port-mdpi")
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [28], qualifiers = "w480dp-h960dp-port-mdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class AsmrOneDownloadDialogTest {
     private val compose = createAndroidComposeRule<ComponentActivity>()

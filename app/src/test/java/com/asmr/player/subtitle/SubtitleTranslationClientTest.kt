@@ -16,7 +16,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
-class SubtitleTranslationClientTest {
+class SubtitleTranslationClientTest : com.asmr.player.LocalizedRobolectricTest() {
     @Test
     fun retryAfter_acceptsSecondsAndHttpDate() {
         assertEquals(4_000L, parseRetryAfterMillis("4", nowMs = 0L))

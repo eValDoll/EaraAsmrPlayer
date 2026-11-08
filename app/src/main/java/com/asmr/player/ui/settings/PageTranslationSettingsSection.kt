@@ -1,5 +1,8 @@
 package com.asmr.player.ui.settings
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -66,27 +69,27 @@ internal fun PageTranslationSettingsSection(isActive: Boolean = true) {
         scope.launch {
             try { action() }
             catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { messages.showError("保存失败，请稍后重试") }
+            catch (_: Exception) { messages.showError(appString(R.string.ui_saving_failed_please_try_again_later)) }
         }
     }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("页面翻译", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium,
+            Text(androidx.compose.ui.res.stringResource(R.string.ui_page_translation), modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
             IconButton(
                 enabled = !clearing,
                 onClick = {
                     clearing = true
                     scope.launch {
-                        try { services.translations().clearCache(); messages.showSuccess("页面翻译缓存已清空") }
+                        try { services.translations().clearCache(); messages.showSuccess(appString(R.string.ui_page_translation_cache_cleared)) }
                         catch (cancelled: CancellationException) { throw cancelled }
-                        catch (_: Exception) { messages.showError("清空失败，请稍后重试") }
+                        catch (_: Exception) { messages.showError(appString(R.string.ui_clearing_failed_please_try_again_later)) }
                         finally { clearing = false }
                     }
                 },
                 modifier = Modifier.size(40.dp).semantics {
-                    contentDescription = "清空页面翻译缓存"
-                    if (clearing) stateDescription = "正在清空"
+                    contentDescription = appString(R.string.ui_clear_page_translation_cache)
+                    if (clearing) stateDescription = appString(R.string.ui_clearing)
                 },
                 colors = IconButtonDefaults.iconButtonColors(
                     containerColor = Color.Transparent, contentColor = colors.primary,
@@ -101,9 +104,9 @@ internal fun PageTranslationSettingsSection(isActive: Boolean = true) {
                 }
             }
         }
-        PageTranslationLanguageSelector("目标语言", settings.target, { value -> save { preferences.setTarget(value) } }, Modifier.fillMaxWidth())
+        PageTranslationLanguageSelector(appString(R.string.ui_target_language), settings.target, { value -> save { preferences.setTarget(value) } }, Modifier.fillMaxWidth())
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("自动翻译页面", modifier = Modifier.weight(1f), color = colors.textPrimary, style = MaterialTheme.typography.bodyMedium)
+            Text(androidx.compose.ui.res.stringResource(R.string.ui_translate_pages_automatically), modifier = Modifier.weight(1f), color = colors.textPrimary, style = MaterialTheme.typography.bodyMedium)
             Switch(checked = settings.automatic, onCheckedChange = { value -> save { preferences.setAutomatic(value) } },
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = colors.surface, checkedTrackColor = colors.primary,
@@ -121,7 +124,16 @@ internal fun PageTranslationLanguageSelector(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    SettingsDropdownSelector(label, value, PageTranslationLanguages, onSelect, modifier, tagPrefix = "page_translation")
+    SettingsDropdownSelector(label, value, PageTranslationLanguages.mapValues { (code, _) ->
+        appString(when (code) {
+            "zh-CN" -> R.string.language_simplified_chinese
+            "zh-TW" -> R.string.language_traditional_chinese
+            "ja" -> R.string.language_japanese
+            "en" -> R.string.language_english
+            "ru" -> R.string.language_russian
+            else -> R.string.language_korean
+        })
+    }, onSelect, modifier, tagPrefix = "page_translation")
 }
 
 @Composable
@@ -182,7 +194,7 @@ internal fun SettingsDropdownSelector(
                         .background(fieldColor)
                         .border(1.dp, colors.primaryStrong.copy(alpha = if (expanded) 0.7f else 0.22f), shape))
                     .clickable(enabled = enabled, role = Role.DropdownList) { expanded = !expanded }
-                    .semantics { stateDescription = if (expanded) "已展开" else "已收起" }
+                    .semantics { stateDescription = if (expanded) appString(R.string.ui_expanded) else appString(R.string.ui_collected) }
                     .testTag("${tagPrefix}_$label")
                     .padding(horizontal = fieldHorizontalPadding, vertical = if (flatTrigger) 6.dp else 10.dp),
                 verticalAlignment = Alignment.CenterVertically,

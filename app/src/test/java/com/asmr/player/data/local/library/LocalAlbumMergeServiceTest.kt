@@ -21,7 +21,7 @@ import org.robolectric.annotation.Config
 import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [34])
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [34])
 class LocalAlbumMergeServiceTest {
     @Test fun dmmOnlineAndDownloadedAlbumMergeWithoutTouchingSameDigitsWorks() = runBlocking {
         val context = RuntimeEnvironment.getApplication()

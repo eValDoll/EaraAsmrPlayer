@@ -1,5 +1,8 @@
 package com.asmr.player.ui.player
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.room.withTransaction
@@ -48,7 +51,7 @@ class NowPlayingTagViewModel @Inject constructor(
             val inherited = parseTagsCsv(listOf(albumTagsCsv, userAlbumTagsCsv).filter { it.isNotBlank() }.joinToString(","))
             val userCsv = database.trackTagDao().getTrackTagsCsvOnce(track.id, TagSource.USER).orEmpty()
             val user = parseTagsCsv(userCsv)
-            val title = track.titleForDisplay.ifBlank { fallbackTitle.ifBlank { "音轨" } }
+            val title = track.titleForDisplay.ifBlank { fallbackTitle.ifBlank { appString(R.string.ui_audio_track) } }
             _dialogState.value = DialogState(trackId = track.id, title = title, inheritedTags = inherited, userTags = user)
         }
     }

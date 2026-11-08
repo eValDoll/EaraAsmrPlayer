@@ -1,5 +1,8 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -87,7 +90,7 @@ fun TagManagerSheet(
                 Icon(imageVector = Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null)
             }
             Text(
-                text = "标签管理",
+                text = appString(R.string.ui_tag_management),
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = colorScheme.textPrimary
             )
@@ -95,7 +98,7 @@ fun TagManagerSheet(
                 onClick = onClose,
                 modifier = Modifier.align(Alignment.CenterEnd)
             ) {
-                Text("完成")
+                Text(androidx.compose.ui.res.stringResource(R.string.ui_done))
             }
         }
 
@@ -103,7 +106,7 @@ fun TagManagerSheet(
             TagManagerSearchField(
                 value = filter,
                 onValueChange = { filter = it },
-                placeholder = "搜索标签"
+                placeholder = appString(R.string.ui_search_tags)
             )
         }
 
@@ -135,15 +138,15 @@ fun TagManagerSheet(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 if (tag.albumCount == 0L) {
-                                    TagManagerMetricBadge(label = "未使用")
+                                    TagManagerMetricBadge(label = appString(R.string.ui_not_used))
                                 } else {
                                     TagManagerMetricBadge(
-                                        label = "用户标注",
+                                        label = appString(R.string.ui_user_annotation),
                                         value = tag.userAlbumCount.toString(),
                                         highlighted = true
                                     )
                                     TagManagerMetricBadge(
-                                        label = "总计",
+                                        label = appString(R.string.ui_total),
                                         value = tag.albumCount.toString()
                                     )
                                 }
@@ -152,7 +155,7 @@ fun TagManagerSheet(
                     },
                     supportingContent = {
                         Text(
-                            text = "点击可重命名或删除",
+                            text = appString(R.string.ui_click_to_rename_or_delete),
                             style = MaterialTheme.typography.bodySmall,
                             color = colorScheme.textTertiary
                         )
@@ -175,19 +178,19 @@ fun TagManagerSheet(
         if (tag != null) {
             FlatActionDialog(
                 onDismissRequest = { showRenameDialog = false },
-                message = "修改标签名称，或删除这个用户标签。",
+                message = appString(R.string.ui_modify_the_label_name_or_delete_this_user),
                 actions = listOf(
                     FlatDialogAction(
-                        text = "删除",
+                        text = appString(R.string.ui_delete),
                         tone = FlatDialogActionTone.Danger,
                         onClick = {
                             showRenameDialog = false
                             showDeleteDialog = true
                         }
                     ),
-                    FlatDialogAction("取消", onClick = { showRenameDialog = false }),
+                    FlatDialogAction(appString(R.string.ui_cancel), onClick = { showRenameDialog = false }),
                     FlatDialogAction(
-                        text = "保存",
+                        text = appString(R.string.ui_save),
                         tone = FlatDialogActionTone.Primary,
                         enabled = renameText.trim().isNotBlank(),
                         onClick = {
@@ -212,11 +215,11 @@ fun TagManagerSheet(
         if (tag != null) {
             FlatActionDialog(
                 onDismissRequest = { showDeleteDialog = false },
-                message = "将从所有用户标注中移除该标签。",
+                message = appString(R.string.ui_the_label_will_be_removed_from_all_user),
                 actions = listOf(
-                    FlatDialogAction("取消", onClick = { showDeleteDialog = false }),
+                    FlatDialogAction(appString(R.string.ui_cancel), onClick = { showDeleteDialog = false }),
                     FlatDialogAction(
-                        text = "删除",
+                        text = appString(R.string.ui_delete),
                         tone = FlatDialogActionTone.Danger,
                         onClick = {
                             onDelete(tag.id)

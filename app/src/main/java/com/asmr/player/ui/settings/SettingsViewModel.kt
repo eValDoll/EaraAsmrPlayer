@@ -1,5 +1,8 @@
 package com.asmr.player.ui.settings
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.content.Context
 import android.os.Environment
 import android.os.SystemClock
@@ -150,7 +153,7 @@ class SettingsViewModel @Inject constructor(
     fun requestDownloadDirectoryChange(onAllowed: () -> Unit) {
         viewModelScope.launch {
             if (withContext(Dispatchers.IO) { downloadDirectoryCoordinator.hasUnfinishedDownloads() }) {
-                messageManager.showError("请先完成或删除未完成任务")
+                messageManager.showError(appString(R.string.ui_please_complete_or_delete_unfinished_tasks_first))
             } else {
                 onAllowed()
             }
@@ -163,21 +166,21 @@ class SettingsViewModel @Inject constructor(
                 downloadDirectoryCoordinator.changeDestination(destination)
             }) {
                 DownloadDirectoryChangeResult.Changed -> {
-                    messageManager.showInfo("下载目录已切换，正在扫描目标目录")
+                    messageManager.showInfo(appString(R.string.ui_the_download_directory_has_been_switched_and_the))
                     onChanged()
                 }
-                DownloadDirectoryChangeResult.Unchanged -> messageManager.showInfo("当前已使用该下载目录")
+                DownloadDirectoryChangeResult.Unchanged -> messageManager.showInfo(appString(R.string.ui_the_download_directory_is_currently_in_use))
                 DownloadDirectoryChangeResult.BlockedByUnfinishedTasks -> {
-                    messageManager.showError("请先完成或删除未完成任务")
+                    messageManager.showError(appString(R.string.ui_please_complete_or_delete_unfinished_tasks_first))
                 }
                 DownloadDirectoryChangeResult.BlockedByLocalFileOperation -> {
                     messageManager.showInfo(com.asmr.player.util.LocalFileOperationCoordinator.BUSY_MESSAGE)
                 }
                 DownloadDirectoryChangeResult.DirectoryUnavailable -> {
-                    messageManager.showError("下载目录不可用，请重新选择或重置为默认目录")
+                    messageManager.showError(appString(R.string.ui_the_download_directory_is_unavailable_please_select_again))
                 }
                 is DownloadDirectoryChangeResult.Failed -> {
-                    messageManager.showError("切换下载目录失败")
+                    messageManager.showError(appString(R.string.ui_failed_to_switch_download_directory))
                 }
             }
         }
@@ -345,7 +348,7 @@ class SettingsViewModel @Inject constructor(
 
     fun openSystemAudioEffects() {
         if (!openSystemAudioEffectsSettings(context)) {
-            messageManager.showError("无法打开系统音效设置")
+            messageManager.showError(appString(R.string.ui_unable_to_open_system_sound_settings))
         }
     }
 
@@ -430,7 +433,7 @@ class SettingsViewModel @Inject constructor(
                 subtitleModelRepository.updateFailure(
                     modelId,
                     source,
-                    error.message?.takeIf { it.isNotBlank() } ?: "无法开始模型下载"
+                    error.message?.takeIf { it.isNotBlank() } ?: appString(R.string.ui_unable_to_start_model_download)
                 )
             }
     }
@@ -473,7 +476,7 @@ class SettingsViewModel @Inject constructor(
             } else {
                 _deepSeekApiKeyState.value = _deepSeekApiKeyState.value.copy(
                     saving = false,
-                    errorMessage = "API Key 保存失败"
+                    errorMessage = appString(R.string.ui_api_key_failed_to_save)
                 )
             }
         }
@@ -499,7 +502,7 @@ class SettingsViewModel @Inject constructor(
     } catch (cancelled: CancellationException) {
         throw cancelled
     } catch (error: Exception) {
-        messageManager.showError(error.message ?: "DeepSeek 模型列表拉取失败")
+        messageManager.showError(error.message ?: appString(R.string.ui_unable_to_fetch_deepseek_model_list))
         null
     }
 
@@ -508,9 +511,9 @@ class SettingsViewModel @Inject constructor(
             withContext(Dispatchers.IO) {
                 val key = apiKey.trim().ifBlank {
                     val saved = translationApiStore.readCustomConfiguration()
-                    require(saved != null) { "请先输入 API Key" }
+                    require(saved != null) { appString(R.string.ui_enter_an_api_key_first) }
                     require(translationModelsUrl(saved.baseUrl) == translationModelsUrl(baseUrl)) {
-                        "API 地址已更改，请重新输入 API Key"
+                        appString(R.string.ui_api_url_changed_enter_your_api_key_again)
                     }
                     saved.apiKey
                 }
@@ -519,7 +522,7 @@ class SettingsViewModel @Inject constructor(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
-            messageManager.showError(error.message ?: "模型列表拉取失败")
+            messageManager.showError(error.message ?: appString(R.string.ui_unable_to_fetch_model_list_7c8fa4))
             null
         }
     }
@@ -551,7 +554,7 @@ class SettingsViewModel @Inject constructor(
                 _translationApiState.value = current.copy(
                     settings = settings, saving = false, saveVersion = current.saveVersion + 1L
                 )
-                messageManager.showSuccess("翻译配置已保存")
+                messageManager.showSuccess(appString(R.string.ui_translation_settings_saved))
                 if (settings.provider == TranslationProvider.DEEPSEEK) {
                     val key = withContext(Dispatchers.IO) { translationApiStore.readDeepSeekKey() }
                     if (key.isNotBlank()) deepSeekAccountRepository.refreshBalance(key)
@@ -560,7 +563,7 @@ class SettingsViewModel @Inject constructor(
                 throw cancelled
             } catch (error: Exception) {
                 _translationApiState.value = current.copy(saving = false)
-                messageManager.showError(error.message ?: "翻译配置保存失败")
+                messageManager.showError(error.message ?: appString(R.string.ui_unable_to_save_translation_settings))
             }
         }
     }
@@ -625,7 +628,7 @@ class SettingsViewModel @Inject constructor(
                 AppUpdateState.UpToDate(latestVersionName = release.versionName, source = source)
             }
         } catch (e: Exception) {
-            val msg = e.message?.trim().orEmpty().ifBlank { "检查更新失败" }
+            val msg = e.message?.trim().orEmpty().ifBlank { appString(R.string.ui_check_for_updates_failed) }
             _updateState.value = AppUpdateState.Failed(msg, source)
         }
     }
@@ -655,9 +658,9 @@ class SettingsViewModel @Inject constructor(
 
                 okHttpClient.newCall(req).execute().use { resp ->
                     if (!resp.isSuccessful) {
-                        throw IllegalStateException("下载失败：${resp.code} ${resp.message}")
+                        throw IllegalStateException(appString(R.string.ui_download_failed, resp.code, resp.message))
                     }
-                    val body = resp.body ?: throw IllegalStateException("下载失败：空响应体")
+                    val body = resp.body ?: throw IllegalStateException(appString(R.string.ui_download_failed_empty_response_body))
                     val total = body.contentLength().coerceAtLeast(0L)
                     val input = body.byteStream()
                     touchedTargetFile = true
@@ -693,13 +696,13 @@ class SettingsViewModel @Inject constructor(
                 }
 
                 val ok = withContext(Dispatchers.IO) { file.exists() && file.length() > 0L }
-                if (!ok) throw IllegalStateException("下载文件无效")
+                if (!ok) throw IllegalStateException(appString(R.string.ui_download_file_is_invalid))
                 _updateState.value = AppUpdateState.ReadyToInstall(release, apkPath = file.absolutePath, source = source)
             } catch (e: Exception) {
                 if (touchedTargetFile) {
                     runCatching { targetFile?.takeIf { it.exists() }?.delete() }
                 }
-                val msg = e.message?.trim().orEmpty().ifBlank { "下载失败" }
+                val msg = e.message?.trim().orEmpty().ifBlank { appString(R.string.ui_download_failed_e0dab2) }
                 _updateState.value = AppUpdateState.Failed(msg, source)
             }
         }

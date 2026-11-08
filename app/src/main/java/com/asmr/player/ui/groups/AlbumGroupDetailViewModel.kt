@@ -1,5 +1,8 @@
 package com.asmr.player.ui.groups
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -51,7 +54,7 @@ class AlbumGroupDetailViewModel @Inject constructor(
         if (id <= 0L || mediaId.isBlank()) return
         viewModelScope.launch {
             groupRepository.removeTrackFromGroup(id, mediaId)
-            messageManager.showInfo("已从分组移除")
+            messageManager.showInfo(appString(R.string.ui_removed_from_group))
         }
     }
 
@@ -60,7 +63,7 @@ class AlbumGroupDetailViewModel @Inject constructor(
         if (id <= 0L || albumId <= 0L) return
         viewModelScope.launch {
             groupRepository.removeAlbumFromGroup(id, albumId)
-            messageManager.showInfo("已从分组移除")
+            messageManager.showInfo(appString(R.string.ui_removed_from_group))
         }
     }
 
@@ -69,7 +72,7 @@ class AlbumGroupDetailViewModel @Inject constructor(
         if (id <= 0L || albumId <= 0L || mediaId.isBlank()) return
         viewModelScope.launch {
             if (groupRepository.moveTrackToTop(id, albumId, mediaId)) {
-                messageManager.showInfo("已移至顶部")
+                messageManager.showInfo(appString(R.string.ui_moved_to_top))
             }
         }
     }
@@ -79,7 +82,7 @@ class AlbumGroupDetailViewModel @Inject constructor(
         if (id <= 0L || albumId <= 0L || mediaId.isBlank()) return
         viewModelScope.launch {
             if (groupRepository.moveTrackToBottom(id, albumId, mediaId)) {
-                messageManager.showInfo("已移至末尾")
+                messageManager.showInfo(appString(R.string.ui_moved_to_end))
             }
         }
     }

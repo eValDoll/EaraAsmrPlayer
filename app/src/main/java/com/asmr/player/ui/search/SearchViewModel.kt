@@ -1,5 +1,8 @@
 package com.asmr.player.ui.search
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.domain.model.CollectedSearchSource
 import android.os.SystemClock
 import android.util.Log
@@ -64,6 +67,7 @@ data class SearchPendingRequest(
 )
 
 private const val DLSITE_CANONICAL_SEARCH_LOCALE = "ja_JP"
+private const val HOT_KEYWORD_REFRESH_INTERVAL_MS = 60_000L
 
 @HiltViewModel
 class SearchViewModel @Inject constructor(
@@ -98,7 +102,8 @@ class SearchViewModel @Inject constructor(
         BoundedLruCache<String, CachedCollectionAvailability>(maxEntries = 1_000)
     private val asmrOneCollectedWorkNoCache = BoundedLruCache<Int, String>(maxEntries = 300)
     private val bootstrapped = AtomicBoolean(false)
-    private val hotKeywordsRequested = AtomicBoolean(false)
+    private val hotKeywordsLoading = AtomicBoolean(false)
+    private var hotKeywordsLoadedAtMs: Long? = null
     private var searchResultRevision: Long = 0L
 
     private val _uiState = MutableStateFlow<SearchUiState>(SearchUiState.Idle)
@@ -111,23 +116,35 @@ class SearchViewModel @Inject constructor(
     val viewMode: StateFlow<Int> = settingsRepository.searchViewMode
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1)
 
-    private var currentLocale: String? = "ja_JP"
+    private var currentLocale: String? = null
     private var lastRequestedKeyword: String = ""
 
     fun ensureHotKeywordTermsLoaded() {
-        if (!hotKeywordsRequested.compareAndSet(false, true)) return
         if (!hotListeningApi.isBackendConfigured) {
             _showHotKeywordFallback.value = true
             return
         }
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (hotKeywordsLoadedAtMs?.let { now - it < HOT_KEYWORD_REFRESH_INTERVAL_MS } == true) return
+        if (!hotKeywordsLoading.compareAndSet(false, true)) return
         viewModelScope.launch {
-            val suggestions = runCatching { hotListeningApi.getSearchSuggestions() }.getOrNull()
-            val terms = buildSearchHotKeywordTerms(
-                hotCvs = suggestions?.hotCvs.orEmpty(),
-                hotTags = suggestions?.hotTags.orEmpty()
-            )
-            _hotKeywordTerms.value = terms
-            _showHotKeywordFallback.value = terms.isEmpty()
+            try {
+                val suggestions = hotListeningApi.getSearchSuggestions() ?: return@launch
+                val terms = buildSearchHotKeywordTerms(
+                    hotCvs = suggestions.hotCvs,
+                    hotTags = suggestions.hotTags
+                )
+                _hotKeywordTerms.value = terms
+                _showHotKeywordFallback.value = terms.isEmpty()
+                hotKeywordsLoadedAtMs = android.os.SystemClock.elapsedRealtime()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                // Retain existing suggestions after a transient refresh failure.
+            } finally {
+                _showHotKeywordFallback.value = _hotKeywordTerms.value.isEmpty()
+                hotKeywordsLoading.set(false)
+            }
         }
     }
 
@@ -227,7 +244,7 @@ class SearchViewModel @Inject constructor(
             collectedSourceName = collectedSourceName
         )
         if (nextFilters.purchasedOnly && !dlsitePlayLibraryClient.hasStoredCredentials()) {
-            messageManager.showWarning("请先登录 DLsite 后再使用\"已购\"搜索")
+            messageManager.showWarning(appString(R.string.ui_please_log_in_to_dlsite_before_using_purchased))
             return false
         }
         val normalizedKeyword = keyword.trim()
@@ -269,7 +286,7 @@ class SearchViewModel @Inject constructor(
         val current = _uiState.value as? SearchUiState.Success ?: return false
         if (current.isBusy) return false
         if (nextFilters.purchasedOnly && !dlsitePlayLibraryClient.hasStoredCredentials()) {
-            messageManager.showWarning("请先登录 DLsite 后再使用\"已购\"搜索")
+            messageManager.showWarning(appString(R.string.ui_please_log_in_to_dlsite_before_using_purchased))
             return false
         }
         val searchRequestChanged =
@@ -303,18 +320,28 @@ class SearchViewModel @Inject constructor(
         return true
     }
 
+    private var lastApplicationLocale = com.asmr.player.i18n.AppLanguage.metadataLocale()
+
+    fun refreshApplicationLocale() {
+        val next = com.asmr.player.i18n.AppLanguage.metadataLocale()
+        if (lastApplicationLocale == next) return
+        lastApplicationLocale = next
+        if (!currentLocale.isNullOrBlank()) return
+        val current = _uiState.value as? SearchUiState.Success ?: return
+        refreshCurrentResultLocale(current, currentLocale)
+    }
+
     private fun refreshCurrentResultLocale(current: SearchUiState.Success, locale: String?) {
         enrichJob?.cancel()
         val detailLocale = resolveSearchDetailLocale(
-            selectedLocale = locale,
-            chineseTranslatedOnly = current.chineseTranslatedOnly
-        )
+            selectedLocale = locale)
         Log.d(
             "SearchViewModel",
             "Refreshing result tags locale=$detailLocale without reloading the result list"
         )
         val updated = current.copy(
             locale = locale,
+            results = current.results.map { it.copy(metadataLocale = locale?.takeIf(String::isNotBlank)) },
             isEnriching = false,
             enrichingRjCodes = emptySet(),
             isRefreshingLocalizedText = true,
@@ -404,7 +431,7 @@ class SearchViewModel @Inject constructor(
                 if (generation != requestGeneration) return@launch
                 val resultRevision = ++searchResultRevision
                 _uiState.value = SearchUiState.Success(
-                    results = pageResult.items,
+                    results = pageResult.items.map { it.copy(metadataLocale = currentLocale?.takeIf(String::isNotBlank)) },
                     keyword = normalizedKeyword,
                     page = page,
                     order = currentOrder,
@@ -444,9 +471,7 @@ class SearchViewModel @Inject constructor(
                         baseItems = pageResult.items,
                         resultRevision = resultRevision,
                         detailLocale = resolveSearchDetailLocale(
-                            selectedLocale = currentLocale,
-                            chineseTranslatedOnly = chineseTranslatedOnly
-                        )
+                            selectedLocale = currentLocale)
                     )
                     startMarkCollectionAvailability(
                         keyword = normalizedKeyword,
@@ -470,9 +495,9 @@ class SearchViewModel @Inject constructor(
                 val cancelled = e is CancellationException
                 if (!cancelled) Log.e("SearchViewModel", "Search paging failed", e)
                 val msg = if (cancelled) {
-                    "搜索已取消，请重试"
+                    appString(R.string.ui_search_canceled_please_try_again)
                 } else if (e is IllegalStateException) {
-                    AppErrorMessageFormatter.sanitize(e.message.orEmpty(), fallback = "搜索失败，请稍后重试")
+                    AppErrorMessageFormatter.sanitize(e.message.orEmpty(), fallback = appString(R.string.ui_search_failed_please_try_again_later))
                 } else {
                     toUserMessage(e)
                 }
@@ -609,7 +634,7 @@ class SearchViewModel @Inject constructor(
             page == 1 &&
             normalizedWorkNo.isNotBlank()
         ) {
-            val preferred = currentLocale
+            val preferred = resolveSearchDetailLocale(currentLocale)
             val info = when {
                 !preferred.isNullOrBlank() -> {
                     runCatching { dlsiteScraper.getWorkInfo(normalizedWorkNo, locale = preferred) }.getOrNull()
@@ -675,7 +700,7 @@ class SearchViewModel @Inject constructor(
                     current.keyword != keyword ||
                     current.page != page ||
                     current.resultRevision != resultRevision ||
-                    resolveSearchDetailLocale(current.locale, current.chineseTranslatedOnly) != detailLocale ||
+                    resolveSearchDetailLocale(current.locale) != detailLocale ||
                     current.purchasedOnly ||
                     current.collectedOnly
                 ) {
@@ -735,7 +760,7 @@ class SearchViewModel @Inject constructor(
                             cur.keyword != keyword ||
                             cur.page != page ||
                             cur.resultRevision != resultRevision ||
-                            resolveSearchDetailLocale(cur.locale, cur.chineseTranslatedOnly) != detailLocale ||
+                            resolveSearchDetailLocale(cur.locale) != detailLocale ||
                             cur.purchasedOnly ||
                             cur.collectedOnly
                         ) {
@@ -748,7 +773,7 @@ class SearchViewModel @Inject constructor(
                             if (detail != null && idx in list.indices) {
                                 val merged = mergeSearchAlbumDetail(
                                     base = list[idx],
-                                    detail = detail,
+                                    detail = detail.copy(metadataLocale = cur.locale?.takeIf(String::isNotBlank)),
                                     preferDetailTags = replaceTagsFromDetail,
                                     localizedTextOnly = localizedTextOnlyFromDetail
                                 )
@@ -777,7 +802,7 @@ class SearchViewModel @Inject constructor(
                     current.keyword != keyword ||
                     current.page != page ||
                     current.resultRevision != resultRevision ||
-                    resolveSearchDetailLocale(current.locale, current.chineseTranslatedOnly) != detailLocale ||
+                    resolveSearchDetailLocale(current.locale) != detailLocale ||
                     current.purchasedOnly ||
                     current.collectedOnly
                 ) {
@@ -909,29 +934,29 @@ class SearchViewModel @Inject constructor(
 
     private fun toUserMessage(e: Throwable): String {
         val raw = e.message.orEmpty()
-        if (raw.contains("请先登录")) return "请先登录后再使用\"已购\"搜索"
+        if (raw.contains("请先登录")) return appString(R.string.ui_purchased_login_required)
         return when (e) {
-            is SocketTimeoutException -> "连接超时，请稍后重试"
-            is IOException -> "网络连接失败，请检查网络后重试"
+            is SocketTimeoutException -> appString(R.string.ui_connection_timed_out_please_try_again_later)
+            is IOException -> appString(R.string.ui_network_connection_failed_please_check_the_network_and)
             is HttpException -> {
                 val code = e.code()
                 when {
-                    code == 401 -> "登录已过期，请重新登录"
-                    code == 403 -> "访问受限，请稍后再试"
-                    code in 500..599 -> "服务器开小差了，请稍后重试"
-                    else -> "请求失败，请稍后重试"
+                    code == 401 -> appString(R.string.ui_login_has_expired_please_log_in_again)
+                    code == 403 -> appString(R.string.ui_access_is_restricted_please_try_again_later)
+                    code in 500..599 -> appString(R.string.ui_the_server_is_out_of_service_please_try)
+                    else -> appString(R.string.ui_request_failed_please_try_again_later)
                 }
             }
 
             is HttpStatusException -> {
                 when (e.statusCode) {
-                    403, 429 -> "访问受限或触发风控，请稍后再试"
-                    in 500..599 -> "服务器开小差了，请稍后重试"
-                    else -> "请求失败，请稍后重试"
+                    403, 429 -> appString(R.string.ui_access_is_restricted_or_risk_control_is_triggered)
+                    in 500..599 -> appString(R.string.ui_the_server_is_out_of_service_please_try)
+                    else -> appString(R.string.ui_request_failed_please_try_again_later)
                 }
             }
 
-            else -> "搜索失败，请稍后重试"
+            else -> appString(R.string.ui_search_failed_please_try_again_later)
         }
     }
 
@@ -1248,7 +1273,7 @@ internal fun AsmrOneCollectedSearchItem.toCollectedAlbum(
 ): Album {
     val workNo = resolvedWorkNo(fallbackWorkNo, source)
     return Album(
-        title = title.trim().ifBlank { workNo.ifBlank { "已收录作品" } },
+        title = title.trim().ifBlank { workNo.ifBlank { appString(R.string.ui_collected_works) } },
         path = "",
         workId = workNo,
         rjCode = workNo,
@@ -1258,6 +1283,7 @@ internal fun AsmrOneCollectedSearchItem.toCollectedAlbum(
             .filter { it.isNotBlank() }
             .distinct()
             .joinToString(", "),
+        tagDetails = tagDetails,
         tags = tags.orEmpty()
             .map { it.trim() }
             .filter { it.isNotBlank() }
@@ -1366,6 +1392,8 @@ internal fun mergeSearchAlbumDetail(
     if (localizedTextOnly) {
         return base.copy(
             title = detail.title.ifBlank { base.title },
+            tagDetails = com.asmr.player.domain.model.mergeAlbumTags(base.tagDetails, detail.tagDetails),
+            metadataLocale = detail.metadataLocale ?: base.metadataLocale,
             tags = detail.tags.ifEmpty { base.tags }
         )
     }
@@ -1373,6 +1401,8 @@ internal fun mergeSearchAlbumDetail(
         title = base.title.ifBlank { detail.title },
         circle = base.circle.ifBlank { detail.circle },
         cv = detail.cv.ifBlank { base.cv },
+        tagDetails = com.asmr.player.domain.model.mergeAlbumTags(base.tagDetails, detail.tagDetails),
+        metadataLocale = detail.metadataLocale ?: base.metadataLocale,
         tags = when {
             preferDetailTags && detail.tags.isNotEmpty() -> detail.tags
             base.tags.isNotEmpty() -> base.tags
@@ -1388,14 +1418,13 @@ internal fun mergeSearchAlbumDetail(
 }
 
 internal fun resolveSearchDetailLocale(
-    selectedLocale: String?,
-    chineseTranslatedOnly: Boolean
+    selectedLocale: String?
 ): String {
-    if (chineseTranslatedOnly) return "zh_CN"
-    val normalized = selectedLocale?.trim().orEmpty()
+    val normalized = selectedLocale?.trim().orEmpty().ifBlank { com.asmr.player.i18n.AppLanguage.metadataLocale() }
     return when {
         normalized.startsWith("zh_CN", ignoreCase = true) -> "zh_CN"
         normalized.startsWith("zh_TW", ignoreCase = true) -> "zh_TW"
+        normalized.startsWith("en", ignoreCase = true) -> "en_US"
         else -> DLSITE_CANONICAL_SEARCH_LOCALE
     }
 }
@@ -1404,7 +1433,7 @@ internal fun resolveSearchRequestLocale(
     selectedLocale: String?,
     chineseTranslatedOnly: Boolean
 ): String {
-    return resolveSearchDetailLocale(selectedLocale, chineseTranslatedOnly)
+    return if (chineseTranslatedOnly) "zh_CN" else resolveSearchDetailLocale(selectedLocale)
 }
 
 private data class DlsiteDetailCacheKey(

@@ -1,5 +1,8 @@
 package com.asmr.player.translation
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.data.remote.NetworkHeaders
 import com.google.gson.JsonParser
 import java.io.IOException
@@ -63,13 +66,13 @@ internal class PageTranslationClient(
                                     ?.coerceIn(60, 86_400)?.times(1_000) ?: 60_000
                                 if (it.peekBody(8_192).string().contains("unusual traffic", ignoreCase = true)) {
                                     throw PageTranslationException(
-                                        "Google 检测到当前网络异常流量，请检查代理或稍后再试",
+                                        appString(R.string.ui_google_has_detected_abnormal_traffic_on_the_current),
                                         maxOf(cooldown, 300_000),
                                     )
                                 }
-                                throw PageTranslationException("翻译服务暂时限流，请稍后重试", cooldown)
+                                throw PageTranslationException(appString(R.string.ui_the_translation_service_is_temporarily_limited_please_try), cooldown)
                             }
-                            if (!it.isSuccessful) throw PageTranslationException("翻译服务暂不可用（${it.code}）")
+                            if (!it.isSuccessful) throw PageTranslationException(appString(R.string.ui_translation_service_is_temporarily_unavailable, it.code))
                             parsePageTranslationBatch(it.body?.string().orEmpty(), texts.size)
                         }
                     }
@@ -94,7 +97,7 @@ internal fun parsePageTranslationBatch(body: String, expectedCount: Int): List<S
         value.asString.also { require(it.isNotBlank()) }
     }
 } catch (error: Exception) {
-    throw PageTranslationException("翻译服务返回了无效内容，请稍后重试")
+    throw PageTranslationException(appString(R.string.ui_the_translation_service_returned_invalid_content_please_try))
 }
 
 internal data class PageTranslationText(val source: String, val suffix: String = "")

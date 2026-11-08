@@ -1,6 +1,5 @@
 package com.asmr.player.subtitle
 
-import android.app.Application
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import java.util.concurrent.TimeUnit
@@ -19,8 +18,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [34], manifest = Config.NONE)
-class SubtitleDisplayNameTranslationTest {
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [34], manifest = Config.NONE)
+class SubtitleDisplayNameTranslationTest : com.asmr.player.LocalizedRobolectricTest() {
     private val gson = Gson()
 
     @Test

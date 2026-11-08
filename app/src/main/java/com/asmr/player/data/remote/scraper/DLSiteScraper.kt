@@ -1,5 +1,8 @@
 package com.asmr.player.data.remote.scraper
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.content.Context
 import android.util.Log
 import com.asmr.player.data.remote.auth.DlsiteAuthStore
@@ -16,6 +19,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.jsoup.Jsoup
 import org.jsoup.Connection
 import org.jsoup.nodes.Document
@@ -31,6 +35,9 @@ import javax.inject.Singleton
 internal fun storeSegment(): String = String.format("%s%s", "ma", "niax")
 
 internal const val DLSITE_DOMAIN = "https://www.dlsite.com/"
+
+internal fun hasDlsiteWorkMetadata(doc: Document): Boolean =
+    doc.selectFirst("#work_name") != null && doc.selectFirst("#work_outline") != null
 
 private val DLSITE_WORK_URL_NUMBER_REGEX = Regex(
     """(?:^|/)product_id/((?:RJ|BJ|VJ)\d+)(?:\.html)?(?:/|$)""",
@@ -104,9 +111,27 @@ internal fun matchesDlsiteWorkDocument(
 }
 
 private fun appendLocaleQuery(url: String, locale: String?): String {
-    val normalizedLocale = locale?.trim().takeIf { !it.isNullOrBlank() } ?: "ja_JP"
-    val separator = if ('?' in url) '&' else '?'
-    return "$url$separator" + "locale=${URLEncoder.encode(normalizedLocale, "UTF-8")}"
+    val normalizedLocale = locale?.trim().takeIf { !it.isNullOrBlank() } ?: com.asmr.player.i18n.AppLanguage.metadataLocale()
+    return url.toHttpUrl().newBuilder().setQueryParameter("locale", normalizedLocale).build().toString()
+}
+
+private fun acceptLanguageForLocale(locale: String): String = when {
+    locale.startsWith("zh_CN", ignoreCase = true) -> "zh-CN,zh;q=0.9,en;q=0.8,ja;q=0.7"
+    locale.startsWith("zh_TW", ignoreCase = true) -> "zh-TW,zh;q=0.9,en;q=0.8,ja;q=0.7"
+    locale.startsWith("en", ignoreCase = true) -> "en-US,en;q=0.9,ja;q=0.7"
+    locale.startsWith("ja", ignoreCase = true) -> "ja-JP,ja;q=0.9,en;q=0.8"
+    else -> NetworkHeaders.ACCEPT_LANGUAGE
+}
+
+internal fun buildDlsitePageConnection(url: String, baseCookie: String, locale: String? = null): Connection {
+    val requestedLocale = locale?.trim().takeIf { !it.isNullOrBlank() }
+        ?: com.asmr.player.i18n.AppLanguage.metadataLocale()
+    return Jsoup.connect(appendLocaleQuery(url, requestedLocale))
+        .userAgent(NetworkHeaders.USER_AGENT)
+        .header("Accept-Language", acceptLanguageForLocale(requestedLocale))
+        .header("Cookie", buildDlsiteCookieHeader(baseCookie, requestedLocale))
+        .ignoreHttpErrors(true)
+        .timeout(10000)
 }
 
 internal fun buildDlsiteSearchUrls(
@@ -231,7 +256,8 @@ internal fun parseCvNames(doc: Document): List<String> {
             th.contains("声优") ||
                 th.contains("声優") ||
                 th.contains("聲優") ||
-                th.contains("CV", ignoreCase = true)
+                th.contains("CV", ignoreCase = true) ||
+                th.contains("Voice Actor", ignoreCase = true)
         }
         .flatMap { row ->
             val anchors = row.select("td a")
@@ -273,28 +299,8 @@ class DLSiteScraper @Inject constructor(
         return runCatching { URI(baseUrl).resolve(trimmed).toString() }.getOrDefault(trimmed)
     }
 
-    private fun cookieHeader(locale: String? = null): String {
-        return buildDlsiteCookieHeader(authStore.getDlsiteCookie(), locale)
-    }
-
-    private fun acceptLanguageForLocale(locale: String?): String {
-        val l = locale?.trim().orEmpty()
-        return when {
-            l.startsWith("zh_CN", ignoreCase = true) -> "zh-CN,zh;q=0.9,en;q=0.8,ja;q=0.7"
-            l.startsWith("zh_TW", ignoreCase = true) -> "zh-TW,zh;q=0.9,en;q=0.8,ja;q=0.7"
-            l.startsWith("ja", ignoreCase = true) -> "ja-JP,ja;q=0.9,en;q=0.8"
-            else -> NetworkHeaders.ACCEPT_LANGUAGE
-        }
-    }
-
-    private fun connect(url: String, locale: String? = null, acceptLanguage: String? = null): Connection {
-        return Jsoup.connect(url)
-            .userAgent(NetworkHeaders.USER_AGENT)
-            .header("Accept-Language", acceptLanguage ?: acceptLanguageForLocale(locale))
-            .header("Cookie", cookieHeader(locale))
-            .ignoreHttpErrors(true)
-            .timeout(10000)
-    }
+    private fun connect(url: String, locale: String? = null): Connection =
+        buildDlsitePageConnection(url, authStore.getDlsiteCookie(), locale)
 
     private fun parseRecommendHtml(doc: Document): List<DlsiteRecommendedWork> {
         return DlsiteRecommendHtmlParser.parse(doc)
@@ -309,7 +315,7 @@ class DLSiteScraper @Inject constructor(
         )
         for (url in candidates) {
             val doc = runCatching { runInterruptible { connect(url, locale = locale).get() } }.getOrNull() ?: continue
-            if (doc.selectFirst("#work_name") == null) continue
+            if (!hasDlsiteWorkMetadata(doc)) continue
             if (matchesDlsiteWorkDocument(clean, doc)) return doc
             val parentCandidate = dlsiteTranslationParentWorkNo(clean, doc) ?: continue
             val cachedParent = synchronized(verifiedTranslationParents) { verifiedTranslationParents[clean] }
@@ -509,6 +515,8 @@ class DLSiteScraper @Inject constructor(
                         circle = circle,
                         cv = cv,
                         tags = tags,
+                        metadataLocale = locale?.takeIf(String::isNotBlank),
+                        tagDetails = parseDlsiteTags(item.select(".search_tag a")),
                         coverUrl = coverUrl
                     )
                 )
@@ -594,7 +602,7 @@ class DLSiteScraper @Inject constructor(
     ): DlsiteWorkInfo? = withContext(Dispatchers.IO) {
         val clean = workId.trim().uppercase()
         val doc = fetchWorkDocument(clean, locale = locale) ?: return@withContext null
-        val parsed = parseWorkInfo(clean, doc) ?: return@withContext null
+        val parsed = parseWorkInfo(clean, doc, locale) ?: return@withContext null
         if (allowJapaneseCvFallback) {
             withJapaneseCvFallback(clean, locale, parsed)
         } else {
@@ -625,7 +633,7 @@ class DLSiteScraper @Inject constructor(
         val clean = workId.trim().uppercase()
         if (clean.isBlank()) return@withContext DlsiteWorkInitialDetail(workInfo = null)
         val doc = fetchWorkDocument(clean, locale = locale) ?: return@withContext DlsiteWorkInitialDetail(workInfo = null)
-        val workInfo = parseWorkInfo(clean, doc)
+        val workInfo = parseWorkInfo(clean, doc, locale)
             ?.let { withJapaneseCvFallback(clean, locale, it) }
         DlsiteWorkInitialDetail(
             workInfo = workInfo,
@@ -633,7 +641,7 @@ class DLSiteScraper @Inject constructor(
         )
     }
 
-    private fun parseWorkInfo(workId: String, doc: Document): DlsiteWorkInfo? {
+    private fun parseWorkInfo(workId: String, doc: Document, locale: String? = null): DlsiteWorkInfo? {
         val title = doc.selectFirst("#work_name")?.text()?.trim() ?: return null
         val circle = doc.selectFirst(".maker_name a")?.text()?.trim() ?: ""
         
@@ -642,7 +650,7 @@ class DLSiteScraper @Inject constructor(
         var releaseDate = ""
         outline?.select("tr")?.forEach { row ->
             val th = row.selectFirst("th")?.text() ?: ""
-            if (releaseDate.isBlank() && (th.contains("販売日") || th.contains("発売日") || th.contains("发售日") || th.contains("發售日"))) {
+            if (releaseDate.isBlank() && (th.contains("販売日") || th.contains("発売日") || th.contains("发售日") || th.contains("發售日") || th.contains("Release", ignoreCase = true))) {
                 val txt = row.selectFirst("td")?.text()?.trim().orEmpty()
                 val m = Regex("""(\d{4})\D+(\d{1,2})\D+(\d{1,2})""").find(txt)
                 if (m != null) {
@@ -650,6 +658,8 @@ class DLSiteScraper @Inject constructor(
                     val mo = m.groupValues.getOrNull(2).orEmpty().padStart(2, '0')
                     val d = m.groupValues.getOrNull(3).orEmpty().padStart(2, '0')
                     if (y.isNotBlank()) releaseDate = "$y-$mo-$d"
+                } else {
+                    releaseDate = parseEnglishReleaseDate(txt).orEmpty()
                 }
             }
         }
@@ -668,7 +678,7 @@ class DLSiteScraper @Inject constructor(
             val label = dt.text().trim().replace("：", "")
             val dd = dt.nextElementSibling() ?: return@forEach
             val v = dd.text().trim()
-            if (label in listOf("售出数", "販売数", "DL数", "売上数")) {
+            if (label in listOf("售出数", "販売数", "DL数", "売上数", "Sales", "Downloads")) {
                 dlCount = pickInt(v)
             }
         }
@@ -691,6 +701,8 @@ class DLSiteScraper @Inject constructor(
                 circle = circle,
                 cv = cvNames.joinToString(", "),
                 tags = tags,
+                        metadataLocale = locale?.takeIf(String::isNotBlank),
+                        tagDetails = parseDlsiteTags(doc.select(".main_genre a")),
                 coverUrl = if (coverUrl.startsWith("http")) coverUrl else "https:$coverUrl",
                 ratingValue = ratingValue,
                 ratingCount = ratingCount,
@@ -774,7 +786,7 @@ class DLSiteScraper @Inject constructor(
                 else -> downloadUrl
             }.trim()
             if (fullUrl.isBlank()) return emptyList()
-            return listOf(Track(albumId = 0, title = "试听下载 (ZIP)", path = fullUrl, duration = 0.0))
+            return listOf(Track(albumId = 0, title = appString(R.string.ui_trial_zip), path = fullUrl, duration = 0.0))
         }
 
         fun parseChobitFromHtml(html: String): String {
@@ -807,7 +819,7 @@ class DLSiteScraper @Inject constructor(
                 embedUrl = parseChobitFromHtml(doc0.html())
             }
             if (embedUrl.isNotBlank()) {
-                val acceptLanguage = acceptLanguageForLocale(locale)
+                val acceptLanguage = acceptLanguageForLocale(locale ?: com.asmr.player.i18n.AppLanguage.metadataLocale())
                 val embedDoc = runInterruptible {
                     Jsoup.connect(embedUrl)
                         .userAgent(NetworkHeaders.USER_AGENT)

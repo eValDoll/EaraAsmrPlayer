@@ -40,7 +40,7 @@ import org.robolectric.annotation.GraphicsMode
 import androidx.test.core.app.ApplicationProvider
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [28])
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [28])
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class SwipeRevealActionsBoxTest {
     val composeRule = createEaraComposeRule()

@@ -1,5 +1,10 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
+import com.asmr.player.domain.model.localizedTags
+import com.asmr.player.domain.model.originalTagForDisplay
 import com.asmr.player.util.AlbumWorkNo
 import com.asmr.player.data.remote.crawler.AlbumResourceSource
 
@@ -579,11 +584,12 @@ fun AlbumDetailScreen(
     LaunchedEffect(viewModel) {
         viewModel.setListenTogetherRjSummaryPollingEnabled(true)
     }
-    LaunchedEffect(albumId, rjCode, initialResourceSource) {
+    LaunchedEffect(albumId, rjCode, initialResourceSource, androidx.compose.ui.platform.LocalConfiguration.current) {
         val hasCachedAlbum = viewModel.hasCachedAlbum(albumId, rjCode)
         isInitialRouteReady = hasCachedAlbum
         if (!hasCachedAlbum) withFrameNanos { }
         viewModel.loadAlbumAndAwait(albumId, rjCode, force = false, initialResourceSource = initialResourceSource)
+        viewModel.refreshApplicationLocale()
         isInitialRouteReady = true
     }
     DisposableEffect(screenKey, viewModel) {
@@ -671,7 +677,7 @@ fun AlbumDetailScreen(
                             } catch (error: CancellationException) {
                                 throw error
                             } catch (_: Exception) {
-                                viewModel.messageManager.showError("读取本地文件状态失败，请稍后重试")
+                                viewModel.messageManager.showError(appString(R.string.ui_failed_to_read_local_file_status_please_try))
                                 return@launch
                             }
                             when (action) {
@@ -1298,7 +1304,7 @@ fun AlbumDetailScreen(
                                                 onTogglePreferredCurrentPath = { path, enabled ->
                                                     if (enabled) {
                                                         viewModel.persistPreferredTreeCurrentPath(localTreeStateKey, path)
-                                                        viewModel.messageManager.showSuccess("已设为默认打开目录")
+                                                        viewModel.messageManager.showSuccess(appString(R.string.ui_set_as_default_directory_to_open))
                                                     } else {
                                                         viewModel.clearPreferredTreeCurrentPath(localTreeStateKey)
                                                     }
@@ -1343,7 +1349,7 @@ fun AlbumDetailScreen(
                                                 if (albumId != null && albumId > 0) {
                                                     EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
                                                 } else {
-                                                    Text("未下载到本地")
+                                                    Text(androidx.compose.ui.res.stringResource(R.string.ui_not_downloaded_to_local))
                                                 }
                                             }
                                         }
@@ -1695,9 +1701,9 @@ fun AlbumDetailScreen(
                                 }
                                 settingsViewModel.addSearchBlockedKeyword(normalized)
                                 if (exists) {
-                                    viewModel.messageManager.showInfo("屏蔽词已存在：$normalized")
+                                    viewModel.messageManager.showInfo(appString(R.string.ui_blocked_word_already_exists, normalized))
                                 } else {
-                                    viewModel.messageManager.showSuccess("已添加屏蔽词：$normalized")
+                                    viewModel.messageManager.showSuccess(appString(R.string.ui_blocked_word_added, normalized))
                                 }
                             }
                         },
@@ -2320,7 +2326,7 @@ private fun AlbumDetailLandscapeIdentity(
     ) {
         Text(
             text = translatedPageText(identity.title),
-            modifier = Modifier.clickable { copyMeta("标题", identity.title) },
+            modifier = Modifier.clickable { copyMeta(appString(R.string.ui_title), identity.title) },
             style = MaterialTheme.typography.headlineMedium.copy(
                 fontWeight = FontWeight.Bold,
                 fontSize = 24.sp,
@@ -2341,8 +2347,8 @@ private fun AlbumDetailLandscapeIdentity(
                 circle = identity.circle,
                 emphasized = true,
                 modifier = Modifier.weight(1f),
-                rjOnClick = { copyMeta("作品编号", identity.rj) },
-                circleOnClick = { copyMeta("社团", identity.circle) },
+                rjOnClick = { copyMeta(appString(R.string.ui_work_id), identity.rj) },
+                circleOnClick = { copyMeta(appString(R.string.ui_circle), identity.circle) },
                 circleOnLongClick = { onMetaLongClick(identity.circle) }
             )
             AlbumOnlineListenerInfo(
@@ -2393,7 +2399,7 @@ private fun AlbumDetailLandscapeSimilarWorksPane(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
-            text = "相似作品",
+            text = appString(R.string.ui_similar_works),
             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
             color = colorScheme.textPrimary
         )
@@ -2423,7 +2429,7 @@ private fun AlbumDetailLandscapeSimilarWorksPane(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
-                            text = if (state.failed) "相似作品加载失败" else "暂时没有相似作品推荐",
+                            text = if (state.failed) appString(R.string.ui_similar_works_failed_to_load) else appString(R.string.ui_there_are_currently_no_similar_works_recommended),
                             style = MaterialTheme.typography.bodyMedium,
                             color = colorScheme.textSecondary,
                             textAlign = TextAlign.Center
@@ -2436,7 +2442,7 @@ private fun AlbumDetailLandscapeSimilarWorksPane(
                                     force = true
                                 )
                             }) {
-                                Text("重试")
+                                Text(androidx.compose.ui.res.stringResource(R.string.ui_retry))
                             }
                         }
                     }
@@ -2515,7 +2521,7 @@ private fun AlbumDetailPortraitSimilarWorksRow(
             .padding(horizontal = AlbumDetailHorizontalPadding, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        AlbumDetailSectionHeading(title = "相似作品推荐")
+        AlbumDetailSectionHeading(title = appString(R.string.ui_recommended_similar_works))
         when {
             (!isRouteReady && state.works.isEmpty()) ||
                 (state.isLoading && state.works.isEmpty()) -> {
@@ -2531,7 +2537,7 @@ private fun AlbumDetailPortraitSimilarWorksRow(
                     verticalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        text = if (state.failed) "相似作品加载失败" else "暂时没有相似作品推荐",
+                        text = if (state.failed) appString(R.string.ui_similar_works_failed_to_load) else appString(R.string.ui_there_are_currently_no_similar_works_recommended),
                         style = MaterialTheme.typography.bodyMedium,
                         color = colorScheme.textSecondary,
                         textAlign = TextAlign.Center
@@ -2546,7 +2552,7 @@ private fun AlbumDetailPortraitSimilarWorksRow(
                                 )
                             }
                         ) {
-                            Text("重试")
+                            Text(androidx.compose.ui.res.stringResource(R.string.ui_retry))
                         }
                     }
                 }
@@ -2992,7 +2998,7 @@ private fun AlbumHeroIdentityOverlay(
     ) {
         Text(
             text = translatedPageText(identity.title),
-            modifier = Modifier.clickable { copyMeta("标题", identity.title) },
+            modifier = Modifier.clickable { copyMeta(appString(R.string.ui_title), identity.title) },
             style = MaterialTheme.typography.titleMedium.copy(
                 fontWeight = FontWeight.Bold,
                 fontSize = 20.sp,
@@ -3016,8 +3022,8 @@ private fun AlbumHeroIdentityOverlay(
                     rjCode = rj,
                     circle = circle,
                     modifier = Modifier.weight(1f),
-                    rjOnClick = { copyMeta("作品编号", rj) },
-                    circleOnClick = { copyMeta("社团", circle) },
+                    rjOnClick = { copyMeta(appString(R.string.ui_work_id), rj) },
+                    circleOnClick = { copyMeta(appString(R.string.ui_circle), circle) },
                     circleOnLongClick = { onMetaLongClick(circle) },
                 )
                 AlbumOnlineListenerInfo(
@@ -3074,7 +3080,7 @@ private fun AlbumOnlineListenerInfo(
                     modifier = Modifier.size(if (emphasized) 14.dp else 12.dp)
                 )
                 Text(
-                    text = "$count 人正在听",
+                    text = appString(R.string.ui_people_are_listening, count),
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontSize = if (emphasized) 12.sp else MaterialTheme.typography.labelSmall.fontSize,
                         shadow = textShadow
@@ -3099,10 +3105,10 @@ internal fun resolveStableAlbumHeroIdentity(
     current: StableAlbumHeroIdentity
 ): StableAlbumHeroIdentity {
     val stableTitleIsPlaceholder = stable.title.isBlank() ||
-        stable.title == "专辑" ||
+        stable.title in setOf("专辑", "Album") ||
         stable.title.equals(stable.rj, ignoreCase = true)
     val currentTitleIsResolved = current.title.isNotBlank() &&
-        current.title != "专辑" &&
+        current.title !in setOf("专辑", "Album") &&
         !current.title.equals(current.rj, ignoreCase = true)
     return StableAlbumHeroIdentity(
         title = if (stableTitleIsPlaceholder && currentTitleIsResolved) current.title else stable.title,
@@ -3114,7 +3120,7 @@ internal fun resolveStableAlbumHeroIdentity(
 @Composable
 private fun rememberStableAlbumHeroIdentity(album: Album, identitySessionKey: String): StableAlbumHeroIdentity {
     val current = StableAlbumHeroIdentity(
-        title = album.title.trim().ifBlank { "专辑" },
+        title = album.title.trim().ifBlank { appString(R.string.ui_album) },
         rj = album.rjCode.ifBlank { album.workId }.trim(),
         circle = album.circle.trim()
     )
@@ -3256,7 +3262,7 @@ private fun AlbumHeader(
                 AlbumHeaderCvLightweight(
                     cvText = album.cv,
                     emphasized = landscapeFloatingActions,
-                    onCvClick = { cv -> copyMeta("声优", cv) },
+                    onCvClick = { cv -> copyMeta(appString(R.string.ui_voice_actor), cv) },
                     onCvLongClick = onMetaLongClick
                 )
             }
@@ -3270,10 +3276,10 @@ private fun AlbumHeader(
         ) {
             Box(modifier = Modifier.padding(bottom = 8.dp)) {
                 AlbumHeaderTagsLightweight(
-                    tags = album.tags,
+                    tags = album.localizedTags(),
                     emphasized = landscapeFloatingActions,
-                    onTagClick = { tag -> copyMeta("标签", tag) },
-                    onTagLongClick = onMetaLongClick
+                    onTagClick = { tag -> copyMeta(appString(R.string.ui_label), tag) },
+                    onTagLongClick = { label -> onMetaLongClick(album.originalTagForDisplay(label)) }
                 )
             }
         }
@@ -3353,8 +3359,8 @@ internal fun AlbumHeaderActionBar(
     }
     var languageMenuExpanded by rememberSaveable { mutableStateOf(false) }
     val secondaryAction = when (groupState) {
-        AlbumHeaderButtonGroupState.Save -> Triple("保存", Icons.Rounded.Bookmark, saveEnabled)
-        AlbumHeaderButtonGroupState.Lossless -> Triple("无损下载", Icons.Rounded.LibraryMusic, losslessDownloadEnabled)
+        AlbumHeaderButtonGroupState.Save -> Triple(appString(R.string.ui_save), Icons.Rounded.Bookmark, saveEnabled)
+        AlbumHeaderButtonGroupState.Lossless -> Triple(appString(R.string.ui_lossless_download), Icons.Rounded.LibraryMusic, losslessDownloadEnabled)
         AlbumHeaderButtonGroupState.DownloadOnly -> null
     }
     val hasSecondaryAction = secondaryAction != null
@@ -3404,9 +3410,8 @@ internal fun AlbumHeaderActionBar(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     AlbumHeaderBarAction(
-                        label = "下载",
+                        label = appString(R.string.ui_download),
                         icon = Icons.Rounded.Download,
-                        showLabel = true,
                         enabled = downloadEnabled,
                         style = AlbumHeaderActionStyle.Primary,
                         shape = floatingInnerStartShape,
@@ -3419,7 +3424,6 @@ internal fun AlbumHeaderActionBar(
                         AlbumHeaderBarAction(
                             label = label,
                             icon = icon,
-                            showLabel = true,
                             enabled = enabled,
                             style = AlbumHeaderActionStyle.Secondary,
                             shape = floatingInnerEndShape,
@@ -3455,9 +3459,8 @@ internal fun AlbumHeaderActionBar(
                 ) {
                     if (showGroupAction) {
                         AlbumHeaderBarAction(
-                            label = "分组",
+                            label = appString(R.string.ui_group),
                             icon = Icons.Rounded.CreateNewFolder,
-                            showLabel = true,
                             enabled = groupEnabled,
                             onClick = onGroupClick,
                             shape = floatingSegmentShape,
@@ -3483,7 +3486,6 @@ internal fun AlbumHeaderActionBar(
                             AlbumHeaderBarAction(
                                 label = selectedLangLabel,
                                 icon = Icons.Rounded.Translate,
-                                showLabel = true,
                                 enabled = languageSelectable,
                                 onClick = { languageMenuExpanded = true },
                                 shape = floatingSegmentShape,
@@ -3552,9 +3554,8 @@ internal fun AlbumHeaderActionBar(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 AlbumHeaderBarAction(
-                    label = "下载",
+                    label = appString(R.string.ui_download),
                     icon = Icons.Rounded.Download,
-                    showLabel = true,
                     enabled = downloadEnabled,
                     style = AlbumHeaderActionStyle.Primary,
                     shape = downloadShape,
@@ -3568,7 +3569,6 @@ internal fun AlbumHeaderActionBar(
                     AlbumHeaderBarAction(
                         label = label,
                         icon = icon,
-                        showLabel = true,
                         enabled = enabled,
                         style = AlbumHeaderActionStyle.Secondary,
                         shape = secondaryShape,
@@ -3594,9 +3594,8 @@ internal fun AlbumHeaderActionBar(
 
             if (showGroupAction) {
                 AlbumHeaderBarAction(
-                    label = "分组",
+                    label = appString(R.string.ui_group),
                     icon = Icons.Rounded.CreateNewFolder,
-                    showLabel = true,
                     enabled = groupEnabled,
                     onClick = onGroupClick,
                     modifier = Modifier
@@ -3615,7 +3614,6 @@ internal fun AlbumHeaderActionBar(
                     AlbumHeaderBarAction(
                         label = selectedLangLabel,
                         icon = Icons.Rounded.Translate,
-                        showLabel = true,
                         enabled = languageSelectable,
                         onClick = { languageMenuExpanded = true },
                         modifier = Modifier.fillMaxSize(),
@@ -3654,7 +3652,6 @@ private enum class AlbumHeaderActionStyle {
 @Composable
 private fun AlbumHeaderBarAction(
     label: String,
-    showLabel: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -3690,53 +3687,19 @@ private fun AlbumHeaderBarAction(
     )
 
     CompositionLocalProvider(LocalContentColor provides contentColor) {
-        Row(
+        AlbumHeaderActionContent(
+            label = label,
+            icon = icon,
+            trailingIcon = trailingIcon,
+            color = contentColor,
+            textStyle = MaterialTheme.typography.labelMedium.copy(
+                fontWeight = if (style == AlbumHeaderActionStyle.Standard) FontWeight.Medium else FontWeight.SemiBold,
+            ),
             modifier = modifier
                 .clip(shape)
                 .background(containerColor, shape)
-                .clickable(
-                    enabled = enabled,
-                    role = Role.Button,
-                    onClick = onClick,
-                )
-                .padding(horizontal = if (showLabel && icon != null) 7.dp else 5.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (icon != null) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = if (showLabel) null else label,
-                    tint = contentColor,
-                    modifier = Modifier.size(17.dp),
-                )
-            }
-            if (showLabel) {
-                if (icon != null) Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontWeight = if (style == AlbumHeaderActionStyle.Standard) {
-                            FontWeight.Medium
-                        } else {
-                            FontWeight.SemiBold
-                        },
-                    ),
-                    color = contentColor,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            if (trailingIcon != null) {
-                Spacer(modifier = Modifier.width(4.dp))
-                Icon(
-                    imageVector = trailingIcon,
-                    contentDescription = null,
-                    tint = contentColor,
-                    modifier = Modifier.size(17.dp),
-                )
-            }
-        }
+                .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
+        )
     }
 }
 
@@ -3762,8 +3725,7 @@ private fun AlbumHeaderSiteDropdown(
     val menuContainer = lerp(colorScheme.surface, colorScheme.primarySoft, if (colorScheme.isDark) 0.24f else 0.46f)
     Box(modifier = modifier) {
         AlbumHeaderBarAction(
-            label = "打开网页",
-            showLabel = true,
+            label = appString(R.string.ui_open_webpage),
             trailingIcon = if (expanded) Icons.Rounded.ArrowDropUp else Icons.Rounded.ArrowDropDown,
             enabled = links.any { it.second.isNotBlank() },
             onClick = { expanded = !expanded },
@@ -3826,10 +3788,10 @@ private fun AlbumHeaderSiteDropdown(
 
 private fun dlsiteLanguageButtonLabel(lang: String): String {
     return when (lang.trim().uppercase()) {
-        "CHI_HANS" -> "简中"
-        "CHI_HANT" -> "繁中"
-        "JPN" -> "日语"
-        else -> lang.trim().ifBlank { "日语" }
+        "CHI_HANS" -> appString(R.string.ui_simplified_chinese)
+        "CHI_HANT" -> appString(R.string.ui_traditional_chinese)
+        "JPN" -> appString(R.string.ui_japanese)
+        else -> lang.trim().ifBlank { appString(R.string.ui_japanese) }
     }
 }
 

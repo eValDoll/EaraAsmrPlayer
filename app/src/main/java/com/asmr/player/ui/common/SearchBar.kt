@@ -1,5 +1,8 @@
 package com.asmr.player.ui.common
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.tween
@@ -187,10 +190,10 @@ private fun SearchBarSelectionToolbarPopup(
     }
 
     val actions = buildList {
-        menuState.onCopyRequested?.let { add("复制" to it) }
-        menuState.onPasteRequested?.let { add("粘贴" to it) }
-        menuState.onCutRequested?.let { add("剪切" to it) }
-        menuState.onSelectAllRequested?.let { add("全选" to it) }
+        menuState.onCopyRequested?.let { add(appString(R.string.ui_copy) to it) }
+        menuState.onPasteRequested?.let { add(appString(R.string.ui_paste) to it) }
+        menuState.onCutRequested?.let { add(appString(R.string.ui_cut) to it) }
+        menuState.onSelectAllRequested?.let { add(appString(R.string.ui_select_all) to it) }
     }
 
     Popup(

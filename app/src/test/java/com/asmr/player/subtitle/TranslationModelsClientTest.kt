@@ -16,7 +16,7 @@ import okhttp3.mockwebserver.SocketPolicy
 import org.junit.Assert.*
 import org.junit.Test
 
-class TranslationModelsClientTest {
+class TranslationModelsClientTest : com.asmr.player.LocalizedRobolectricTest() {
     @Test
     fun endpoint_preservesGatewayPathAndAcceptsCompleteChatUrl() {
         mapOf(

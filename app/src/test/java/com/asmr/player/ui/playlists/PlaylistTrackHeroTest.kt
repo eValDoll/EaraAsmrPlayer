@@ -1,6 +1,5 @@
 package com.asmr.player.ui.playlists
 
-import android.app.Application
 import android.content.res.Configuration
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
@@ -39,7 +38,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [28], qualifiers = "w500dp-h900dp-mdpi")
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [28], qualifiers = "w500dp-h900dp-mdpi")
 class PlaylistTrackHeroTest {
     @get:Rule
     val compose = createEaraComposeRule()

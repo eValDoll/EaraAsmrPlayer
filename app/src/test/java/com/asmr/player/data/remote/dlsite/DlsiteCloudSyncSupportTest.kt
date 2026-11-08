@@ -8,7 +8,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class DlsiteCloudSyncSupportTest {
+class DlsiteCloudSyncSupportTest : com.asmr.player.LocalizedRobolectricTest() {
     @Test
     fun sanitizeDlsiteCloudSyncKeyword_removesSingleBracketBlock() {
         assertEquals(

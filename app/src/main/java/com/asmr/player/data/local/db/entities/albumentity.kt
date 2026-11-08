@@ -15,6 +15,7 @@ data class AlbumEntity(
     val circle: String = "",
     val cv: String = "",
     val tags: String = "",
+    @ColumnInfo(defaultValue = "'[]'") val tagDetailsJson: String = "[]",
     val coverUrl: String = "",
     val coverPath: String = "",
     @ColumnInfo(defaultValue = "''") val manualCoverPath: String = "",

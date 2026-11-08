@@ -15,7 +15,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
-class MainNavigationSupportTest {
+class MainNavigationSupportTest : com.asmr.player.LocalizedRobolectricTest() {
 
     @Test
     fun resolveMainRequestedOrientation_fullscreenPlayerUsesLandscape() {

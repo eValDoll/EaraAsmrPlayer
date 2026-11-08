@@ -1,5 +1,8 @@
 package com.asmr.player.ui.player
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -98,14 +101,14 @@ internal fun TabletLandscapeQueuePanel(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "播放队列",
+                text = appString(R.string.ui_play_queue),
                 style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
                 color = colorScheme.textPrimary
             )
             if (queue.isNotEmpty()) {
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "${queue.size} 首",
+                    text = appString(R.string.ui_first, queue.size),
                     style = MaterialTheme.typography.labelSmall,
                     color = supportingTextColor
                 )
@@ -113,7 +116,7 @@ internal fun TabletLandscapeQueuePanel(
             Spacer(modifier = Modifier.weight(1f))
             Icon(
                 imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                contentDescription = if (expanded) "收起播放列表" else "展开播放列表",
+                contentDescription = if (expanded) appString(R.string.ui_collapse_playlist) else appString(R.string.ui_expand_playlist),
                 tint = colorScheme.textSecondary,
                 modifier = Modifier.size(20.dp)
             )
@@ -138,7 +141,7 @@ internal fun TabletLandscapeQueuePanel(
                     contentAlignment = Alignment.CenterStart
                 ) {
                     Text(
-                        text = "播放队列为空",
+                        text = appString(R.string.ui_play_queue_is_empty),
                         modifier = Modifier.padding(horizontal = 32.dp),
                         style = MaterialTheme.typography.bodySmall,
                         color = supportingTextColor
@@ -200,7 +203,7 @@ internal fun TabletLandscapeQueuePanel(
                             )
                             if (selected && isPlaying) {
                                 Text(
-                                    text = "播放中",
+                                    text = appString(R.string.ui_playing),
                                     modifier = Modifier.padding(start = 8.dp),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = activeColor

@@ -1,5 +1,8 @@
 package com.asmr.player.ui.common
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.ClipData
@@ -210,13 +213,13 @@ internal fun ImagePreviewDialog(
                 )
                 savingImageKey = null
                 savedImageKey = request.key
-                messageManager.showSuccess("已保存到相册")
+                messageManager.showSuccess(appString(R.string.ui_saved_to_album))
                 delay(1_500)
                 if (savedImageKey == request.key) savedImageKey = null
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (_: Exception) {
-                messageManager.showError("保存到相册失败")
+                messageManager.showError(appString(R.string.ui_failed_to_save_to_album))
             } finally {
                 savingImageKey = null
             }
@@ -231,7 +234,7 @@ internal fun ImagePreviewDialog(
         if (granted && pendingRequest != null) {
             saveImage(pendingRequest)
         } else if (!granted) {
-            messageManager.showWarning("需要存储权限才能保存到相册")
+            messageManager.showWarning(appString(R.string.ui_storage_permission_is_required_to_save_to_album))
         }
     }
 
@@ -254,7 +257,7 @@ internal fun ImagePreviewDialog(
         if (openingExternalImageKey != null) return
         val openRequest = currentImageRequest()
         if (resolvePreviewImageSaveSource(openRequest).location.isBlank()) {
-            messageManager.showError("无法打开：路径为空")
+            messageManager.showError(appString(R.string.ui_unable_to_open_path_is_empty))
             return
         }
 
@@ -273,18 +276,18 @@ internal fun ImagePreviewDialog(
                     clipData = ClipData.newRawUri("image", prepared.uri)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                val chooser = Intent.createChooser(viewIntent, "打开图片").apply {
+                val chooser = Intent.createChooser(viewIntent, appString(R.string.ui_open_picture)).apply {
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
                 context.startActivity(chooser)
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (_: ActivityNotFoundException) {
-                messageManager.showInfo("未找到可打开的应用")
+                messageManager.showInfo(appString(R.string.ui_no_app_found_to_open))
             } catch (_: java.io.FileNotFoundException) {
-                messageManager.showError("文件不存在")
+                messageManager.showError(appString(R.string.ui_file_does_not_exist))
             } catch (_: Exception) {
-                messageManager.showError("无法打开该图片")
+                messageManager.showError(appString(R.string.ui_the_image_cannot_be_opened))
             } finally {
                 openingExternalImageKey = null
             }
@@ -353,7 +356,7 @@ internal fun ImagePreviewDialog(
                                 strokeWidth = 2.dp
                             )
                         } else {
-                            Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = "使用其他应用打开")
+                            Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = appString(R.string.ui_open_with_another_app))
                         }
                     }
                     IconButton(
@@ -372,9 +375,9 @@ internal fun ImagePreviewDialog(
                                 strokeWidth = 2.dp
                             )
                         } else if (savedImageKey == currentItem.key) {
-                            Icon(Icons.Rounded.Check, contentDescription = "已保存到相册")
+                            Icon(Icons.Rounded.Check, contentDescription = appString(R.string.ui_saved_to_album))
                         } else {
-                            Icon(Icons.Rounded.SaveAlt, contentDescription = "保存到相册")
+                            Icon(Icons.Rounded.SaveAlt, contentDescription = appString(R.string.ui_save_to_album))
                         }
                     }
                     IconButton(
@@ -382,7 +385,7 @@ internal fun ImagePreviewDialog(
                         colors = actionColors,
                         modifier = Modifier.testTag(IMAGE_PREVIEW_CLOSE_TAG)
                     ) {
-                        Icon(Icons.Rounded.Close, contentDescription = "关闭")
+                        Icon(Icons.Rounded.Close, contentDescription = appString(R.string.ui_close))
                     }
                 }
 
@@ -638,7 +641,7 @@ private fun PreviewImageFallback(
                 modifier = Modifier.size(40.dp)
             )
             Text(
-                text = if (failed) "图片加载失败" else title,
+                text = if (failed) appString(R.string.ui_image_loading_failed) else title,
                 color = colorScheme.textSecondary,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(top = 10.dp)

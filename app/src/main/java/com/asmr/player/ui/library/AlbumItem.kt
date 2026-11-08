@@ -1,5 +1,10 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
+import com.asmr.player.domain.model.localizedTags
+import com.asmr.player.domain.model.originalTagForDisplay
 import com.asmr.player.ui.common.LocalPageAnimationsActive
 import com.asmr.player.ui.common.LocalAlbumRowRasterCacheAllowed
 import com.asmr.player.ui.common.LocalAlbumCoverShadowCache
@@ -373,9 +378,10 @@ fun AlbumItem(
                         usePlaceholders = showStatsPlaceholders,
                     )
                 }
-                val tagsStateContent = remember(album.tags) {
-                    album.tags.joinToString(separator = "\n")
+                val displayTags = remember(album.tags, album.tagDetails, album.metadataLocale, androidx.compose.ui.platform.LocalConfiguration.current) {
+                    album.localizedTags()
                 }
+                val tagsStateContent = remember(displayTags) { displayTags.joinToString(separator = "\n") }
 
                 BalancedColumn(
                     modifier = Modifier
@@ -431,13 +437,13 @@ fun AlbumItem(
                         }
                     ) {
                         AlbumItemTagsLightweight(
-                            tags = album.tags,
+                            tags = displayTags,
                             preparedItemKey = preparedItemKey,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag(ALBUM_ITEM_TAGS_TAG),
                             onClick = onClick,
-                            onTagLongClick = onTagLongClick,
+                            onTagLongClick = onTagLongClick?.let { callback -> { label -> callback(album.originalTagForDisplay(label)) } },
                         )
                     }
 
@@ -714,9 +720,10 @@ fun AlbumGridItem(
                     usePlaceholders = showStatsPlaceholders,
                 )
             }
-            val tagsStateContent = remember(album.tags) {
-                album.tags.joinToString(separator = "\n")
+            val displayTags = remember(album.tags, album.tagDetails, album.metadataLocale, androidx.compose.ui.platform.LocalConfiguration.current) {
+                album.localizedTags()
             }
+            val tagsStateContent = remember(displayTags) { displayTags.joinToString(separator = "\n") }
 
             AlbumOnlineDetailAnimatedLine(
                 content = if (onlineTagsLoading) "" else tagsStateContent,
@@ -727,11 +734,11 @@ fun AlbumGridItem(
                 }
             ) {
                 AlbumItemTagsLightweight(
-                    tags = album.tags,
+                    tags = displayTags,
                     modifier = Modifier.fillMaxWidth(),
                     layout = AlbumInlineValuesLayout.Flow,
                     onClick = onClick,
-                    onTagLongClick = onTagLongClick,
+                    onTagLongClick = onTagLongClick?.let { callback -> { label -> callback(album.originalTagForDisplay(label)) } },
                 )
             }
 
@@ -1076,7 +1083,7 @@ internal fun CollectedCoverRibbon(label: String, modifier: Modifier = Modifier) 
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = if (label == "收录") 11.sp else 9.sp,
+                fontSize = if (label == appString(R.string.ui_included)) 11.sp else 9.sp,
                 fontWeight = FontWeight.Bold,
             ),
             color = colorScheme.onPrimary,
@@ -1110,4 +1117,4 @@ private fun BoxScope.AnimatedCollectedCoverRibbon(visible: Boolean, label: Strin
 }
 
 internal val Album.collectedRibbonLabel: String?
-    get() = if (collectionAvailability != null) collectionAvailability.label else "收录".takeIf { hasAsmrOne }
+    get() = if (collectionAvailability != null) collectionAvailability.label else appString(R.string.ui_included).takeIf { hasAsmrOne }

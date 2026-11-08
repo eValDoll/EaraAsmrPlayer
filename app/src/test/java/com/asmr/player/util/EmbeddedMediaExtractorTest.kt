@@ -16,7 +16,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowContentResolver
 
 @RunWith(RobolectricTestRunner::class)
-@Config(manifest = Config.NONE, application = Application::class)
+@Config(manifest = Config.NONE, application = com.asmr.player.LocalizedTestApplication::class)
 class EmbeddedMediaExtractorTest {
     @Test
     fun extractEmbeddedLyricsEntries_returnsEmptyWhenProviderRejectsMissingDocument() {

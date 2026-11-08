@@ -6,7 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
 
-class TranslationTaskStateTest {
+class TranslationTaskStateTest : com.asmr.player.LocalizedRobolectricTest() {
     @Test
     fun transcribedItem_neverDisplaysAsTranslationComplete() {
         val stage = subtitleItemStage(item(SubtitleItemState.QUEUED_TRANSLATION))

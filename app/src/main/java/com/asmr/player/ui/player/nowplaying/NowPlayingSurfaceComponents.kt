@@ -1,5 +1,7 @@
 package com.asmr.player.ui.player
 
+import com.asmr.player.i18n.appString
+
 import android.view.LayoutInflater
 import android.view.SurfaceHolder
 import android.view.SurfaceView
@@ -86,7 +88,7 @@ internal fun PlayerSurfaceHeader(
         }
         if (showTitle) {
             Text(
-                text = title.ifBlank { "未播放" },
+                text = title.ifBlank { appString(R.string.ui_not_played) },
                 style = MaterialTheme.typography.titleSmall.copy(
                     fontSize = if (isLandscape) 14.sp else 16.sp,
                     shadow = headerShadow
@@ -106,7 +108,7 @@ internal fun PlayerSurfaceHeader(
                 IconButton(onClick = onManualBindLyrics) {
                     Icon(
                         painter = painterResource(R.drawable.ic_manual_subtitle_import),
-                        contentDescription = "手动绑定歌词",
+                        contentDescription = appString(R.string.ui_manually_bind_lyrics),
                         modifier = Modifier.size(if (isLandscape) 20.dp else 22.dp),
                         tint = colorScheme.onSurface
                     )
@@ -193,7 +195,7 @@ internal fun NowPlayingLyricsSurface(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "暂无歌词",
+                    text = appString(R.string.ui_no_lyrics_yet),
                     style = MaterialTheme.typography.titleMedium,
                     color = playerSupportingTextColor(AsmrTheme.colorScheme.isDark)
                 )
@@ -215,7 +217,7 @@ internal fun NowPlayingLyricsSurface(
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("添加歌词")
+                        Text(androidx.compose.ui.res.stringResource(R.string.ui_add_lyrics))
                     }
                 }
             }
@@ -500,7 +502,7 @@ private fun NowPlayingVideoPlayer(
         ) {
             Icon(
                 imageVector = if (fullscreen) Icons.Rounded.FullscreenExit else Icons.Rounded.Fullscreen,
-                contentDescription = if (fullscreen) "退出全屏" else "全屏",
+                contentDescription = if (fullscreen) appString(R.string.ui_exit_full_screen) else appString(R.string.ui_full_screen),
                 tint = Color.White
             )
         }

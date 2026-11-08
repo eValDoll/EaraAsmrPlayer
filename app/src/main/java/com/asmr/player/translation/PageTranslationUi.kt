@@ -1,5 +1,8 @@
 package com.asmr.player.translation
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Undo
@@ -154,7 +157,7 @@ internal fun PageTranslationScope(
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (error: Exception) {
-                    session.failure = (error as? PageTranslationException)?.message ?: "页面翻译失败，请稍后重试"
+                    session.failure = (error as? PageTranslationException)?.message ?: appString(R.string.ui_page_translation_failed_please_try_again_later)
                 } finally {
                     session.pending = 0
                 }
@@ -203,12 +206,12 @@ internal fun PageTranslationAction(
         checked = session.enabled,
         onCheckedChange = { control.toggle() },
         modifier = modifier.size(40.dp).testTag("page_translation_action").semantics {
-            contentDescription = if (session.enabled) "显示原文" else "翻译页面"
+            contentDescription = if (session.enabled) appString(R.string.ui_show_original) else appString(R.string.ui_translate_page)
             stateDescription = when {
-                loading -> "正在翻译"
-                !session.enabled -> "原文"
-                session.failure != null -> "翻译失败"
-                else -> "已开启翻译"
+                loading -> appString(R.string.ui_translating_8ccb0c)
+                !session.enabled -> appString(R.string.ui_original)
+                session.failure != null -> appString(R.string.ui_translation_failed)
+                else -> appString(R.string.ui_translation_enabled)
             }
         },
         colors = IconButtonDefaults.iconToggleButtonColors(

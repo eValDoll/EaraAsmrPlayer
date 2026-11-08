@@ -1,5 +1,8 @@
 package com.asmr.player.ui.groups
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
@@ -36,8 +39,8 @@ fun AlbumGroupPickerScreen(
 
     CollectionPickerContent(
         windowSizeClass = windowSizeClass,
-        title = "选择分组",
-        createPlaceholder = "新建分组名称",
+        title = appString(R.string.ui_select_group),
+        createPlaceholder = appString(R.string.ui_new_group_name),
         createName = createName,
         onCreateNameChange = { createName = it },
         onCreate = {
@@ -51,13 +54,13 @@ fun AlbumGroupPickerScreen(
         embeddedInDialog = embeddedInDialog,
         isAdding = isAdding,
         isEmpty = groups.isEmpty(),
-        emptyText = "暂无可选分组",
+        emptyText = appString(R.string.ui_there_are_currently_no_optional_groups),
     ) {
         items(groups, key = { it.id }) { group ->
             CollectionPickerRow(
                 name = group.name,
                 artworkUri = group.firstArtworkUri,
-                summary = "共 ${group.albumCount} 张专辑 · ${group.itemCount} 首",
+                summary = appString(R.string.ui_total_albums_songs, group.albumCount, group.itemCount),
                 enabled = !isAdding,
                 isAdding = addingId == group.id,
                 onClick = {

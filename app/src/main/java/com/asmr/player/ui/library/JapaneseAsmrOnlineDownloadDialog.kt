@@ -1,5 +1,8 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.runtime.Composable
 import com.asmr.player.ui.common.FlatActionDialog
 import com.asmr.player.ui.common.FlatDialogAction
@@ -12,11 +15,11 @@ internal fun JapaneseAsmrOnlineDownloadDialog(
     onCancel: () -> Unit,
 ) {
     FlatActionDialog(
-        message = if (missingFileCount == 1) "源文件已丢失，是否下载在线音源？" else
-            "其中 $missingFileCount 个音频的源文件已丢失，是否下载这些音频的在线音源？",
+        message = if (missingFileCount == 1) appString(R.string.ui_the_source_file_is_missing_download_the_online) else
+            appString(R.string.ui_source_files_for_tracks_are_missing_download_their, missingFileCount),
         actions = listOf(
-            FlatDialogAction("取消", onCancel),
-            FlatDialogAction("下载在线音源", onConfirm, tone = FlatDialogActionTone.Primary),
+            FlatDialogAction(appString(R.string.ui_cancel), onCancel),
+            FlatDialogAction(appString(R.string.ui_download_online_audio), onConfirm, tone = FlatDialogActionTone.Primary),
         ),
         onDismissRequest = onCancel,
     )

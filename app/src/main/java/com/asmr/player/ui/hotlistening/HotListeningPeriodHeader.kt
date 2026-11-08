@@ -1,5 +1,8 @@
 package com.asmr.player.ui.hotlistening
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -101,8 +104,8 @@ private fun HotListeningPeriodSelector(
     onPeriodSelected: (String) -> Unit,
 ) {
     val colors = AsmrTheme.colorScheme
-    val periods = remember { listOf("day" to "天", "week" to "周", "month" to "月") }
-    val selectedLabel = periods.firstOrNull { it.first == selectedPeriod }?.second ?: "天"
+    val periods = remember { listOf("day" to appString(R.string.ui_days_c3304d), "week" to appString(R.string.ui_week), "month" to appString(R.string.ui_moon)) }
+    val selectedLabel = periods.firstOrNull { it.first == selectedPeriod }?.second ?: appString(R.string.ui_days_c3304d)
     var expanded by remember { mutableStateOf(false) }
     val menuShape = RoundedCornerShape(8.dp)
     val menuContainer = if (colors.isDark) colors.surfaceVariant else colors.surface
@@ -113,8 +116,8 @@ private fun HotListeningPeriodSelector(
                 .height(32.dp)
                 .clickable(role = Role.DropdownList) { expanded = !expanded }
                 .semantics {
-                    contentDescription = "排行时间范围"
-                    stateDescription = "$selectedLabel，${if (expanded) "已展开" else "已折叠"}"
+                    contentDescription = appString(R.string.ui_ranking_period)
+                    stateDescription = "$selectedLabel，${if (expanded) appString(R.string.ui_expanded) else appString(R.string.ui_collapsed)}"
                 }
                 .padding(horizontal = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -189,8 +192,8 @@ private fun HotListeningPeriodSelector(
 
 private val HotListeningSortMode.toggleLabel: String
     get() = when (this) {
-        HotListeningSortMode.PlayCount -> "次数"
-        HotListeningSortMode.ListenDuration -> "时长"
+        HotListeningSortMode.PlayCount -> appString(R.string.ui_frequency)
+        HotListeningSortMode.ListenDuration -> appString(R.string.ui_duration)
     }
 
 private val HotListeningSortMode.nextMode: HotListeningSortMode

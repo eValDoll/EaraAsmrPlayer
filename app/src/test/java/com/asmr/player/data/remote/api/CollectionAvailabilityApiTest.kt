@@ -1,6 +1,5 @@
 package com.asmr.player.data.remote.api
 
-import android.app.Application
 import com.asmr.player.domain.model.CollectedSearchSource
 import com.google.gson.Gson
 import com.google.gson.JsonParser
@@ -16,8 +15,8 @@ import org.robolectric.annotation.Config
 import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], application = Application::class)
-class CollectionAvailabilityApiTest {
+@Config(sdk = [28], application = com.asmr.player.LocalizedTestApplication::class)
+class CollectionAvailabilityApiTest : com.asmr.player.LocalizedRobolectricTest() {
     @Test
     fun optsIntoBothSourcesAndKeepsTheirIdentitiesSeparate() = withServer { server, api ->
         server.enqueue(MockResponse().setBody("""{"items":[

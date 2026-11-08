@@ -66,7 +66,7 @@ interface DownloadDao {
             "albumTitle = :albumTitle, " +
             "albumCircle = :albumCircle, " +
             "albumCv = :albumCv, " +
-            "albumTagsCsv = :albumTagsCsv, " +
+            "albumTagsCsv = :albumTagsCsv, albumTagDetailsJson = :albumTagDetailsJson, " +
             "albumCoverUrl = :albumCoverUrl, " +
             "albumDescription = :albumDescription, " +
             "albumWorkId = :albumWorkId, " +
@@ -81,6 +81,7 @@ interface DownloadDao {
         albumCircle: String,
         albumCv: String,
         albumTagsCsv: String,
+        albumTagDetailsJson: String = "[]",
         albumCoverUrl: String,
         albumDescription: String,
         albumWorkId: String,

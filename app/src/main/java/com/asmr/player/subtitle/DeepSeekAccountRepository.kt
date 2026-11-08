@@ -1,5 +1,8 @@
 package com.asmr.player.subtitle
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.content.Context
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.di.DEEPSEEK_HTTP_CLIENT
@@ -163,7 +166,7 @@ class DeepSeekAccountRepository @Inject internal constructor(
                 override fun onFailure(call: Call, e: IOException) {
                     if (!continuation.isActive) return
                     if (call.isCanceled()) {
-                        continuation.resumeWithException(CancellationException("余额查询已取消", e))
+                        continuation.resumeWithException(CancellationException(appString(R.string.ui_balance_inquiry_canceled), e))
                     } else {
                         continuation.resumeWithException(e)
                     }

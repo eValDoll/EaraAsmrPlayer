@@ -1,5 +1,8 @@
 package com.asmr.player.ui.calendar
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.ui.common.LocalTabletLayout
 import com.asmr.player.ui.common.LocalMainHeaderPadding
 
@@ -270,7 +273,7 @@ private fun DlsiteAccountRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
-                    text = "DLsite 账号",
+                    text = appString(R.string.ui_dlsite_account),
                     style = MaterialTheme.typography.bodyMedium,
                     color = colorScheme.textPrimary,
                     fontWeight = FontWeight.Medium
@@ -278,13 +281,13 @@ private fun DlsiteAccountRow(
                 DlsiteLoginStatusTag(isLoggedIn = isLoggedIn, colorScheme = colorScheme)
             }
             Text(
-                text = "用于「已购」搜索鉴权",
+                text = appString(R.string.ui_used_for_purchased_search_authentication),
                 style = MaterialTheme.typography.labelSmall,
                 color = colorScheme.textSecondary
             )
         }
         SmallCalendarButton(
-            label = if (isLoggedIn) "管理" else "登录",
+            label = if (isLoggedIn) appString(R.string.ui_manage) else appString(R.string.ui_log_in),
             colorScheme = colorScheme,
             minWidth = 58.dp,
             onClick = onOpenDlsiteLogin
@@ -308,7 +311,7 @@ private fun DlsiteLoginStatusTag(
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = if (isLoggedIn) "已登录" else "未登录",
+            text = if (isLoggedIn) appString(R.string.ui_logged_in) else appString(R.string.ui_not_logged_in),
             style = MaterialTheme.typography.labelSmall,
             color = statusColor,
             fontSize = 10.sp,
@@ -356,7 +359,7 @@ internal fun SummaryCards(
                 ) {
                     SummaryCell(
                         icon = Icons.Rounded.AccessTime,
-                        label = "总时长",
+                        label = appString(R.string.ui_total_duration),
                         value = formatDurationLong(summary.totalDurationMs),
                         comparisonDisplay = summaryComparisonDisplay(SummaryMetric.Duration, comparison, colorScheme),
                         colorScheme = colorScheme,
@@ -364,7 +367,7 @@ internal fun SummaryCards(
                     )
                     SummaryCell(
                         icon = Icons.Rounded.Audiotrack,
-                        label = "音轨",
+                        label = appString(R.string.ui_audio_track),
                         value = "${summary.totalTrackCount}",
                         comparisonDisplay = summaryComparisonDisplay(SummaryMetric.TrackCount, comparison, colorScheme),
                         colorScheme = colorScheme,
@@ -377,7 +380,7 @@ internal fun SummaryCards(
                 ) {
                     SummaryCell(
                         icon = Icons.Rounded.EventAvailable,
-                        label = "活跃天数",
+                        label = appString(R.string.ui_active_days),
                         value = "${summary.activeDayCount}",
                         comparisonDisplay = summaryComparisonDisplay(
                             metric = SummaryMetric.ActiveDayCount,
@@ -390,7 +393,7 @@ internal fun SummaryCards(
                     )
                     SummaryCell(
                         icon = Icons.Rounded.CloudDownload,
-                        label = "流量",
+                        label = appString(R.string.ui_flow),
                         value = formatTraffic(summary.totalTrafficBytes),
                         comparisonDisplay = summaryComparisonDisplay(SummaryMetric.Traffic, comparison, colorScheme),
                         colorScheme = colorScheme,
@@ -770,7 +773,7 @@ internal fun HeatmapSection(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = "收听热度",
+                text = appString(R.string.ui_listening_popularity),
                 style = MaterialTheme.typography.labelSmall,
                 color = colorScheme.textSecondary,
                 modifier = Modifier.weight(1f)
@@ -784,7 +787,7 @@ internal fun HeatmapSection(
         }
         if (days.isEmpty()) {
             Text(
-                text = "还没有收听记录，去听点什么吧～",
+                text = appString(R.string.ui_there_are_no_listening_records_yet_go_and),
                 style = MaterialTheme.typography.bodySmall,
                 color = colorScheme.textSecondary
             )
@@ -858,7 +861,7 @@ private fun YearSelector(
     var expanded by remember { mutableStateOf(false) }
     Box {
         SmallCalendarButton(
-            label = "${selectedYear} 年",
+            label = appString(R.string.ui_years, selectedYear),
             onClick = { expanded = true },
             enabled = years.size > 1,
             colorScheme = colorScheme,
@@ -870,7 +873,7 @@ private fun YearSelector(
         ) {
             years.forEach { year ->
                 DropdownMenuItem(
-                    text = { Text("${year} 年") },
+                    text = { Text(androidx.compose.ui.res.stringResource(R.string.ui_years, year)) },
                     leadingIcon = if (year == selectedYear) {
                         {
                             Icon(
@@ -1012,7 +1015,7 @@ private fun HeatmapLegend(colorScheme: AsmrColorScheme) {
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Text(
-            text = "少",
+            text = appString(R.string.ui_few),
             style = MaterialTheme.typography.labelSmall,
             color = colorScheme.textSecondary,
             fontSize = 10.sp
@@ -1026,7 +1029,7 @@ private fun HeatmapLegend(colorScheme: AsmrColorScheme) {
             )
         }
         Text(
-            text = "多",
+            text = appString(R.string.ui_many),
             style = MaterialTheme.typography.labelSmall,
             color = colorScheme.textSecondary,
             fontSize = 10.sp
@@ -1066,7 +1069,7 @@ private fun DayTimeline(
 
         if (sessions.isEmpty()) {
             Text(
-                text = "这一天没有收听记录",
+                text = appString(R.string.ui_there_are_no_listening_records_for_this_day),
                 style = MaterialTheme.typography.bodyMedium,
                 color = colorScheme.textSecondary,
                 modifier = Modifier.padding(vertical = 24.dp)
@@ -1159,7 +1162,7 @@ private fun TimelineRow(
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = session.title.ifBlank { session.rjCode.ifBlank { "未知作品" } },
+                    text = session.title.ifBlank { session.rjCode.ifBlank { appString(R.string.ui_unknown_works) } },
                     style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                     color = colorScheme.textPrimary,
                     maxLines = 2
@@ -1293,7 +1296,7 @@ private fun summaryComparisonDisplay(
     if (metric == SummaryMetric.ActiveDayCount && selectedGranularity == ListeningComparisonGranularity.Day) {
         return SummaryComparisonDisplay(
             headline = "-",
-            caption = "相比${comparison.referenceLabel}",
+            caption = appString(R.string.ui_compared_to, comparison.referenceLabel),
             color = colorScheme.textSecondary,
             captionColor = Color.Transparent
         )
@@ -1301,7 +1304,7 @@ private fun summaryComparisonDisplay(
     val delta = metricDelta(metric, comparison)
     return SummaryComparisonDisplay(
         headline = formatComparisonHeadline(metric, delta),
-        caption = "相比${comparison.referenceLabel}",
+        caption = appString(R.string.ui_compared_to, comparison.referenceLabel),
         color = comparisonColorFor(metric, comparison, colorScheme),
         captionColor = colorScheme.textSecondary
     )
@@ -1309,10 +1312,10 @@ private fun summaryComparisonDisplay(
 
 private fun summaryTitleFor(granularity: ListeningComparisonGranularity): String {
     return when (granularity) {
-        ListeningComparisonGranularity.Day -> "今日收听"
-        ListeningComparisonGranularity.Week -> "本周收听"
-        ListeningComparisonGranularity.Month -> "本月收听"
-        ListeningComparisonGranularity.Year -> "本年收听"
+        ListeningComparisonGranularity.Day -> appString(R.string.ui_listen_today)
+        ListeningComparisonGranularity.Week -> appString(R.string.ui_listen_this_week)
+        ListeningComparisonGranularity.Month -> appString(R.string.ui_listen_this_month)
+        ListeningComparisonGranularity.Year -> appString(R.string.ui_listen_this_year)
     }
 }
 
@@ -1330,8 +1333,8 @@ private fun formatComparisonHeadline(
 private fun formatComparisonAmount(metric: SummaryMetric, value: Double): String {
     return when (metric) {
         SummaryMetric.Duration -> formatDurationLong(value.roundToLong())
-        SummaryMetric.TrackCount -> "${formatDecimalAmount(value)}个"
-        SummaryMetric.ActiveDayCount -> "${formatDecimalAmount(value)}天"
+        SummaryMetric.TrackCount -> appString(R.string.ui_, formatDecimalAmount(value))
+        SummaryMetric.ActiveDayCount -> appString(R.string.ui_days, formatDecimalAmount(value))
         SummaryMetric.Traffic -> formatTraffic(value.roundToLong())
     }
 }
@@ -1377,7 +1380,7 @@ private fun formatTimeOfDay(epochMs: Long): String {
 private fun formatDateHeader(date: String): String {
     return runCatching {
         val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(date) ?: return date
-        SimpleDateFormat("yyyy 年 M 月 d 日", Locale.getDefault()).format(parsed)
+        java.text.DateFormat.getDateInstance(java.text.DateFormat.LONG, com.asmr.player.i18n.AppLanguage.resourcesContext().resources.configuration.locales[0]).format(parsed)
     }.getOrDefault(date)
 }
 
@@ -1385,12 +1388,12 @@ private fun formatMonthLabel(date: String): String {
     return runCatching {
         val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(date)
             ?: return@runCatching fallbackMonthLabel(date)
-        SimpleDateFormat("M月", Locale.getDefault()).format(parsed)
+        SimpleDateFormat(android.text.format.DateFormat.getBestDateTimePattern(com.asmr.player.i18n.AppLanguage.resourcesContext().resources.configuration.locales[0], "MMM"), com.asmr.player.i18n.AppLanguage.resourcesContext().resources.configuration.locales[0]).format(parsed)
     }.getOrElse { fallbackMonthLabel(date) }
 }
 
 private fun fallbackMonthLabel(date: String): String {
     if (date.length < 7) return date
     val month = date.substring(5, 7).trimStart('0').ifBlank { date.substring(5, 7) }
-    return "${month}月"
+    return appString(R.string.ui_months, month)
 }

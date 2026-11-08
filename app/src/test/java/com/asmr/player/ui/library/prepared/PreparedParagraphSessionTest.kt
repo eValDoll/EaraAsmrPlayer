@@ -35,7 +35,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [33])
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [33])
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class PreparedParagraphSessionTest {
     @Test

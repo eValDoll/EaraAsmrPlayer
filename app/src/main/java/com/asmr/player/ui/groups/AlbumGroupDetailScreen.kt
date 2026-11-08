@@ -1,5 +1,8 @@
 package com.asmr.player.ui.groups
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.ui.common.formatCvNames
 import com.asmr.player.playback.MediaItemFactory
 
@@ -224,8 +227,8 @@ internal fun AlbumGroupDetailContent(
         ) {
             if (tracks.isEmpty()) {
                 EaraBrandedEmptyState(
-                    sectionTitle = title.ifBlank { "我的分组" },
-                    headline = "这个分组还没有内容",
+                    sectionTitle = title.ifBlank { appString(R.string.ui_groups) },
+                    headline = appString(R.string.ui_this_group_has_no_content_yet),
                     sectionIcon = Icons.Rounded.Folder,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current + 88.dp)
@@ -322,11 +325,11 @@ internal fun AlbumGroupDetailContent(
     pendingRemoveTrack?.let { track ->
         FlatActionDialog(
             onDismissRequest = { pendingRemoveTrack = null },
-            message = "确定从「$title」移除“${track.trackTitle.ifBlank { "未命名" }}”吗？",
+            message = appString(R.string.ui_are_you_sure_you_want_to_remove_from, title, track.trackTitle.ifBlank { appString(R.string.ui_unnamed) }),
             actions = listOf(
-                FlatDialogAction("取消", onClick = { pendingRemoveTrack = null }),
+                FlatDialogAction(appString(R.string.ui_cancel), onClick = { pendingRemoveTrack = null }),
                 FlatDialogAction(
-                    text = "移除",
+                    text = appString(R.string.ui_remove),
                     tone = FlatDialogActionTone.Danger,
                     onClick = {
                         pendingRemoveTrack = null
@@ -340,11 +343,11 @@ internal fun AlbumGroupDetailContent(
     pendingRemoveAlbum?.let { album ->
         FlatActionDialog(
             onDismissRequest = { pendingRemoveAlbum = null },
-            message = "确定从「$title」移除专辑“${album.second}”吗？",
+            message = appString(R.string.ui_are_you_sure_you_want_to_remove_the, title, album.second),
             actions = listOf(
-                FlatDialogAction("取消", onClick = { pendingRemoveAlbum = null }),
+                FlatDialogAction(appString(R.string.ui_cancel), onClick = { pendingRemoveAlbum = null }),
                 FlatDialogAction(
-                    text = "移除",
+                    text = appString(R.string.ui_remove),
                     tone = FlatDialogActionTone.Danger,
                     onClick = {
                         pendingRemoveAlbum = null
@@ -380,7 +383,7 @@ private fun AlbumSectionHeader(
     val footerSegments = remember(rjCode, tracks, totalSizeBytes) {
         buildList {
             if (rjCode.isNotBlank()) add(rjCode)
-            add("${tracks.size} 音频")
+            add(appString(R.string.ui_audio, tracks.size))
             Formatting.formatTrackSeconds(tracks.sumOf { it.trackDuration }).takeIf { it.isNotBlank() }?.let(::add)
             totalSizeBytes?.let(Formatting::formatFileSize)?.let(::add)
         }
@@ -407,7 +410,7 @@ private fun AlbumSectionHeader(
         Spacer(modifier = Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
-                text = albumTitle.ifBlank { rjCode.ifBlank { "专辑" } },
+                text = albumTitle.ifBlank { rjCode.ifBlank { appString(R.string.ui_album) } },
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                 color = colorScheme.textPrimary,
                 maxLines = 2,
@@ -463,28 +466,28 @@ private fun GroupTrackRow(
         val actions = remember(onPlay, onMoveToTop, onMoveToBottom, onRemove) {
             listOf(
                 AudioItemMenuAction(
-                    label = "播放",
+                    label = appString(R.string.ui_play),
                     onClick = onPlay
                 ),
                 AudioItemMenuAction(
-                    label = "移至顶部",
+                    label = appString(R.string.ui_move_to_top),
                     onClick = onMoveToTop,
                     testTag = GROUP_DETAIL_MOVE_TOP_MENU_ITEM_TAG
                 ),
                 AudioItemMenuAction(
-                    label = "移至末尾",
+                    label = appString(R.string.ui_move_to_end),
                     onClick = onMoveToBottom,
                     testTag = GROUP_DETAIL_MOVE_BOTTOM_MENU_ITEM_TAG
                 ),
                 AudioItemMenuAction(
-                    label = "从分组移除",
+                    label = appString(R.string.ui_remove_from_group),
                     onClick = onRemove,
                     showDividerBefore = true
                 )
             )
         }
         AudioItemRow(
-            title = item.trackTitle.ifBlank { "未命名" },
+            title = item.trackTitle.ifBlank { appString(R.string.ui_unnamed) },
             sourcePath = item.trackPath,
             loadAudioMetadata = loadAudioMetadata,
             subtitle = cvText,
@@ -524,7 +527,7 @@ private fun buildGroupDetailRows(
     sections.forEach { (albumId, list) ->
         val first = list.firstOrNull() ?: return@forEach
         val sectionTitle = first.albumTitle.orEmpty().ifBlank {
-            first.albumRjCode.orEmpty().ifBlank { "专辑" }
+            first.albumRjCode.orEmpty().ifBlank { appString(R.string.ui_album) }
         }
         val coverModel = first.albumCoverThumbPath.orEmpty()
             .ifBlank { first.albumCoverPath.orEmpty() }

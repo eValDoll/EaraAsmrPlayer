@@ -1,5 +1,7 @@
 package com.asmr.player.ui.library.prepared
 
+import com.asmr.player.domain.model.localizedTags
+
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
@@ -155,7 +157,7 @@ internal class AlbumParagraphAheadWindow(
             }
             val seen = HashSet<String>()
             var tagIndex = 0
-            for (raw in album.tags.take(MaxRawTagsPerAlbum)) {
+            for (raw in album.localizedTags().take(MaxRawTagsPerAlbum)) {
                 if (labels.size == MaxLabels) return labels
                 // Stop rather than shift later occurrence indices relative to the UI normalization.
                 if (raw.length > MaxEntryUtf16Units) break

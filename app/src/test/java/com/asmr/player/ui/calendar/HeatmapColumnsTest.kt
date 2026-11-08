@@ -9,7 +9,7 @@ import org.junit.Test
 import com.asmr.player.util.ListeningDay
 import java.util.TimeZone
 
-class HeatmapColumnsTest {
+class HeatmapColumnsTest : com.asmr.player.LocalizedRobolectricTest() {
 
     private lateinit var originalTz: TimeZone
 

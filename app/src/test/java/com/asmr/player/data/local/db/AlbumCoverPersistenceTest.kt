@@ -13,7 +13,7 @@ import org.robolectric.annotation.Config
 import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [34])
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [34])
 class AlbumCoverPersistenceTest {
     @Test
     fun manualCoverIncludingDefaultCoverFileSurvivesReopenAndCanBeCleared() = runBlocking {
@@ -126,7 +126,7 @@ class AlbumCoverPersistenceTest {
         val context = RuntimeEnvironment.getApplication()
         val name = File.createTempFile("album-migration-", ".db").absolutePath
         fun open() = Room.databaseBuilder(context, AppDatabase::class.java, name)
-            .addMigrations(AppDatabaseMigrations.MIGRATION_35_36, AppDatabaseMigrations.MIGRATION_36_37)
+            .addMigrations(AppDatabaseMigrations.MIGRATION_35_36, AppDatabaseMigrations.MIGRATION_36_37, AppDatabaseMigrations.MIGRATION_37_38)
             .allowMainThreadQueries().build()
         try {
             val original = AlbumEntity(

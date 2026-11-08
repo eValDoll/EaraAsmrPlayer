@@ -1,6 +1,5 @@
 package com.asmr.player.ui.common
 
-import android.app.Application
 import android.os.Looper
 import androidx.compose.runtime.BroadcastFrameClock
 import androidx.compose.runtime.mutableStateOf
@@ -22,7 +21,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [28])
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [28])
 class DeferredPageContentTest {
     @After
     fun applyPendingSnapshots() {

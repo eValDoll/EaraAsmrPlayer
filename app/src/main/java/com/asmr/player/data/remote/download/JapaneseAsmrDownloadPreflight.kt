@@ -1,5 +1,8 @@
 package com.asmr.player.data.remote.download
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.util.ChapterMediaReference
 import kotlinx.coroutines.Dispatchers
@@ -74,11 +77,11 @@ class JapaneseAsmrDownloadPreflight internal constructor(
                 .header("Range", "bytes=0-15").build()
             return withJapaneseAsmrResponse(client, request) { response ->
                 if (response.code == 404 || response.code == 410) return@withJapaneseAsmrResponse true
-                if (!response.isSuccessful) throw IOException("源文件状态检查失败 (${response.code})")
-                val source = response.body?.source()?.peek() ?: throw IOException("源文件状态检查失败")
+                if (!response.isSuccessful) throw IOException(appString(R.string.ui_source_file_check_failed, response.code))
+                val source = response.body?.source()?.peek() ?: throw IOException(appString(R.string.ui_source_file_check_failed_375aad))
                 source.request(12)
                 if (!isJapaneseAsmrAudioHeader(chapter.fileName, source.readByteArray(minOf(12L, source.buffer.size)))) {
-                    throw IOException("源文件状态检查未返回音频")
+                    throw IOException(appString(R.string.ui_the_source_file_check_did_not_return_audio))
                 }
                 false
             }

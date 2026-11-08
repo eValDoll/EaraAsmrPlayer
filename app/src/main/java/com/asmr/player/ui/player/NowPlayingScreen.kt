@@ -1,5 +1,7 @@
 package com.asmr.player.ui.player
 
+import com.asmr.player.i18n.appString
+
 import com.asmr.player.ui.common.parseCvNames
 import com.asmr.player.ui.common.formatArtistMetadata
 import com.asmr.player.ui.common.CvNameSeparator
@@ -580,7 +582,7 @@ internal fun resolveListenTogetherAudiencePresentation(
     state: ListenTogetherUiState
 ): ListenTogetherAudiencePresentation? = when {
     !state.available && state.status == ListenTogetherStatus.Unsupported ->
-        ListenTogetherAudiencePresentation.Status("当前音频无法参与一起听")
+        ListenTogetherAudiencePresentation.Status(appString(R.string.ui_the_current_audio_cannot_be_listened_to_together))
     state.listenerCount != null ->
         ListenTogetherAudiencePresentation.Audience(
             companionCount = (state.listenerCount - 1).coerceAtLeast(0)
@@ -670,7 +672,7 @@ private fun ListenTogetherAudienceCountText(
                     )
                 }
                 Text(
-                    text = " 人正在和你一起听",
+                    text = appString(R.string.ui_people_are_listening_with_you),
                     style = textStyle,
                     color = color,
                     maxLines = 1,
@@ -679,7 +681,7 @@ private fun ListenTogetherAudienceCountText(
             }
         } else {
             Text(
-                text = "孤独赏鉴中",
+                text = appString(R.string.ui_appreciating_loneliness),
                 modifier = modifier,
                 style = textStyle,
                 color = color,
@@ -787,7 +789,7 @@ private fun LandscapePlayerIdentity(
             pageEntranceSettled = pageEntranceSettled
         )
         Text(
-            text = title.ifBlank { "未播放" },
+            text = title.ifBlank { appString(R.string.ui_not_played) },
             modifier = Modifier.fillMaxWidth(),
             style = MaterialTheme.typography.titleLarge.copy(
                 fontSize = typography.titleFontSizeSp.sp,
@@ -905,7 +907,7 @@ private fun ClassicPlayerIdentity(
         )
     ) {
         Text(
-            text = title.ifBlank { "未播放" },
+            text = title.ifBlank { appString(R.string.ui_not_played) },
             modifier = Modifier.fillMaxWidth(),
             style = MaterialTheme.typography.titleMedium.copy(
                 fontWeight = FontWeight.SemiBold,
@@ -984,7 +986,7 @@ private fun ExpandedPlayerIdentityOverlay(
                 pageEntranceSettled = pageEntranceSettled
             )
             Text(
-                text = title.ifBlank { "未播放" },
+                text = title.ifBlank { appString(R.string.ui_not_played) },
                 modifier = Modifier.fillMaxWidth(),
                 style = MaterialTheme.typography.titleSmall.copy(
                     fontWeight = FontWeight.SemiBold,
@@ -1093,7 +1095,7 @@ private fun NowPlayingHomeLayoutSwipeHint(
             }
         }
         Text(
-            text = "上滑切换封面排布",
+            text = appString(R.string.ui_swipe_up_to_switch_cover_layout),
             style = MaterialTheme.typography.labelMedium.copy(
                 fontWeight = FontWeight.SemiBold,
                 shadow = textShadow
@@ -1443,14 +1445,14 @@ internal fun NowPlayingScreen(
         handleNavigateUp()
     }
     val playerHeaderTitle = metadata?.title?.toString().orEmpty().ifBlank {
-        lyricsState.title.ifBlank { "未播放" }
+        lyricsState.title.ifBlank { appString(R.string.ui_not_played) }
     }
     val playerArtistText = metadata?.artist?.toString().orEmpty()
     val playerArtistMeta = remember(playerArtistText) {
         parseNowPlayingArtistMeta(playerArtistText)
     }
     val lyricsHeaderTitle = lyricsState.title.ifBlank {
-        metadata?.title?.toString().orEmpty().ifBlank { "歌词" }
+        metadata?.title?.toString().orEmpty().ifBlank { appString(R.string.ui_lyrics) }
     }
 
     val sharedHeaderTitle = if (surfaceMode == NowPlayingSurfaceMode.LYRICS) {
@@ -2384,7 +2386,7 @@ internal fun NowPlayingScreen(
                                                     currentMaxLinesOverride = 1,
                                                     upcomingMaxLinesOverride = 1,
                                                     marqueeCurrentLine = true,
-                                                    emptyText = "暂无歌词",
+                                                    emptyText = appString(R.string.ui_no_lyrics_yet),
                                                     modifier = Modifier.fillMaxWidth()
                                                 )
                                             }
@@ -2543,13 +2545,13 @@ internal fun NowPlayingScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "切片管理",
+                            text = appString(R.string.ui_slice_management),
                             style = MaterialTheme.typography.titleMedium,
                             color = colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.weight(1f))
                         TextButton(onClick = { viewModel.clearSlicesForCurrentTrack() }) {
-                            Text("清空")
+                            Text(androidx.compose.ui.res.stringResource(R.string.ui_clear))
                         }
                     }
 
@@ -2583,7 +2585,7 @@ internal fun NowPlayingScreen(
 
                     if (sliceUiState.slices.isEmpty()) {
                         Text(
-                            text = "暂无切片",
+                            text = appString(R.string.ui_no_slices_yet),
                             style = MaterialTheme.typography.bodyMedium,
                             color = colorScheme.textTertiary,
                             modifier = Modifier.padding(vertical = 18.dp)
@@ -2646,7 +2648,7 @@ internal fun NowPlayingScreen(
                                         IconButton(onClick = { viewModel.playSlicePreview(slice) }) {
                                             Icon(
                                                 imageVector = Icons.Rounded.PlayArrow,
-                                                contentDescription = "播放切片",
+                                                contentDescription = appString(R.string.ui_play_slice),
                                                 tint = colorScheme.onSurface
                                             )
                                         }
@@ -2654,7 +2656,7 @@ internal fun NowPlayingScreen(
                                         IconButton(onClick = { viewModel.deleteSlice(slice.id) }) {
                                             Icon(
                                                 imageVector = Icons.Outlined.DeleteOutline,
-                                                contentDescription = "删除切片",
+                                                contentDescription = appString(R.string.ui_delete_slice),
                                                 tint = colorScheme.onSurface.copy(alpha = 0.8f)
                                             )
                                         }
@@ -2674,7 +2676,7 @@ internal fun NowPlayingScreen(
             if (slice != null) {
                 PlaybackProgressContent(viewModel, isVideo) { progress ->
                     SliceTimeEditDialog(
-                        title = if (edit.second) "修改起点" else "修改终点",
+                        title = if (edit.second) appString(R.string.ui_modify_starting_point) else appString(R.string.ui_modify_end_point),
                         durationMs = progressDurationMs,
                         currentMs = progress.positionMs,
                         initialMs = if (edit.second) slice.startMs else slice.endMs,

@@ -1,5 +1,8 @@
 package com.asmr.player.subtitle
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
@@ -51,15 +54,15 @@ internal class TranslationApiStore internal constructor(
 
     fun selectProvider(provider: TranslationProvider) = synchronized(lock) {
         if (provider == TranslationProvider.CUSTOM) {
-            checkNotNull(readCustom()) { "请先配置自定义翻译服务" }.requireConfigured()
+            checkNotNull(readCustom()) { appString(R.string.ui_configure_a_custom_translation_service_first) }.requireConfigured()
         }
-        check(preferences.edit().putString(KEY_PROVIDER, provider.name).commit()) { "翻译服务保存失败" }
+        check(preferences.edit().putString(KEY_PROVIDER, provider.name).commit()) { appString(R.string.ui_unable_to_save_translation_service) }
     }
 
     fun saveDeepSeekModel(model: String) = synchronized(lock) {
         val normalized = model.trim()
-        require(normalized.isNotEmpty()) { "请选择 DeepSeek 模型" }
-        check(preferences.edit().putString(KEY_DEEPSEEK_MODEL, normalized).commit()) { "DeepSeek 模型保存失败" }
+        require(normalized.isNotEmpty()) { appString(R.string.ui_select_a_deepseek_model) }
+        check(preferences.edit().putString(KEY_DEEPSEEK_MODEL, normalized).commit()) { appString(R.string.ui_unable_to_save_deepseek_model) }
     }
 
     private fun readDeepSeekModel(): String = preferences.getString(KEY_DEEPSEEK_MODEL, null)
@@ -153,7 +156,7 @@ internal class TranslationApiStore internal constructor(
             .putString(prefix + KEY_ENCRYPTED_VALUE, Base64.encodeToString(encrypted, Base64.NO_WRAP))
             .putString(prefix + KEY_INITIALIZATION_VECTOR, Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
         if (provider != null) editor.putString(KEY_PROVIDER, provider.name)
-        check(editor.commit()) { "翻译配置保存失败" }
+        check(editor.commit()) { appString(R.string.ui_unable_to_save_translation_settings) }
     }
 
     private fun getOrCreateSecretKey(): SecretKey {

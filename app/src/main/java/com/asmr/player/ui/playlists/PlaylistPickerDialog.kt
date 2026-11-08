@@ -1,5 +1,8 @@
 package com.asmr.player.ui.playlists
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
@@ -38,8 +41,8 @@ fun PlaylistPickerScreen(
 
     CollectionPickerContent(
         windowSizeClass = windowSizeClass,
-        title = "选择列表",
-        createPlaceholder = "新建列表名称",
+        title = appString(R.string.ui_select_list),
+        createPlaceholder = appString(R.string.ui_new_list_name),
         createName = createName,
         onCreateNameChange = { createName = it },
         onCreate = {
@@ -53,14 +56,14 @@ fun PlaylistPickerScreen(
         embeddedInDialog = embeddedInDialog,
         isAdding = isAdding,
         isEmpty = userPlaylists.isEmpty(),
-        emptyText = "暂无可选列表",
-        selectionSummary = if (items.size > 1) "将添加 ${items.size} 项" else null,
+        emptyText = appString(R.string.ui_no_optional_list_yet),
+        selectionSummary = if (items.size > 1) appString(R.string.ui_items_will_be_added, items.size) else null,
     ) {
         items(userPlaylists, key = { it.id }) { playlist ->
             CollectionPickerRow(
                 name = playlist.name,
                 artworkUri = playlist.firstArtworkUri,
-                summary = "共 ${playlist.itemCount} 首",
+                summary = appString(R.string.ui_total_first, playlist.itemCount),
                 enabled = !isAdding,
                 isAdding = addingId == playlist.id,
                 onClick = {

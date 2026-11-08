@@ -1,5 +1,8 @@
 package com.asmr.player.ui.search
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -144,6 +147,7 @@ internal fun SearchAssistContent(
     val keyboardController = LocalSoftwareKeyboardController.current
     val inputFocusRequester = remember { FocusRequester() }
     var keyword by rememberSaveable(initialRequest.keyword) { mutableStateOf(initialRequest.keyword) }
+    var editingKeyword by rememberSaveable(initialRequest.keyword) { mutableStateOf(false) }
     var purchasedOnly by rememberSaveable(initialRequest.purchasedOnly) {
         mutableStateOf(initialRequest.purchasedOnly)
     }
@@ -207,8 +211,11 @@ internal fun SearchAssistContent(
             hotTags = uiState.suggestions.hotTags
         )
     }
+    val localizedKeywords = rememberLocalizedSearchKeywords(hotKeywordTerms)
+    val displayedKeyword = if (editingKeyword) keyword else localizedKeywords[keyword] ?: keyword
     val hotKeywordCarouselItem = rememberSearchHotKeywordCarouselItem(
         terms = hotKeywordTerms,
+        labels = localizedKeywords,
         showFallback = !uiState.isLoadingSuggestions
     )
     val chromeState = rememberCollapsibleHeaderState()
@@ -251,6 +258,7 @@ internal fun SearchAssistContent(
             .ifBlank { hotKeywordCarouselItem.keyword.orEmpty() }
         if (normalized.isBlank()) return
         keyword = normalized
+        editingKeyword = false
         keyboardController?.hide()
         onSubmitSearch(buildRequest(requestKeyword = normalized))
     }
@@ -275,7 +283,7 @@ internal fun SearchAssistContent(
         val suggestionItems: LazyListScope.() -> Unit = {
             item(contentType = "history") {
                 SearchAssistSection(
-                    title = "搜索历史",
+                    title = appString(R.string.ui_search_history),
                     trailing = {
                         if (uiState.history.isNotEmpty()) {
                             Row(
@@ -284,7 +292,7 @@ internal fun SearchAssistContent(
                             ) {
                                 HeaderIconButton(
                                     icon = Icons.Rounded.Delete,
-                                    contentDescription = "清空搜索历史",
+                                    contentDescription = appString(R.string.ui_clear_search_history),
                                     onClick = { showClearHistoryDialog = true },
                                     modifier = Modifier.testTag(SEARCH_ASSIST_HISTORY_CLEAR_TAG)
                                 )
@@ -297,7 +305,7 @@ internal fun SearchAssistContent(
                     }
                 ) {
                     if (uiState.history.isEmpty()) {
-                        AssistMutedText("还没有搜索记录")
+                        AssistMutedText(androidx.compose.ui.res.stringResource(R.string.ui_no_search_history_yet))
                     } else {
                         SearchAssistHistoryChips(
                             history = uiState.history,
@@ -311,13 +319,13 @@ internal fun SearchAssistContent(
             if (uiState.isLoadingSuggestions) {
                 item(contentType = "hotCvsLoading") {
                     SearchAssistTermSectionSkeleton(
-                        title = "热门声优",
+                        title = appString(R.string.ui_popular_voice_actors),
                         modifier = Modifier.testTag(SEARCH_ASSIST_HOT_CVS_SECTION_TAG)
                     )
                 }
                 item(contentType = "hotTagsLoading") {
                     SearchAssistTermSectionSkeleton(
-                        title = "热门标签",
+                        title = appString(R.string.ui_popular_tags),
                         modifier = Modifier.testTag(SEARCH_ASSIST_HOT_TAGS_SECTION_TAG)
                     )
                 }
@@ -325,8 +333,9 @@ internal fun SearchAssistContent(
                 if (uiState.suggestions.hotCvs.isNotEmpty()) {
                     item(contentType = "hotCvs") {
                         SearchAssistTermSection(
-                            title = "热门声优",
+                            title = appString(R.string.ui_popular_voice_actors),
                             terms = uiState.suggestions.hotCvs,
+                            labels = localizedKeywords,
                             expanded = hotCvsExpanded,
                             onExpandedChange = { hotCvsExpanded = it },
                             onTermClick = { submit(it) },
@@ -337,8 +346,9 @@ internal fun SearchAssistContent(
                 if (uiState.suggestions.hotTags.isNotEmpty()) {
                     item(contentType = "hotTags") {
                         SearchAssistTermSection(
-                            title = "热门标签",
+                            title = appString(R.string.ui_popular_tags),
                             terms = uiState.suggestions.hotTags,
+                            labels = localizedKeywords,
                             expanded = hotTagsExpanded,
                             onExpandedChange = { hotTagsExpanded = it },
                             onTermClick = { submit(it) },
@@ -353,7 +363,7 @@ internal fun SearchAssistContent(
             if (uiState.isLoadingRecommendations && uiState.suggestions.recommendations.isEmpty()) {
                 item(contentType = "recommendationsLoading") {
                     SearchAssistWorkSectionSkeleton(
-                        title = "猜你喜欢",
+                        title = appString(R.string.ui_guess_you_like),
                         compact = isCompact,
                         modifier = Modifier.testTag(SEARCH_ASSIST_RECOMMENDATION_SECTION_TAG)
                     )
@@ -361,7 +371,7 @@ internal fun SearchAssistContent(
             } else if (uiState.suggestions.recommendations.isNotEmpty()) {
                 item(contentType = "recommendations") {
                     SearchAssistSection(
-                        title = "猜你喜欢",
+                        title = appString(R.string.ui_guess_you_like),
                         modifier = Modifier.testTag(SEARCH_ASSIST_RECOMMENDATION_SECTION_TAG),
                         trailing = {
                             TextButton(
@@ -380,9 +390,9 @@ internal fun SearchAssistContent(
                                 )
                                 Text(
                                     when {
-                                        uiState.isLoadingRecommendations -> "推荐中"
-                                        uiState.hasMoreRecommendations -> "换一批"
-                                        else -> "已看完"
+                                        uiState.isLoadingRecommendations -> appString(R.string.ui_recommended)
+                                        uiState.hasMoreRecommendations -> appString(R.string.ui_change_a_batch)
+                                        else -> appString(R.string.ui_already_finished_reading)
                                     }
                                 )
                             }
@@ -454,8 +464,13 @@ internal fun SearchAssistContent(
 
         SearchChrome(
             modifier = Modifier.align(Alignment.TopCenter).padding(top = LocalMainHeaderPadding.current),
-            keyword = keyword,
-            onKeywordChange = { keyword = it },
+            keyword = displayedKeyword,
+            onKeywordChange = {
+                if (it != displayedKeyword) {
+                    keyword = it
+                    editingKeyword = true
+                }
+            },
             placeholder = hotKeywordCarouselItem.placeholder,
             selectedFilter = selectedFilter,
             selectedOrder = selectedOrder,
@@ -521,11 +536,11 @@ internal fun SearchAssistContent(
         if (showClearHistoryDialog) {
             FlatActionDialog(
                 onDismissRequest = { showClearHistoryDialog = false },
-                message = "是否清空历史搜索记录？",
+                message = appString(R.string.ui_clear_search_history_334950),
                 actions = listOf(
-                    FlatDialogAction("取消", onClick = { showClearHistoryDialog = false }),
+                    FlatDialogAction(appString(R.string.ui_cancel), onClick = { showClearHistoryDialog = false }),
                     FlatDialogAction(
-                        text = "清空",
+                        text = appString(R.string.ui_clear),
                         tone = FlatDialogActionTone.Danger,
                         onClick = {
                             showClearHistoryDialog = false
@@ -628,6 +643,7 @@ private fun SearchAssistSection(
 private fun SearchAssistTermSection(
     title: String,
     terms: List<SearchSuggestionTerm>,
+    labels: Map<String, String>,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     onTermClick: (String) -> Unit,
@@ -645,6 +661,7 @@ private fun SearchAssistTermSection(
     ) {
         SearchAssistTermChips(
             terms = terms,
+            labels = labels,
             expanded = expanded,
             onTermClick = onTermClick
         )
@@ -766,6 +783,7 @@ private fun SearchAssistHistoryChips(
 @Composable
 private fun SearchAssistTermChips(
     terms: List<SearchSuggestionTerm>,
+    labels: Map<String, String>,
     expanded: Boolean,
     onTermClick: (String) -> Unit
 ) {
@@ -775,7 +793,7 @@ private fun SearchAssistTermChips(
     ) {
         terms.forEach { term ->
             SearchAssistTextChip(
-                text = term.value,
+                text = labels[term.value.trim()] ?: term.value,
                 onClick = { onTermClick(term.value) }
             )
         }
@@ -853,7 +871,7 @@ private fun ExpandCollapseIconButton(
         } else {
             Icons.AutoMirrored.Rounded.KeyboardArrowRight
         },
-        contentDescription = if (expanded) "折叠" else "展开",
+        contentDescription = if (expanded) appString(R.string.ui_fold) else appString(R.string.ui_expand),
         onClick = onClick
     )
 }
@@ -940,7 +958,7 @@ private fun SearchAssistRecommendationCard(
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
-                text = album.title.ifBlank { "推荐作品" },
+                text = album.title.ifBlank { appString(R.string.ui_recommended_works) },
                 style = MaterialTheme.typography.labelMedium,
                 color = colorScheme.textPrimary,
                 maxLines = 2,

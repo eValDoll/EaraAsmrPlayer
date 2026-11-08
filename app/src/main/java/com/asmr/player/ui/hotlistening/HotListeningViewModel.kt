@@ -1,5 +1,8 @@
 package com.asmr.player.ui.hotlistening
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.compose.runtime.Immutable
@@ -86,14 +89,14 @@ class HotListeningViewModel @Inject constructor(
 
     private suspend fun loadTopListings(period: String, sortMode: HotListeningSortMode) {
         if (!hotListeningApi.isBackendConfigured) {
-            _rawUiState.update { HotListeningRawUiState.Error("后端未配置") }
+            _rawUiState.update { HotListeningRawUiState.Error(appString(R.string.ui_backend_not_configured)) }
             return
         }
         _rawUiState.update { HotListeningRawUiState.Loading }
         runCatching {
             val items = hotListeningApi.getTopListings(period, sortMode)
             if (items == null) {
-                _rawUiState.update { HotListeningRawUiState.Error("请求失败") }
+                _rawUiState.update { HotListeningRawUiState.Error(appString(R.string.ui_request_failed)) }
                 return
             }
             val entries = withContext(Dispatchers.Default) {
@@ -108,7 +111,7 @@ class HotListeningViewModel @Inject constructor(
             }
         }.onFailure { error ->
             _rawUiState.update {
-                HotListeningRawUiState.Error(error.message ?: "加载失败")
+                HotListeningRawUiState.Error(error.message ?: appString(R.string.ui_loading_failed))
             }
         }
     }
@@ -121,6 +124,7 @@ class HotListeningViewModel @Inject constructor(
                 circle = circle,
                 cv = cv,
                 tags = tagList,
+                tagDetails = tagDetails,
                 coverUrl = coverUrl,
                 rjCode = rj,
                 releaseDate = releaseDate.trim(),
@@ -162,8 +166,8 @@ data class HotListeningEntry(
 
     private fun formatCompactCount(value: Long): String {
         return when {
-            value >= 100_000_000L -> formatDecimalUnit(value, 100_000_000L, "亿")
-            value >= 10_000L -> formatDecimalUnit(value, 10_000L, "万")
+            value >= 100_000_000L -> formatDecimalUnit(value, 100_000_000L, appString(R.string.ui_100_million))
+            value >= 10_000L -> formatDecimalUnit(value, 10_000L, appString(R.string.ui_ten_thousand))
             else -> value.toString()
         }
     }
@@ -179,18 +183,18 @@ data class HotListeningEntry(
     }
 
     private fun formatCompactDuration(ms: Long): String {
-        if (ms < 60_000L) return "<1分钟"
+        if (ms < 60_000L) return appString(R.string.ui_1_minute)
 
         val totalMinutes = ms / 60_000L
-        if (totalMinutes < 60L) return "${totalMinutes}分钟"
+        if (totalMinutes < 60L) return appString(R.string.ui_minutes, totalMinutes)
 
         val totalHours = totalMinutes / 60L
         val compactHours = when {
-            totalHours >= 100_000_000L -> "${totalHours / 100_000_000L}亿"
-            totalHours >= 10_000L -> "${totalHours / 10_000L}万"
+            totalHours >= 100_000_000L -> appString(R.string.ui_billion, totalHours / 100_000_000L)
+            totalHours >= 10_000L -> appString(R.string.ui_million, totalHours / 10_000L)
             else -> totalHours.toString()
         }
-        return "${compactHours}小时"
+        return appString(R.string.ui_hours, compactHours)
     }
 }
 

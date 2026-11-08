@@ -1,5 +1,7 @@
 package com.asmr.player.subtitle
 
+import com.asmr.player.i18n.appString
+
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
@@ -61,7 +63,7 @@ internal class SubtitleModelDownloadWorker(
                 createForegroundInfo(
                     repository.downloadedInstallationBytes(model),
                     totalBytes,
-                    "准备下载字幕组件"
+                    appString(R.string.ui_prepare_to_download_subtitle_components)
                 )
             )
             val client = EntryPointAccessors.fromApplication(
@@ -138,10 +140,10 @@ internal class SubtitleModelDownloadWorker(
                 val actualHash = sha256(partialFile)
                 check(actualHash.equals(artifact.sha256, ignoreCase = true)) {
                     partialFile.delete()
-                    "模型校验失败：${artifact.fileName}，请重新下载"
+                    appString(R.string.ui_model_verification_failed_please_download_again, artifact.fileName)
                 }
-                if (targetFile.exists()) check(targetFile.delete()) { "无法替换旧模型文件" }
-                check(partialFile.renameTo(targetFile)) { "无法保存日语字幕模型" }
+                if (targetFile.exists()) check(targetFile.delete()) { appString(R.string.ui_unable_to_replace_old_model_files) }
+                check(partialFile.renameTo(targetFile)) { appString(R.string.ui_unable_to_save_japanese_subtitle_model) }
             }
             repository.updateAvailable(model.id, source)
             Result.success(
@@ -155,7 +157,7 @@ internal class SubtitleModelDownloadWorker(
             repository.updateMissing(model.id)
             throw cancelled
         } catch (error: Throwable) {
-            val message = error.message?.trim().orEmpty().ifBlank { "字幕组件下载失败" }
+            val message = error.message?.trim().orEmpty().ifBlank { appString(R.string.ui_subtitle_component_download_failed) }
             if (runAttemptCount < MAX_RETRY_COUNT && error is IOException) {
                 repository.updateDownloading(
                     model.id,
@@ -265,7 +267,7 @@ internal class SubtitleModelDownloadWorker(
         val requiredBytes = expectedBytes - existingBytes + FREE_SPACE_RESERVE_BYTES
         val availableBytes = StatFs(destinationDirectory.absolutePath)
             .availableBytes
-        check(availableBytes >= requiredBytes) { "存储空间不足，至少需要额外可用空间" }
+        check(availableBytes >= requiredBytes) { appString(R.string.ui_not_enough_storage_space_at_least_additional_free) }
     }
 
     private fun createForegroundInfo(
@@ -278,7 +280,7 @@ internal class SubtitleModelDownloadWorker(
             notificationManager.createNotificationChannel(
                 NotificationChannel(
                     NOTIFICATION_CHANNEL_ID,
-                    "日语字幕组件下载",
+                    appString(R.string.ui_japanese_subtitle_component_download),
                     NotificationManager.IMPORTANCE_LOW
                 )
             )
@@ -290,7 +292,7 @@ internal class SubtitleModelDownloadWorker(
         }
         val notification = NotificationCompat.Builder(applicationContext, NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle("日语字幕组件")
+            .setContentTitle(appString(R.string.ui_japanese_subtitle_component))
             .setContentText(stage)
             .setOnlyAlertOnce(true)
             .setOngoing(true)

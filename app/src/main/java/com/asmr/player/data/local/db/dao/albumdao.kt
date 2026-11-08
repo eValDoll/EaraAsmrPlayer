@@ -80,6 +80,9 @@ interface AlbumDao {
     @Update
     suspend fun updateAlbum(album: AlbumEntity)
 
+    @Query("UPDATE albums SET tagDetailsJson = :metadata WHERE id = :albumId")
+    suspend fun updateTagMetadata(albumId: Long, metadata: String)
+
     @Query("UPDATE albums SET displayTitle = :displayTitle WHERE id = :albumId")
     suspend fun updateAlbumDisplayTitle(albumId: Long, displayTitle: String)
 

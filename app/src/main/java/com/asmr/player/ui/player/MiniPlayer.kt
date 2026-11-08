@@ -1,5 +1,8 @@
 package com.asmr.player.ui.player
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.ui.common.formatStoredArtist
 
 import androidx.compose.animation.AnimatedContent
@@ -342,7 +345,7 @@ fun MiniPlayer(
                                     verticalArrangement = Arrangement.Center
                                 ) {
                                     Text(
-                                        text = metadata.title?.toString().orEmpty().ifBlank { "未播放" },
+                                        text = metadata.title?.toString().orEmpty().ifBlank { appString(R.string.ui_not_played) },
                                         modifier = Modifier
                                             .basicMarquee()
                                             // 走马灯只平移已录制的文字图层，避免逐帧让整张迷你栏和列表

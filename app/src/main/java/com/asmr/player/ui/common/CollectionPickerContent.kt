@@ -1,5 +1,8 @@
 package com.asmr.player.ui.common
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -90,7 +93,7 @@ internal fun CollectionPickerContent(
                                 disabledContentColor = colorScheme.textTertiary
                             )
                         ) {
-                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "返回")
+                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = appString(R.string.ui_back))
                         }
                     }
                     Text(
@@ -141,7 +144,7 @@ internal fun CollectionPickerContent(
                             disabledContentColor = colorScheme.textTertiary
                         )
                     ) {
-                        Text("创建")
+                        Text(androidx.compose.ui.res.stringResource(R.string.ui_create))
                     }
                 }
             }

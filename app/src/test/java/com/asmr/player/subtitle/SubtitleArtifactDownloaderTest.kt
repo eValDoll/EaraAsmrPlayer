@@ -15,7 +15,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
-class SubtitleArtifactDownloaderTest {
+class SubtitleArtifactDownloaderTest : com.asmr.player.LocalizedRobolectricTest() {
     @get:Rule
     val temporaryFolder = TemporaryFolder()
 

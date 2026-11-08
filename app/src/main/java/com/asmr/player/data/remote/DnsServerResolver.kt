@@ -1,5 +1,8 @@
 package com.asmr.player.data.remote
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.data.settings.normalizeDnsServerAddress
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
@@ -35,7 +38,7 @@ internal class DnsServerResolver private constructor(
         normalizeDnsServerAddress(hostname)?.let { address ->
             return listOf(InetAddress.getByName(address))
         }
-        if (servers.isEmpty()) throw UnknownHostException("没有可用的 DNS 服务器")
+        if (servers.isEmpty()) throw UnknownHostException(appString(R.string.ui_no_dns_servers_available))
 
         var lastFailure: Throwable? = null
         servers.forEach { server ->
@@ -51,7 +54,7 @@ internal class DnsServerResolver private constructor(
             lastFailure = ipv6.exceptionOrNull()
         }
 
-        throw UnknownHostException("DNS 解析失败：$hostname").apply {
+        throw UnknownHostException(appString(R.string.ui_dns_resolution_failed, hostname)).apply {
             lastFailure?.let(::initCause)
         }
     }
@@ -62,7 +65,7 @@ internal class DnsServerResolver private constructor(
         server: InetSocketAddress,
         depth: Int = 0
     ): List<InetAddress> {
-        if (depth >= MAX_CNAME_DEPTH) throw IOException("CNAME 跳转次数过多")
+        if (depth >= MAX_CNAME_DEPTH) throw IOException(appString(R.string.ui_too_many_cname_jumps))
         val queryId = ThreadLocalRandom.current().nextInt(0x10000)
         val query = buildQuery(hostname, recordType, queryId)
         var response = queryUdp(server, query)
@@ -100,7 +103,7 @@ internal class DnsServerResolver private constructor(
                 val input = DataInputStream(socket.getInputStream())
                 val responseLength = input.readUnsignedShort()
                 if (responseLength !in DNS_HEADER_BYTES..MAX_TCP_RESPONSE_BYTES) {
-                    throw IOException("DNS TCP 响应长度无效")
+                    throw IOException(appString(R.string.ui_dns_tcp_response_length_is_invalid))
                 }
                 ByteArray(responseLength).also(input::readFully)
             }
@@ -111,10 +114,10 @@ internal class DnsServerResolver private constructor(
         val asciiName = runCatching {
             IDN.toASCII(hostname.trim().trimEnd('.'), IDN.USE_STD3_ASCII_RULES)
         }.getOrElse {
-            throw UnknownHostException("域名格式无效")
+            throw UnknownHostException(appString(R.string.ui_domain_name_format_is_invalid))
         }
         if (asciiName.isBlank() || asciiName.length > MAX_DOMAIN_BYTES) {
-            throw UnknownHostException("域名格式无效")
+            throw UnknownHostException(appString(R.string.ui_domain_name_format_is_invalid))
         }
         return ByteArrayOutputStream().use { bytes ->
             DataOutputStream(bytes).use { output ->
@@ -127,7 +130,7 @@ internal class DnsServerResolver private constructor(
                 asciiName.split('.').forEach { label ->
                     val encoded = label.toByteArray(StandardCharsets.US_ASCII)
                     if (encoded.isEmpty() || encoded.size > MAX_LABEL_BYTES) {
-                        throw UnknownHostException("域名标签格式无效")
+                        throw UnknownHostException(appString(R.string.ui_domain_name_label_format_is_invalid))
                     }
                     output.writeByte(encoded.size)
                     output.write(encoded)
@@ -144,7 +147,7 @@ internal class DnsServerResolver private constructor(
         validateResponseHeader(response, queryId)
         val responseCode = readUnsignedShort(response, FLAGS_OFFSET) and RESPONSE_CODE_MASK
         if (responseCode == RESPONSE_CODE_NAME_ERROR) return ParsedResponse()
-        if (responseCode != RESPONSE_CODE_NO_ERROR) throw IOException("DNS 服务器返回错误码 $responseCode")
+        if (responseCode != RESPONSE_CODE_NO_ERROR) throw IOException(appString(R.string.ui_dns_server_returned_error_code, responseCode))
 
         val questionCount = readUnsignedShort(response, QUESTION_COUNT_OFFSET)
         val answerCount = readUnsignedShort(response, ANSWER_COUNT_OFFSET)
@@ -186,9 +189,9 @@ internal class DnsServerResolver private constructor(
 
     private fun validateResponseHeader(response: ByteArray, queryId: Int) {
         ensureAvailable(response, 0, DNS_HEADER_BYTES)
-        if (readUnsignedShort(response, 0) != queryId) throw IOException("DNS 响应 ID 不匹配")
+        if (readUnsignedShort(response, 0) != queryId) throw IOException(appString(R.string.ui_dns_response_id_mismatch))
         if (readUnsignedShort(response, FLAGS_OFFSET) and FLAG_RESPONSE == 0) {
-            throw IOException("收到的不是 DNS 响应")
+            throw IOException(appString(R.string.ui_received_something_other_than_a_dns_response))
         }
     }
 
@@ -211,9 +214,9 @@ internal class DnsServerResolver private constructor(
                     offset = ((length and POINTER_OFFSET_MASK) shl 8) or
                         (data[offset + 1].toInt() and 0xFF)
                     pointerCount += 1
-                    if (pointerCount > MAX_POINTER_DEPTH) throw IOException("DNS 名称压缩指针异常")
+                    if (pointerCount > MAX_POINTER_DEPTH) throw IOException(appString(R.string.ui_dns_name_compression_pointer_exception))
                 }
-                length > MAX_LABEL_BYTES -> throw IOException("DNS 名称标签长度无效")
+                length > MAX_LABEL_BYTES -> throw IOException(appString(R.string.ui_dns_name_tag_length_is_invalid))
                 else -> {
                     ensureAvailable(data, offset + 1, length)
                     labels += String(data, offset + 1, length, StandardCharsets.US_ASCII)
@@ -231,7 +234,7 @@ internal class DnsServerResolver private constructor(
 
     private fun ensureAvailable(data: ByteArray, offset: Int, length: Int) {
         if (offset < 0 || length < 0 || offset > data.size - length) {
-            throw IOException("DNS 响应格式无效")
+            throw IOException(appString(R.string.ui_dns_response_format_is_invalid))
         }
     }
 

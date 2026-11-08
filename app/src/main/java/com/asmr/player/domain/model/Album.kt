@@ -14,6 +14,8 @@ data class Album(
     val circle: String = "",
     val cv: String = "",
     val tags: List<String> = emptyList(),
+    val tagDetails: List<AlbumTag>? = emptyList(),
+    val metadataLocale: String? = null,
     val coverUrl: String = "",
     val coverPath: String = "",
     val manualCoverPath: String = "",

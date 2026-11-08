@@ -1,5 +1,8 @@
 package com.asmr.player.data.local.library
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.room.withTransaction
 import com.asmr.player.data.local.db.AppDatabase
 import com.asmr.player.data.local.db.dao.AlbumDao
@@ -22,7 +25,7 @@ internal suspend fun bindLocalAlbumWorkNumber(
     workno: String,
 ): LocalAlbumWorkBindingResult {
     val normalized = DlsiteWorkNo.normalizeWorkNo(workno)
-    require(normalized.isNotBlank()) { "无效的作品编号" }
+    require(normalized.isNotBlank()) { appString(R.string.ui_invalid_work_number) }
     return database.withTransaction {
         val albumDao = database.albumDao()
         val previous = albumDao.getAlbumById(albumId)

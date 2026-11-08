@@ -35,6 +35,9 @@ class AlbumTagRepository @Inject constructor(private val database: AppDatabase) 
         val userTagsCsv = database.tagDao().getAlbumTagsCsvOnce(albumId, TagSource.USER).orEmpty()
         val combinedTagsCsv = buildString {
             append(entity.tags)
+            com.asmr.player.domain.model.AlbumTagCodec.decode(entity.tagDetailsJson).forEach { tag ->
+                tag.names.orEmpty().values.forEach { append(','); append(it) }
+            }
             if (userTagsCsv.isNotBlank()) {
                 if (isNotEmpty() && last() != ',') append(',')
                 append(userTagsCsv)

@@ -112,6 +112,7 @@ class FinalizeDownloadTaskWorker(context: Context, parameters: WorkerParameters)
                     albumCircle = task.albumCircle.ifBlank { albumCircle },
                     albumCv = task.albumCv.ifBlank { albumCv },
                     albumTagsCsv = task.albumTagsCsv.ifBlank { albumTagsCsv },
+                    albumTagDetailsJson = task.albumTagDetailsJson,
                     albumCoverUrl = task.albumCoverUrl.ifBlank { albumCoverUrl },
                     albumDescription = task.albumDescription.ifBlank { albumDescription },
                     albumWorkId = task.albumWorkId.ifBlank { albumWorkId },

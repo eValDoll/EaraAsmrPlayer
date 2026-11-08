@@ -1,5 +1,8 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -171,7 +174,7 @@ fun LibraryFilterSheet(
         ) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 FilterSection(
-                    title = "来源",
+                    title = appString(R.string.ui_source_c63f79),
                     subtitle = sourceLabel(normalizedDraftSpec.source)
                 ) {
                     SourceSelector(
@@ -185,13 +188,13 @@ fun LibraryFilterSheet(
 
             item {
                 FilterSection(
-                    title = "标签",
+                    title = appString(R.string.ui_label),
                     subtitle = selectedCountText(normalizedDraftSpec.includeTagIds.size)
                 ) {
                     FilterSearchField(
                         value = tagSearch,
                         onValueChange = { tagSearch = it },
-                        placeholder = "搜索标签"
+                        placeholder = appString(R.string.ui_search_tags)
                     )
                     val orderedTags = remember(tags, tagSearch, normalizedDraftSpec.includeTagIds) {
                         tags.filterByTagQuery(tagSearch)
@@ -202,7 +205,7 @@ fun LibraryFilterSheet(
                             )
                     }
                     if (orderedTags.isEmpty()) {
-                        EmptyFilterHint(text = "没有匹配的标签")
+                        EmptyFilterHint(text = appString(R.string.ui_no_matching_tags))
                     } else {
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -226,13 +229,13 @@ fun LibraryFilterSheet(
 
             item {
                 FilterSection(
-                    title = "社团",
+                    title = appString(R.string.ui_circle),
                     subtitle = selectedCountText(normalizedDraftSpec.circles.size)
                 ) {
                     FilterSearchField(
                         value = circleSearch,
                         onValueChange = { circleSearch = it },
-                        placeholder = "搜索社团"
+                        placeholder = appString(R.string.ui_search_communities)
                     )
                     val orderedCircles = remember(circles, circleSearch, normalizedDraftSpec.circles) {
                         circles.filterByTextQuery(circleSearch)
@@ -242,7 +245,7 @@ fun LibraryFilterSheet(
                             )
                     }
                     if (orderedCircles.isEmpty()) {
-                        EmptyFilterHint(text = "没有匹配的社团")
+                        EmptyFilterHint(text = appString(R.string.ui_no_matching_groups))
                     } else {
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -271,7 +274,7 @@ fun LibraryFilterSheet(
                     FilterSearchField(
                         value = cvSearch,
                         onValueChange = { cvSearch = it },
-                        placeholder = "搜索 CV"
+                        placeholder = appString(R.string.ui_search_cv)
                     )
                     val orderedCvs = remember(cvs, cvSearch, normalizedDraftSpec.cvs) {
                         cvs.filterByTextQuery(cvSearch)
@@ -281,7 +284,7 @@ fun LibraryFilterSheet(
                             )
                     }
                     if (orderedCvs.isEmpty()) {
-                        EmptyFilterHint(text = "没有匹配的 CV")
+                        EmptyFilterHint(text = appString(R.string.ui_no_matching_cv))
                     } else {
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -308,7 +311,7 @@ fun LibraryFilterSheet(
             if (presets.isEmpty()) {
                 item {
                     EmptyFilterHint(
-                        text = "暂无筛选预设",
+                        text = appString(R.string.ui_no_filter_presets_yet),
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
                 }
@@ -336,7 +339,7 @@ fun LibraryFilterSheet(
                             },
                             trailingContent = {
                                 IconButton(onClick = { onDeletePreset(preset.id) }) {
-                                    Icon(imageVector = Icons.Rounded.Delete, contentDescription = "删除预设")
+                                    Icon(imageVector = Icons.Rounded.Delete, contentDescription = appString(R.string.ui_delete_preset))
                                 }
                             }
                         )
@@ -356,11 +359,11 @@ fun LibraryFilterSheet(
     if (showSavePreset) {
         FlatTextFieldDialog(
             onDismissRequest = { showSavePreset = false },
-            message = "请输入筛选预设名称。",
+            message = appString(R.string.ui_please_enter_a_filter_preset_name),
             value = presetName,
             onValueChange = { presetName = it },
-            placeholder = "请输入预设名称",
-            confirmText = "保存",
+            placeholder = appString(R.string.ui_please_enter_the_default_name),
+            confirmText = appString(R.string.ui_save),
             confirmEnabled = presetName.trim().isNotBlank(),
             onConfirm = {
                 val name = presetName.trim()
@@ -400,7 +403,7 @@ private fun LibraryFilterHeader(
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "筛选本地库",
+                    text = appString(R.string.ui_filter_local_library),
                     color = colorScheme.textPrimary,
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                     maxLines = 1,
@@ -409,7 +412,7 @@ private fun LibraryFilterHeader(
                 if (isDirty) {
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "未应用",
+                        text = appString(R.string.ui_not_applied),
                         color = colorScheme.primary,
                         style = MaterialTheme.typography.labelSmall
                     )
@@ -426,14 +429,14 @@ private fun LibraryFilterHeader(
         IconButton(onClick = onOpenTagManager) {
             Icon(
                 imageVector = Icons.Rounded.LocalOffer,
-                contentDescription = "管理标签",
+                contentDescription = appString(R.string.ui_manage_tags),
                 tint = colorScheme.primary
             )
         }
         IconButton(onClick = onClose) {
             Icon(
                 imageVector = Icons.Rounded.Close,
-                contentDescription = "关闭筛选",
+                contentDescription = appString(R.string.ui_turn_off_filtering),
                 tint = colorScheme.textSecondary
             )
         }
@@ -495,10 +498,10 @@ private fun SourceSelector(
 ) {
     val normalized = current.takeUnless { it == LibrarySourceFilter.Both }
     val options = listOf(
-        null to "不限",
-        LibrarySourceFilter.LocalOnly to "仅本地",
-        LibrarySourceFilter.DownloadOnly to "仅下载",
-        LibrarySourceFilter.LocalAndDownload to "本地+下载"
+        null to appString(R.string.ui_no_limit),
+        LibrarySourceFilter.LocalOnly to appString(R.string.ui_local_only),
+        LibrarySourceFilter.DownloadOnly to appString(R.string.ui_download_only),
+        LibrarySourceFilter.LocalAndDownload to appString(R.string.ui_local_download)
     )
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -667,13 +670,13 @@ private fun PresetSectionHeader(
         Icon(imageVector = Icons.Rounded.Bookmark, contentDescription = null, tint = colorScheme.primary)
         Spacer(modifier = Modifier.width(8.dp))
         Text(
-            text = "预设",
+            text = appString(R.string.ui_default),
             color = colorScheme.textPrimary,
             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
             modifier = Modifier.weight(1f)
         )
         TextButton(onClick = onSavePreset) {
-            Text("保存草稿")
+            Text(androidx.compose.ui.res.stringResource(R.string.ui_save_draft))
         }
     }
 }
@@ -720,7 +723,7 @@ private fun LibraryFilterBottomBar(
                 onClick = onClose,
                 modifier = Modifier.weight(1f)
             ) {
-                Text("取消")
+                Text(androidx.compose.ui.res.stringResource(R.string.ui_cancel))
             }
             FilledTonalButton(
                 onClick = onApply,
@@ -736,7 +739,7 @@ private fun LibraryFilterBottomBar(
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("应用")
+                Text(androidx.compose.ui.res.stringResource(R.string.ui_application))
             }
         }
     }
@@ -779,27 +782,27 @@ private fun List<String>.filterByTextQuery(query: String): List<String> {
 }
 
 private fun selectedCountText(count: Int): String? {
-    return if (count > 0) "已选 $count" else null
+    return if (count > 0) appString(R.string.ui_selected_f34565, count) else null
 }
 
 private fun sourceLabel(source: LibrarySourceFilter?): String {
     return when (source) {
-        LibrarySourceFilter.LocalOnly -> "仅本地"
-        LibrarySourceFilter.DownloadOnly -> "仅下载"
-        LibrarySourceFilter.LocalAndDownload -> "本地+下载"
+        LibrarySourceFilter.LocalOnly -> appString(R.string.ui_local_only)
+        LibrarySourceFilter.DownloadOnly -> appString(R.string.ui_download_only)
+        LibrarySourceFilter.LocalAndDownload -> appString(R.string.ui_local_download)
         LibrarySourceFilter.Both,
-        null -> "不限"
+        null -> appString(R.string.ui_no_limit)
     }
 }
 
 private fun buildFilterSummary(spec: LibraryQuerySpec): String {
-    if (!spec.hasActiveFilters) return "未选择筛选条件"
+    if (!spec.hasActiveFilters) return appString(R.string.ui_no_filter_selected)
     val parts = ArrayList<String>(4)
     spec.source?.takeUnless { it == LibrarySourceFilter.Both }?.let { parts.add(sourceLabel(it)) }
-    if (spec.includeTagIds.isNotEmpty()) parts.add("标签 ${spec.includeTagIds.size}")
-    if (spec.circles.isNotEmpty()) parts.add("社团 ${spec.circles.size}")
+    if (spec.includeTagIds.isNotEmpty()) parts.add(appString(R.string.ui_tag, spec.includeTagIds.size))
+    if (spec.circles.isNotEmpty()) parts.add(appString(R.string.ui_society, spec.circles.size))
     if (spec.cvs.isNotEmpty()) parts.add("CV ${spec.cvs.size}")
-    if (spec.excludeTagIds.isNotEmpty()) parts.add("排除标签 ${spec.excludeTagIds.size}")
+    if (spec.excludeTagIds.isNotEmpty()) parts.add(appString(R.string.ui_exclude_tag, spec.excludeTagIds.size))
     return parts.joinToString(" · ")
 }
 

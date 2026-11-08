@@ -1,5 +1,8 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.data.remote.crawler.AlbumResourceSource
 
 import com.asmr.player.ui.common.AudioMetadataLine
@@ -183,15 +186,15 @@ private fun DlsiteGalleryAwaitingPreview(
             verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = "样图未加载",
+                text = appString(R.string.ui_sample_image_not_loaded),
                 style = MaterialTheme.typography.titleSmall,
                 color = colorScheme.textPrimary,
                 fontWeight = FontWeight.SemiBold
             )
             Text(
                 text = galleryCount
-                    ?.let { count -> "共 $count 张 · 点击右上角“预览”后加载到本地" }
-                    ?: "获取到样图链接后，可点击右上角“预览”加载",
+                    ?.let { count -> appString(R.string.ui_a_total_of_photos_click_preview_in_the, count) }
+                    ?: appString(R.string.ui_after_obtaining_the_sample_link_you_can_click),
                 modifier = Modifier.padding(top = 6.dp),
                 style = MaterialTheme.typography.bodySmall,
                 color = colorScheme.textSecondary,
@@ -1180,14 +1183,14 @@ internal fun AlbumDlsiteInfoBreadcrumbTab(
         item(key = "dlsite-header") { header() }
         item(key = "dlsite-one-header") {
             AlbumDetailSectionHeading(
-                title = if (resourceSource == AlbumResourceSource.JapaneseAsmr) "JP-ASMR" else if (asmrOneTree.isNotEmpty()) "ONE（已收录）" else "ONE",
+                title = if (resourceSource == AlbumResourceSource.JapaneseAsmr) "JP-ASMR" else if (asmrOneTree.isNotEmpty()) appString(R.string.ui_one_included) else "ONE",
                 modifier = dlsiteAnimatedSectionModifier(
                     Modifier.fillMaxWidth().padding(start = AlbumDetailHorizontalPadding, end = AlbumDetailHorizontalPadding, top = 8.dp, bottom = 0.dp),
                     animateIntro = animateIntro
                 ),
                 actions = {
                     com.asmr.player.ui.settings.SettingsDropdownSelector(
-                        label = "资源站点", value = resourceSource.name,
+                        label = appString(R.string.ui_source), value = resourceSource.name,
                         options = AlbumResourceSource.entries.associate { it.name to it.label },
                         onSelect = { name -> onResourceSourceChange(AlbumResourceSource.valueOf(name)) },
                         modifier = Modifier.widthIn(min = 154.dp),
@@ -1200,7 +1203,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTab(
                         enabled = !isLoadingAsmrOne,
                         colors = sectionActionIconColors
                     ) {
-                        Icon(Icons.Rounded.Refresh, contentDescription = "刷新")
+                        Icon(Icons.Rounded.Refresh, contentDescription = appString(R.string.ui_refresh))
                     }
                 }
             )
@@ -1341,7 +1344,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTab(
                         }
                         DirectoryTreePanelState.Loading -> DlsiteDirectoryLoadingPanel()
                         DirectoryTreePanelState.Empty -> DlsiteSectionEmptyState(
-                            text = "${if (resourceSource == AlbumResourceSource.JapaneseAsmr) "Japanese ASMR" else "ONE"} 暂未收录",
+                            text = appString(R.string.ui_not_available_on_yet, if (resourceSource == AlbumResourceSource.JapaneseAsmr) "Japanese ASMR" else "ONE"),
                             artworkKind = DlsiteEmptyArtworkKind.One,
                             modifier = Modifier
                         )
@@ -1375,7 +1378,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTab(
                             ),
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                         ) {
-                            Text("预览")
+                            Text(androidx.compose.ui.res.stringResource(R.string.ui_preview))
                         }
                     }
                 )
@@ -1390,7 +1393,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTab(
                         DlsiteContentKind.Loading -> DlsiteGalleryAwaitingPreview(galleryCount = null)
                         DlsiteContentKind.Empty -> {
                             DlsiteSectionEmptyState(
-                                text = "暂无样图",
+                                text = appString(R.string.ui_no_sample_picture_yet),
                                 artworkKind = DlsiteEmptyArtworkKind.Gallery,
                                 modifier = Modifier.then(dlsiteAnimatedSectionModifier(Modifier, animateIntro))
                             )
@@ -1438,7 +1441,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTab(
         }
         item(key = "dlsite-trial-header") {
             AlbumDetailSectionHeading(
-                title = "试听 / 试看",
+                title = appString(R.string.ui_listen_preview),
                 modifier = dlsiteAnimatedSectionModifier(
                     Modifier.fillMaxWidth().padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp),
                     animateIntro = animateIntro
@@ -1449,14 +1452,14 @@ internal fun AlbumDlsiteInfoBreadcrumbTab(
                         enabled = !isLoading && !isLoadingTrial,
                         colors = sectionActionIconColors
                     ) {
-                        Icon(Icons.Rounded.Refresh, contentDescription = "刷新")
+                        Icon(Icons.Rounded.Refresh, contentDescription = appString(R.string.ui_refresh))
                     }
                     IconButton(
                         onClick = onDownloadTrial,
                         enabled = trialDownloadEnabled,
                         colors = sectionActionIconColors
                     ) {
-                        Icon(Icons.Rounded.Download, contentDescription = "下载")
+                        Icon(Icons.Rounded.Download, contentDescription = appString(R.string.ui_download))
                     }
                 }
             )
@@ -1480,7 +1483,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTab(
             DlsiteContentKind.Empty -> {
                 item(key = "dlsite-trial-content") {
                     DlsiteSectionEmptyState(
-                        text = "暂无试听 / 试看",
+                        text = appString(R.string.ui_no_audition_preview_yet),
                         artworkKind = DlsiteEmptyArtworkKind.Trial,
                         modifier = dlsiteAnimatedSectionModifier(
                             Modifier.dlsiteContentFade(trialFadeState),
@@ -1617,9 +1620,9 @@ internal fun AlbumDlsitePlayBreadcrumbTab(
     if (!loggedIn) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("需要先登录 DLsite 才能使用已购播放/下载")
+                Text(androidx.compose.ui.res.stringResource(R.string.ui_you_need_to_log_in_to_dlsite_before))
                 Spacer(modifier = Modifier.height(12.dp))
-                Button(onClick = onOpenLogin) { Text("去登录") }
+                Button(onClick = onOpenLogin) { Text(androidx.compose.ui.res.stringResource(R.string.ui_go_to_login)) }
             }
         }
         return
@@ -1697,12 +1700,12 @@ internal fun AlbumDlsitePlayBreadcrumbTab(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "已购内容",
+                    text = appString(R.string.ui_purchased_content),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.weight(1f))
-                OutlinedButton(onClick = onOpenLogin) { Text("登录 / 切换账号") }
+                OutlinedButton(onClick = onOpenLogin) { Text(androidx.compose.ui.res.stringResource(R.string.ui_log_in_switch_account)) }
             }
         }
 
@@ -1724,13 +1727,13 @@ internal fun AlbumDlsitePlayBreadcrumbTab(
                         modifier = Modifier.fillMaxWidth().height(220.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("缺少作品编号，无法加载")
+                        Text(androidx.compose.ui.res.stringResource(R.string.ui_missing_work_number_unable_to_load))
                     }
                     DirectoryTreePanelState.Empty -> Box(
                         modifier = Modifier.fillMaxWidth().height(220.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("暂无可播放资源")
+                        Text(androidx.compose.ui.res.stringResource(R.string.ui_no_playback_resources_available_yet))
                     }
                     DirectoryTreePanelState.Loading -> Box(
                         modifier = Modifier.fillMaxWidth().height(220.dp),

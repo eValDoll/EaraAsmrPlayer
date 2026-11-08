@@ -2,7 +2,7 @@ package com.asmr.player
 
 import android.os.Bundle
 import android.view.KeyEvent
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -86,7 +86,7 @@ private enum class OverlaySheet {
 }
 
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
     @Inject
     lateinit var messageManager: MessageManager
 
@@ -106,6 +106,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.asmr.player.i18n.AppLanguage.refresh()
         lifecycleScope.launch {
             initialThemeBootstrapPreferences = settingsDataStore.loadThemeBootstrapPreferences()
             if (isFinishing || isDestroyed) return@launch

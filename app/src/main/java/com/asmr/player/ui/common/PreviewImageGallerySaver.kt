@@ -1,5 +1,8 @@
 package com.asmr.player.ui.common
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.content.ContentValues
 import android.content.Context
 import android.media.MediaScannerConnection
@@ -90,7 +93,7 @@ internal suspend fun savePreviewImageToGallery(
     httpClient: OkHttpClient
 ): Uri = withContext(Dispatchers.IO) {
     val source = resolvePreviewImageSaveSource(request)
-    if (source.location.isBlank()) throw IOException("图片来源为空")
+    if (source.location.isBlank()) throw IOException(appString(R.string.ui_image_source_is_empty))
     withPreviewImageInput(context, source, httpClient) { input, sourceMimeType ->
         val mimeType = normalizeImageMimeType(sourceMimeType)
             ?: imageMimeTypeForLocation(source.location)
@@ -115,7 +118,7 @@ internal suspend fun preparePreviewImageForExternalOpen(
     contentUriForFile: (Context, File) -> Uri = ::previewImageContentUriForFile
 ): PreparedExternalPreviewImage = withContext(Dispatchers.IO) {
     val source = resolvePreviewImageSaveSource(request)
-    if (source.location.isBlank()) throw IOException("图片来源为空")
+    if (source.location.isBlank()) throw IOException(appString(R.string.ui_image_source_is_empty))
 
     when {
         source.location.startsWith("content://", ignoreCase = true) -> {
@@ -128,7 +131,7 @@ internal suspend fun preparePreviewImageForExternalOpen(
             )
         }
         source.location.startsWith("file://", ignoreCase = true) -> {
-            val path = Uri.parse(source.location).path ?: throw IOException("图片路径无效")
+            val path = Uri.parse(source.location).path ?: throw IOException(appString(R.string.ui_image_path_is_invalid))
             prepareLocalPreviewImageForExternalOpen(context, File(path), contentUriForFile)
         }
         source.location.startsWith("http://", ignoreCase = true) ||
@@ -169,7 +172,7 @@ private fun stageRemotePreviewImage(
         )
         val cacheDirectory = File(context.cacheDir, PREVIEW_IMAGE_SHARE_CACHE_DIRECTORY)
         if (!cacheDirectory.isDirectory && !cacheDirectory.mkdirs()) {
-            throw IOException("无法创建图片分享缓存")
+            throw IOException(appString(R.string.ui_unable_to_create_image_sharing_cache))
         }
         cleanupExpiredPreviewImageShares(cacheDirectory)
 
@@ -192,7 +195,7 @@ private fun stageRemotePreviewImage(
         try {
             FileOutputStream(temporary).use { output -> input.copyTo(output) }
             if (target.exists() && !target.delete()) {
-                throw IOException("无法更新图片分享缓存")
+                throw IOException(appString(R.string.ui_unable_to_update_image_sharing_cache))
             }
             if (!temporary.renameTo(target)) {
                 temporary.copyTo(target, overwrite = true)
@@ -239,8 +242,8 @@ private fun <T> withPreviewImageInput(
             val requestBuilder = Request.Builder().url(location)
             source.headers.forEach { (name, value) -> requestBuilder.header(name, value) }
             httpClient.newCall(requestBuilder.build()).execute().use { response ->
-                if (!response.isSuccessful) throw IOException("图片下载失败：HTTP ${response.code}")
-                val body = response.body ?: throw IOException("图片下载结果为空")
+                if (!response.isSuccessful) throw IOException(appString(R.string.ui_image_download_failed_http, response.code))
+                val body = response.body ?: throw IOException(appString(R.string.ui_image_download_result_is_empty))
                 body.byteStream().use { input ->
                     block(input, body.contentType()?.toString())
                 }
@@ -249,11 +252,11 @@ private fun <T> withPreviewImageInput(
         location.startsWith("content://", ignoreCase = true) -> {
             val uri = Uri.parse(location)
             val input = context.contentResolver.openInputStream(uri)
-                ?: throw IOException("无法读取图片")
+                ?: throw IOException(appString(R.string.ui_unable_to_read_image))
             input.use { block(it, context.contentResolver.getType(uri)) }
         }
         location.startsWith("file://", ignoreCase = true) -> {
-            val path = Uri.parse(location).path ?: throw IOException("图片路径无效")
+            val path = Uri.parse(location).path ?: throw IOException(appString(R.string.ui_image_path_is_invalid))
             FileInputStream(File(path)).use { block(it, imageMimeTypeForLocation(path)) }
         }
         else -> {
@@ -276,10 +279,10 @@ private fun savePreviewImageWithMediaStore(
         put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/Eara")
         put(MediaStore.Images.Media.IS_PENDING, 1)
     }
-    val uri = resolver.insert(collection, values) ?: throw IOException("无法创建相册文件")
+    val uri = resolver.insert(collection, values) ?: throw IOException(appString(R.string.ui_unable_to_create_album_file))
     return try {
         resolver.openOutputStream(uri, "w")?.use { output -> input.copyTo(output) }
-            ?: throw IOException("无法写入相册文件")
+            ?: throw IOException(appString(R.string.ui_unable_to_write_to_album_file))
         resolver.update(
             uri,
             ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) },
@@ -304,7 +307,7 @@ private fun savePreviewImageToLegacyPictures(
         Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
         "Eara"
     )
-    if (!directory.isDirectory && !directory.mkdirs()) throw IOException("无法创建相册目录")
+    if (!directory.isDirectory && !directory.mkdirs()) throw IOException(appString(R.string.ui_unable_to_create_album_directory))
     val target = uniqueLegacyGalleryFile(directory, displayName)
     try {
         FileOutputStream(target).use { output -> input.copyTo(output) }

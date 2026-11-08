@@ -1,5 +1,8 @@
 package com.asmr.player.ui.common
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -144,7 +147,7 @@ fun FlatTextFieldDialog(
         onDismissRequest = onDismissRequest,
         modifier = modifier,
         actions = listOf(
-            FlatDialogAction("取消", onDismissRequest),
+            FlatDialogAction(appString(R.string.ui_cancel), onDismissRequest),
             FlatDialogAction(
                 text = confirmText,
                 onClick = onConfirm,

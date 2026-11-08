@@ -1,5 +1,8 @@
 package com.asmr.player.ui.playlists
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.ui.common.formatStoredCv
 import com.asmr.player.util.Formatting
 import androidx.compose.foundation.rememberScrollState
@@ -197,11 +200,11 @@ internal fun PlaylistDetailContent(
     val draggedItemElevation = if (colorScheme.isDark) 10.dp else 14.dp
     val isFavorites = title == PlaylistRepository.PLAYLIST_FAVORITES
     val emptyHeadline = if (isFavorites) {
-        "收藏的内容会在这里出现"
+        appString(R.string.ui_your_favorites_will_appear_here)
     } else {
-        "这个列表还没有内容"
+        appString(R.string.ui_this_list_has_no_content_yet)
     }
-    val emptySectionTitle = if (isFavorites) "我的收藏" else title.ifBlank { "我的列表" }
+    val emptySectionTitle = if (isFavorites) appString(R.string.ui_favorites) else title.ifBlank { appString(R.string.ui_playlists) }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -306,11 +309,11 @@ internal fun PlaylistDetailContent(
     pendingRemoveItem?.let { item ->
         FlatActionDialog(
             onDismissRequest = { pendingRemoveItem = null },
-            message = "确定从「$title」移除“${item.title.ifBlank { "未命名" }}”吗？",
+            message = appString(R.string.ui_are_you_sure_you_want_to_remove_from, title, item.title.ifBlank { appString(R.string.ui_unnamed) }),
             actions = listOf(
-                FlatDialogAction("取消", onClick = { pendingRemoveItem = null }),
+                FlatDialogAction(appString(R.string.ui_cancel), onClick = { pendingRemoveItem = null }),
                 FlatDialogAction(
-                    text = "移除",
+                    text = appString(R.string.ui_remove),
                     tone = FlatDialogActionTone.Danger,
                     onClick = {
                         pendingRemoveItem = null
@@ -356,28 +359,28 @@ private fun PlaylistItemRow(
         val actions = remember(onPlay, onMoveToTop, onMoveToBottom, onRemove) {
             listOf(
                 AudioItemMenuAction(
-                    label = "播放",
+                    label = appString(R.string.ui_play),
                     onClick = onPlay
                 ),
                 AudioItemMenuAction(
-                    label = "移至顶部",
+                    label = appString(R.string.ui_move_to_top),
                     onClick = onMoveToTop,
                     testTag = PLAYLIST_DETAIL_MOVE_TOP_MENU_ITEM_TAG
                 ),
                 AudioItemMenuAction(
-                    label = "移至末尾",
+                    label = appString(R.string.ui_move_to_end),
                     onClick = onMoveToBottom,
                     testTag = PLAYLIST_DETAIL_MOVE_BOTTOM_MENU_ITEM_TAG
                 ),
                 AudioItemMenuAction(
-                    label = "移除",
+                    label = appString(R.string.ui_remove),
                     onClick = onRemove,
                     showDividerBefore = true
                 )
             )
         }
         AudioItemRow(
-            title = item.title.ifBlank { "未命名" },
+            title = item.title.ifBlank { appString(R.string.ui_unnamed) },
             sourcePath = item.uri.ifBlank { item.mediaId },
             loadAudioMetadata = loadAudioMetadata && !item.isVideo,
             subtitle = cvText,

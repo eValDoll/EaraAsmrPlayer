@@ -24,7 +24,7 @@ import org.robolectric.annotation.Config
 import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [34])
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [34])
 class AudioMetadataPersistenceTest {
     private val hq = AudioTechnicalMetadata(44100, 320000, 2, 0, "audio/mpeg", 123.0)
     private val sq = AudioTechnicalMetadata(48000, 0, 2, 24, "audio/flac", 234.0)
@@ -149,7 +149,7 @@ class AudioMetadataPersistenceTest {
         try {
             block {
                 Room.databaseBuilder(context, AppDatabase::class.java, name)
-                    .addMigrations(AppDatabaseMigrations.MIGRATION_33_34, AppDatabaseMigrations.MIGRATION_34_35, AppDatabaseMigrations.MIGRATION_35_36, AppDatabaseMigrations.MIGRATION_36_37)
+                    .addMigrations(AppDatabaseMigrations.MIGRATION_33_34, AppDatabaseMigrations.MIGRATION_34_35, AppDatabaseMigrations.MIGRATION_35_36, AppDatabaseMigrations.MIGRATION_36_37, AppDatabaseMigrations.MIGRATION_37_38)
                     .allowMainThreadQueries()
                     .build()
             }

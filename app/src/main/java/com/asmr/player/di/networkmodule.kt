@@ -1,5 +1,8 @@
 package com.asmr.player.di
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.BuildConfig
 import com.asmr.player.data.local.DeviceIdentityStore
 import com.asmr.player.data.remote.api.AsmrOneApi
@@ -142,10 +145,10 @@ object NetworkModule {
                         messageManager.showError(ASMR_ONE_SITE_FAILURE_MESSAGE)
                     } else {
                         when (response.code) {
-                            401 -> messageManager.showError("认证已过期，请重新登录")
-                            403 -> messageManager.showError("访问被拒绝")
+                            401 -> messageManager.showError(appString(R.string.ui_the_certification_has_expired_please_log_in_again))
+                            403 -> messageManager.showError(appString(R.string.ui_access_denied))
                             404 -> {} // 忽略 404
-                            500, 502, 503, 504 -> messageManager.showError("服务器开小差了，请稍后重试")
+                            500, 502, 503, 504 -> messageManager.showError(appString(R.string.ui_the_server_is_out_of_service_please_try))
                             else -> {}
                         }
                     }
@@ -159,7 +162,7 @@ object NetworkModule {
                         if (isAsmrOneRequest) {
                             ASMR_ONE_SITE_FAILURE_MESSAGE
                         } else {
-                            "网络连接失败，请检查网络"
+                            appString(R.string.ui_network_connection_failed_please_check_the_network)
                         }
                     )
                 }

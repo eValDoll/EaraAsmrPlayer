@@ -1,5 +1,8 @@
 package com.asmr.player.ui.groups
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.ui.common.LocalMainHeaderPadding
 
 import androidx.compose.foundation.MutatePriority
@@ -131,8 +134,8 @@ fun AlbumGroupsScreen(
             ) {
                 if (groups.isEmpty()) {
                     EaraBrandedEmptyState(
-                        sectionTitle = "我的分组",
-                        headline = "还没有创建分组",
+                        sectionTitle = appString(R.string.ui_groups),
+                        headline = appString(R.string.ui_no_group_has_been_created_yet),
                         sectionIcon = Icons.Rounded.Folder,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(top = LocalMainHeaderPadding.current, bottom = LocalBottomOverlayPadding.current + 88.dp)
@@ -235,7 +238,7 @@ private fun AlbumGroupRow(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "共 ${group.albumCount} 张专辑 · ${group.itemCount} 首",
+                    text = appString(R.string.ui_total_albums_songs, group.albumCount, group.itemCount),
                     style = MaterialTheme.typography.bodySmall,
                     color = colorScheme.textTertiary
                 )
@@ -262,11 +265,11 @@ private fun AlbumGroupRow(
     if (showDeleteConfirm) {
         FlatActionDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            message = "确定要删除分组“${group.name}”吗？此操作不可撤销。",
+            message = appString(R.string.ui_are_you_sure_you_want_to_delete_group, group.name),
             actions = listOf(
-                FlatDialogAction("取消", onClick = { showDeleteConfirm = false }),
+                FlatDialogAction(appString(R.string.ui_cancel), onClick = { showDeleteConfirm = false }),
                 FlatDialogAction(
-                    text = "删除",
+                    text = appString(R.string.ui_delete),
                     tone = FlatDialogActionTone.Danger,
                     onClick = {
                         showDeleteConfirm = false
@@ -298,11 +301,11 @@ private fun CreateAlbumGroupDialog(
 
     FlatTextFieldDialog(
         onDismissRequest = onDismiss,
-        message = "请输入新分组名称。",
+        message = appString(R.string.ui_please_enter_a_new_group_name),
         value = name,
         onValueChange = { name = it },
-        placeholder = "分组名称",
-        confirmText = "创建",
+        placeholder = appString(R.string.ui_group_name),
+        confirmText = appString(R.string.ui_create),
         confirmEnabled = name.trim().isNotBlank(),
         onConfirm = { onCreate(name.trim()) },
     )
@@ -318,11 +321,11 @@ private fun RenameAlbumGroupDialog(
 
     FlatTextFieldDialog(
         onDismissRequest = onDismiss,
-        message = "请输入新的分组名称。",
+        message = appString(R.string.ui_please_enter_a_new_group_name_d88c11),
         value = name,
         onValueChange = { name = it },
-        placeholder = "分组名称",
-        confirmText = "确定",
+        placeholder = appString(R.string.ui_group_name),
+        confirmText = appString(R.string.ui_ok),
         confirmEnabled = name.trim().isNotBlank(),
         onConfirm = { onRename(name.trim()) },
     )

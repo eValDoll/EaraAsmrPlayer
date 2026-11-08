@@ -38,7 +38,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [33], qualifiers = "w500dp-h900dp-mdpi")
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [33], qualifiers = "w500dp-h900dp-mdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class PreparedParagraphAdoptionTest {
     @get:Rule val compose = createEaraComposeRule()

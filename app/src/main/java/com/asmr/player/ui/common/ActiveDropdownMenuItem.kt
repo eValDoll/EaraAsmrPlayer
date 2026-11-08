@@ -1,5 +1,8 @@
 package com.asmr.player.ui.common
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -56,7 +59,7 @@ fun ActiveDropdownMenuItem(
             .then(if (testTag != null) Modifier.testTag(testTag) else Modifier)
             .semantics {
                 this.selected = selected
-                stateDescription = if (selected) "当前选项" else "可选项"
+                stateDescription = if (selected) appString(R.string.ui_current_options) else appString(R.string.ui_optional)
             }
     )
 }

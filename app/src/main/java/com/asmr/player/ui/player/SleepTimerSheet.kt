@@ -1,5 +1,8 @@
 package com.asmr.player.ui.player
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -62,9 +65,9 @@ fun SleepTimerSheetContent(
 
     val isActive = remainingMs > 0L
     val remainingText = if (isActive) {
-        "剩余 ${formatSleepTimerRemaining(remainingMs)}"
+        appString(R.string.ui_remaining, formatSleepTimerRemaining(remainingMs))
     } else {
-        "未设置定时关闭"
+        appString(R.string.ui_no_scheduled_shutdown_is_set)
     }
 
     var showCustomDialog by remember { mutableStateOf(false) }
@@ -88,13 +91,13 @@ fun SleepTimerSheetContent(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "定时关闭",
+                text = appString(R.string.ui_scheduled_shutdown),
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                 color = colorScheme.textSecondary
             )
             TextButton(onClick = onDismiss) {
-                Text("完成")
+                Text(androidx.compose.ui.res.stringResource(R.string.ui_done))
             }
         }
 
@@ -125,7 +128,7 @@ fun SleepTimerSheetContent(
                                 viewModel.setSleepTimerMinutes(min)
                                 onDismiss()
                             },
-                        headlineContent = { Text("${min}分钟") },
+                        headlineContent = { Text(androidx.compose.ui.res.stringResource(R.string.ui_minutes, min)) },
                         colors = ListItemDefaults.colors(
                             containerColor = Color.Transparent,
                             headlineColor = colorScheme.textPrimary,
@@ -149,8 +152,8 @@ fun SleepTimerSheetContent(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { showCustomDialog = true },
-                    headlineContent = { Text("自定义") },
-                    supportingContent = { Text("输入分钟数") },
+                    headlineContent = { Text(androidx.compose.ui.res.stringResource(R.string.ui_custom)) },
+                    supportingContent = { Text(androidx.compose.ui.res.stringResource(R.string.ui_enter_the_number_of_minutes)) },
                     colors = ListItemDefaults.colors(
                         containerColor = Color.Transparent,
                         headlineColor = colorScheme.textPrimary,
@@ -170,7 +173,7 @@ fun SleepTimerSheetContent(
                                 viewModel.cancelSleepTimer()
                                 onDismiss()
                             },
-                        headlineContent = { Text("取消定时") },
+                        headlineContent = { Text(androidx.compose.ui.res.stringResource(R.string.ui_cancel_timer)) },
                         colors = ListItemDefaults.colors(
                             containerColor = Color.Transparent,
                             headlineColor = colorScheme.textPrimary,
@@ -185,11 +188,11 @@ fun SleepTimerSheetContent(
     if (showCustomDialog) {
         FlatTextFieldDialog(
             onDismissRequest = { showCustomDialog = false },
-            message = "输入定时关闭的分钟数。",
+            message = appString(R.string.ui_enter_the_number_of_minutes_for_the_scheduled),
             value = customMinutesText,
             onValueChange = { customMinutesText = it.filter { ch -> ch.isDigit() }.take(4) },
-            placeholder = "输入分钟数",
-            confirmText = "确定",
+            placeholder = appString(R.string.ui_enter_the_number_of_minutes),
+            confirmText = appString(R.string.ui_ok),
             confirmEnabled = (customMinutesText.toIntOrNull() ?: 0) > 0,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             onConfirm = {

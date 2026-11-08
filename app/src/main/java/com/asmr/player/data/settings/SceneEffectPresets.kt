@@ -1,5 +1,8 @@
 package com.asmr.player.data.settings
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 data class SceneDelayTap(
     val delayMs: Int,
     val gain: Float,
@@ -24,10 +27,13 @@ data class SceneEffectProfile(
 
 data class SceneEffectPreset(
     val id: String,
-    val label: String,
-    val description: String,
+    @androidx.annotation.StringRes private val labelResource: Int,
+    @androidx.annotation.StringRes private val descriptionResource: Int,
     val profile: SceneEffectProfile
-)
+) {
+    val label: String get() = appString(labelResource)
+    val description: String get() = appString(descriptionResource)
+}
 
 object SceneEffectPresets {
     const val DefaultPresetId = "bathroom_echo"
@@ -36,8 +42,8 @@ object SceneEffectPresets {
     val All = listOf(
         SceneEffectPreset(
             id = DefaultPresetId,
-            label = "浴室回声",
-            description = "瓷砖短回声",
+            labelResource = R.string.ui_bathroom_echo,
+            descriptionResource = R.string.ui_tile_short_echo,
             profile = SceneEffectProfile(
                 dryMix = 0.58f,
                 directMix = 0.30f,
@@ -61,8 +67,8 @@ object SceneEffectPresets {
         ),
         SceneEffectPreset(
             id = "through_wall",
-            label = "被窝闷声",
-            description = "闷声包裹感",
+            labelResource = R.string.ui_muffled_sound_in_bed,
+            descriptionResource = R.string.ui_muffled_sound_wrapping_feeling,
             profile = SceneEffectProfile(
                 dryMix = 0.03f,
                 directMix = 1.02f,
@@ -84,8 +90,8 @@ object SceneEffectPresets {
         ),
         SceneEffectPreset(
             id = "telephone",
-            label = "电话音",
-            description = "窄带通话感",
+            labelResource = R.string.ui_phone_tone,
+            descriptionResource = R.string.ui_narrowband_call_feeling,
             profile = SceneEffectProfile(
                 dryMix = 0f,
                 directMix = 1.08f,

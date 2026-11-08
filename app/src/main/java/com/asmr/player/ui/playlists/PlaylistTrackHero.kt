@@ -1,5 +1,8 @@
 package com.asmr.player.ui.playlists
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -146,7 +149,7 @@ internal fun PlaylistTrackHero(
                 .padding(start = 20.dp, end = 20.dp, top = artworkGap, bottom = 18.dp),
         ) {
             Text(
-                text = translatedPageText(item.title.ifBlank { "未命名" }, fileName = true),
+                text = translatedPageText(item.title.ifBlank { appString(R.string.ui_unnamed) }, fileName = true),
                 style = MaterialTheme.typography.titleLarge,
                 color = colors.textPrimary,
                 minLines = 2,
@@ -178,7 +181,7 @@ internal fun PlaylistTrackHero(
                 ) {
                     Icon(
                         imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                        contentDescription = if (isPlaying) "暂停" else "播放",
+                        contentDescription = if (isPlaying) appString(R.string.ui_pause) else appString(R.string.ui_play),
                         tint = colors.primary,
                         modifier = Modifier.size(30.dp),
                     )
