@@ -1,3 +1,1320 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Eara</string>
+    <string name="app_name" translatable="false">Eara</string>
+    <string name="ui_lrcs_have_been_exported_for_legacy_subtitles">"%1$s LRCs have been exported for legacy subtitles."</string>
+    <string name="ui_another_were_not_exported_because_the_directory_was">"Another %1$s were not exported because the directory was not writable."</string>
+    <string name="ui_and_keep_existing_files_with_the_same_name">", and keep %1$s existing files with the same name"</string>
+    <string name="ui_lrc_files_have_been_exported_to_generate_subtitles">"%1$s LRC files have been exported to generate subtitles for the old version"</string>
+    <string name="ui_existing_lrcs_with_the_same_name_were_detected">"%1$s existing LRCs with the same name were detected and were not overwritten during the supplementary export."</string>
+    <string name="ui_invalid_work_number" formatted="false">"Invalid work number"</string>
+    <string name="ui_fallback" formatted="false">"Fallback"</string>
+    <string name="ui_account_cannot_be_empty" formatted="false">"Account cannot be empty"</string>
+    <string name="ui_password_cannot_be_empty" formatted="false">"Password cannot be empty"</string>
+    <string name="ui_failed_to_open_login_page">"Failed to open login page (%1$s)"</string>
+    <string name="ui_login_form_not_found_and_login_status_not" formatted="false">"Login form not found and login status not detected"</string>
+    <string name="ui_login_failed_please_check_your_account_password" formatted="false">"Login failed, please check your account password"</string>
+    <string name="ui_login_cookie_not_obtained" formatted="false">"Login cookie not obtained"</string>
+    <string name="ui_the_work_number_changed_try_syncing_again" formatted="false">"The work number changed. Try syncing again."</string>
+    <string name="ui_please_log_in_to_dlsite_first_requires_cookies" formatted="false">"Please log in to DLsite first (requires cookies from play.dlsite.com)"</string>
+    <string name="ui_authentication_of_the_purchased_library_failed_401_please" formatted="false">"Authentication of the purchased library failed (401), please log in to DLsite again"</string>
+    <string name="ui_failed_to_obtain_purchased_list">"Failed to obtain purchased list (%1$s)"</string>
+    <string name="ui_dlsite_play_failed_to_obtain_signature">"DLsite Play failed to obtain signature (%1$s)"</string>
+    <string name="ui_dlsite_play_obtains_signature_and_returns_empty" formatted="false">"DLsite Play obtains signature and returns empty"</string>
+    <string name="ui_dlsite_play_obtains_signature_and_returns_missing_url" formatted="false">"DLsite Play obtains signature and returns missing url/params"</string>
+    <string name="ui_dlsite_play_failed_to_obtain_the_directory_tree">"DLsite Play failed to obtain the directory tree (%1$s)"</string>
+    <string name="ui_dlsite_play_gets_the_directory_tree_to_be" formatted="false">"DLsite Play gets the directory tree to be empty"</string>
+    <string name="ui_no_dns_servers_available" formatted="false">"No DNS servers available"</string>
+    <string name="ui_dns_resolution_failed">"DNS resolution failed: %1$s"</string>
+    <string name="ui_too_many_cname_jumps" formatted="false">"Too many CNAME jumps"</string>
+    <string name="ui_dns_tcp_response_length_is_invalid" formatted="false">"DNS TCP response length is invalid"</string>
+    <string name="ui_domain_name_format_is_invalid" formatted="false">"Domain name format is invalid"</string>
+    <string name="ui_domain_name_label_format_is_invalid" formatted="false">"Domain name label format is invalid"</string>
+    <string name="ui_dns_server_returned_error_code">"DNS server returned error code %1$s"</string>
+    <string name="ui_dns_response_id_mismatch" formatted="false">"DNS response ID mismatch"</string>
+    <string name="ui_received_something_other_than_a_dns_response" formatted="false">"Received something other than a DNS response"</string>
+    <string name="ui_dns_name_compression_pointer_exception" formatted="false">"DNS name compression pointer exception"</string>
+    <string name="ui_dns_name_tag_length_is_invalid" formatted="false">"DNS name tag length is invalid"</string>
+    <string name="ui_dns_response_format_is_invalid" formatted="false">"DNS response format is invalid"</string>
+    <string name="ui_default_directory_application_specific" formatted="false">"Default directory (application-specific)"</string>
+    <string name="ui_custom_directory" formatted="false">"Custom directory"</string>
+    <string name="ui_download_relative_path_is_invalid" formatted="false">"Download relative path is invalid"</string>
+    <string name="ui_unable_to_create_download_directory" formatted="false">"Unable to create download directory"</string>
+    <string name="ui_download_file_name_is_invalid" formatted="false">"Download file name is invalid"</string>
+    <string name="ui_unable_to_create_file_in_download_directory" formatted="false">"Unable to create file in download directory"</string>
+    <string name="ui_the_document_provider_changed_the_download_file_name" formatted="false">"The document provider changed the download file name"</string>
+    <string name="ui_unable_to_read_downloaded_file" formatted="false">"Unable to read downloaded file"</string>
+    <string name="ui_unable_to_write_download_file" formatted="false">"Unable to write download file"</string>
+    <string name="ui_download_directory_permission_has_expired" formatted="false">"Download directory permission has expired"</string>
+    <string name="ui_checking_source_files" formatted="false">"Checking source files"</string>
+    <string name="ui_joining_download_queue_item">"Joining download queue (%1$s item)"</string>
+    <string name="ui_the_download_directory_is_unavailable_please_select_again" formatted="false">"The download directory is unavailable, please select again or reset to the default directory"</string>
+    <string name="ui_the_selected_files_are_already_in_the_download" formatted="false">"The selected files are already in the download queue"</string>
+    <string name="ui_source_file_check_timed_out_try_again" formatted="false">"Source file check timed out. Try again."</string>
+    <string name="ui_unable_to_check_the_source_file_try_again" formatted="false">"Unable to check the source file. Try again later."</string>
+    <string name="ui_unable_to_create_download_try_again" formatted="false">"Unable to create download. Try again."</string>
+    <string name="ui_online_audio_download_has_not_been_confirmed" formatted="false">"Online audio download has not been confirmed"</string>
+    <string name="ui_download_stopped" formatted="false">"Download stopped"</string>
+    <string name="ui_download_paused_or_canceled" formatted="false">"Download paused or canceled"</string>
+    <string name="ui_audio_download_failed">"Audio download failed (%1$s)"</string>
+    <string name="ui_the_download_link_did_not_return_audio" formatted="false">"The download link did not return audio"</string>
+    <string name="ui_the_downloaded_file_was_changed_by_another_app" formatted="false">"The downloaded file was changed by another app"</string>
+    <string name="ui_the_downloaded_file_is_incomplete" formatted="false">"The downloaded file is incomplete"</string>
+    <string name="ui_the_downloaded_file_was_moved_or_deleted" formatted="false">"The downloaded file was moved or deleted"</string>
+    <string name="ui_source_file_check_failed">"Source file check failed (%1$s)"</string>
+    <string name="ui_source_file_check_failed_375aad" formatted="false">"Source file check failed"</string>
+    <string name="ui_the_source_file_check_did_not_return_audio" formatted="false">"The source file check did not return audio"</string>
+    <string name="ui_source_file_missing" formatted="false">"Source file missing"</string>
+    <string name="ui_audio_download_site_request_failed">"Audio download site request failed (%1$s)"</string>
+    <string name="ui_unsupported_audio_format" formatted="false">"Unsupported audio format"</string>
+    <string name="ui_no_audio_download_link_found" formatted="false">"No audio download link found"</string>
+    <string name="ui_unable_to_rebuild_the_temporary_audio_file" formatted="false">"Unable to rebuild the temporary audio file"</string>
+    <string name="ui_online_audio_download_failed" formatted="false">"Online audio download failed"</string>
+    <string name="ui_online_audio_must_not_be_re_encoded" formatted="false">"Online audio must not be re-encoded"</string>
+    <string name="ui_no_online_audio_available" formatted="false">"No online audio available"</string>
+    <string name="ui_unable_to_save_online_audio" formatted="false">"Unable to save online audio"</string>
+    <string name="ui_github_request_failed">"GitHub request failed: %1$s %2$s"</string>
+    <string name="ui_release_does_not_contain_apk_resources" formatted="false">"Release does not contain APK resources"</string>
+    <string name="ui_bathroom_echo" formatted="false">"bathroom echo"</string>
+    <string name="ui_tile_short_echo" formatted="false">"tile short echo"</string>
+    <string name="ui_muffled_sound_in_bed" formatted="false">"Muffled sound in bed"</string>
+    <string name="ui_muffled_sound_wrapping_feeling" formatted="false">"Muffled sound wrapping feeling"</string>
+    <string name="ui_phone_tone" formatted="false">"phone tone"</string>
+    <string name="ui_narrowband_call_feeling" formatted="false">"Narrowband call feeling"</string>
+    <string name="ui_the_certification_has_expired_please_log_in_again" formatted="false">"The certification has expired, please log in again"</string>
+    <string name="ui_access_denied" formatted="false">"access denied"</string>
+    <string name="ui_the_server_is_out_of_service_please_try" formatted="false">"The server is out of service, please try again later."</string>
+    <string name="ui_network_connection_failed_please_check_the_network" formatted="false">"Network connection failed, please check the network"</string>
+    <string name="ui_included" formatted="false">"Listed"</string>
+    <string name="ui_by_plays" formatted="false">"by plays"</string>
+    <string name="ui_press_listening_time" formatted="false">"Press listening time"</string>
+    <string name="ui_in_the_clipboard_was_detected_quickly_jump_to">"%1$s in the clipboard was detected. Quickly jump to the album details of this work?"</string>
+    <string name="ui_cancel" formatted="false">"Cancel"</string>
+    <string name="ui_jump_now" formatted="false">"Jump now"</string>
+    <string name="ui_manually_enter_item_number" formatted="false">"Manually enter item number"</string>
+    <string name="ui_opening_system_installer" formatted="false">"Opening system installer"</string>
+    <string name="ui_please_allow_eara_to_continue_installing_apps_from" formatted="false">"Please allow Eara to continue installing apps from unknown sources."</string>
+    <string name="ui_the_download_file_is_invalid_please_download_again" formatted="false">"The download file is invalid, please download again"</string>
+    <string name="ui_press_return_again_to_exit_the_app" formatted="false">"Press return again to exit the app"</string>
+    <string name="ui_library" formatted="false">"Library"</string>
+    <string name="ui_filter" formatted="false">"filter"</string>
+    <string name="ui_search" formatted="false">"Search"</string>
+    <string name="ui_popular" formatted="false">"Popular"</string>
+    <string name="ui_playlists" formatted="false">"Playlists"</string>
+    <string name="ui_favorites" formatted="false">"Favorites"</string>
+    <string name="ui_groups" formatted="false">"Groups"</string>
+    <string name="ui_settings" formatted="false">"Settings"</string>
+    <string name="ui_tasks" formatted="false">"Tasks"</string>
+    <string name="ui_asmr_dashboard" formatted="false">"ASMR dashboard"</string>
+    <string name="ui_dlsite_login" formatted="false">"DLsite login"</string>
+    <string name="ui_switch_view" formatted="false">"Switch view"</string>
+    <string name="ui_album_list" formatted="false">"album list"</string>
+    <string name="ui_album_card" formatted="false">"album card"</string>
+    <string name="ui_audio_track_list" formatted="false">"Audio track list"</string>
+    <string name="ui_switch_to_list_view" formatted="false">"Switch to list view"</string>
+    <string name="ui_switch_to_card_view" formatted="false">"Switch to card view"</string>
+    <string name="ui_pause_all" formatted="false">"Pause all"</string>
+    <string name="ui_continue_all" formatted="false">"continue all"</string>
+    <string name="ui_please_enter_the_dlsite_work_number_support_rj" formatted="false">"Please enter the DLsite work number, support RJ, BJ, VJ; cloud synchronization will be automatically performed after saving."</string>
+    <string name="ui_work_number_such_as_bj02370869" formatted="false">"Work number (such as BJ02370869)"</string>
+    <string name="ui_synchronous" formatted="false">"synchronous"</string>
+    <string name="ui_new_version_found">"New version found: %1$s"</string>
+    <string name="ui_update_now" formatted="false">"Update now"</string>
+    <string name="ui_start_downloading_updates" formatted="false">"Start downloading updates…"</string>
+    <string name="ui_don_t_remind_again" formatted="false">"Don\'t remind again"</string>
+    <string name="ui_automatically_checking_for_updates_on_startup_is_turned" formatted="false">"Automatically checking for updates on startup is turned off"</string>
+    <string name="ui_details" formatted="false">"Details"</string>
+    <string name="ui_unable_to_open_github_releases_page" formatted="false">"Unable to open GitHub releases page"</string>
+    <string name="ui_current_version">"Current version: %1$s"</string>
+    <string name="ui_installation_package">"Installation package: %1$s"</string>
+    <string name="ui_playing_using_traffic" formatted="false">"Playing using traffic"</string>
+    <string name="ui_playback_failed">"Playback failed: %1$s"</string>
+    <string name="ui_now_playing" formatted="false">"Now playing"</string>
+    <string name="ui_playing_in_the_background" formatted="false">"Playing in the background"</string>
+    <string name="ui_previous_track" formatted="false">"Previous track"</string>
+    <string name="ui_pause" formatted="false">"Pause"</string>
+    <string name="ui_play" formatted="false">"Play"</string>
+    <string name="ui_next_track" formatted="false">"Next track"</string>
+    <string name="ui_playback_controls" formatted="false">"Playback controls"</string>
+    <string name="ui_used_for_background_playback_control_and_lock_screen" formatted="false">"Used for background playback control and lock screen media panel"</string>
+    <string name="ui_no_lyrics_yet" formatted="false">"No lyrics yet"</string>
+    <string name="ui_balance_inquiry_canceled" formatted="false">"Balance inquiry canceled"</string>
+    <string name="ui_no_subtitles_available_for_export" formatted="false">"No subtitles available for export"</string>
+    <string name="ui_the_subtitle_file_was_moved_or_deleted" formatted="false">"The subtitle file was moved or deleted"</string>
+    <string name="ui_the_subtitle_file_changed_during_this_task_writing" formatted="false">"The subtitle file changed during this task. Writing stopped."</string>
+    <string name="ui_the_target_subtitle_index_cannot_be_repeated" formatted="false">"The target subtitle index cannot be repeated"</string>
+    <string name="ui_missing_captions_subtitles_array" formatted="false">"Missing captions subtitles array"</string>
+    <string name="ui_the_source_indices_of_the_subtitle_group_cannot" formatted="false">"The source_indices of the subtitle group cannot be empty"</string>
+    <string name="ui_imported_subtitles_must_be_submitted_one_by_one" formatted="false">"Imported subtitles must be submitted one by one and source_indices cannot be merged"</string>
+    <string name="ui_subtitle_group_contains_non_target_index">"Subtitle group contains non-target index: %1$s"</string>
+    <string name="ui_the_source_indices_of_the_subtitle_group_must" formatted="false">"The source_indices of the subtitle group must increase continuously in the order of the source subtitles."</string>
+    <string name="ui_the_corrected_japanese_cannot_be_empty" formatted="false">"The corrected Japanese cannot be empty"</string>
+    <string name="ui_translation_text_cannot_be_empty" formatted="false">"Translation text cannot be empty"</string>
+    <string name="ui_this_tool_call_must_start_from_the_first" formatted="false">"This tool call must start from the first unconfirmed index and submit consecutive prefixes in order."</string>
+    <string name="ui_there_are_no_decodable_audio_tracks_in_the" formatted="false">"There are no decodable audio tracks in the file"</string>
+    <string name="ui_audio_encoding_not_recognized" formatted="false">"Audio encoding not recognized"</string>
+    <string name="ui_audio_channel_lengths_are_inconsistent" formatted="false">"Audio channel lengths are inconsistent"</string>
+    <string name="ui_unable_to_obtain_audio_decoding_input_buffer" formatted="false">"Unable to obtain audio decoding input buffer"</string>
+    <string name="ui_unable_to_obtain_audio_decoding_output_buffer" formatted="false">"Unable to obtain audio decoding output buffer"</string>
+    <string name="ui_number_of_audio_channels_changes_during_decoding" formatted="false">"Number of audio channels changes during decoding"</string>
+    <string name="ui_audio_channel_resampling_out_of_sync" formatted="false">"Audio channel resampling out of sync"</string>
+    <string name="ui_audio_channel_tail_is_out_of_sync" formatted="false">"Audio channel tail is out of sync"</string>
+    <string name="ui_unsupported_pcm_encoding">"Unsupported PCM encoding: %1$s"</string>
+    <string name="ui_japanese_subtitle_model_released" formatted="false">"Japanese subtitle model released"</string>
+    <string name="ui_the_speech_segmentation_model_has_been_released" formatted="false">"The speech segmentation model has been released"</string>
+    <string name="ui_japanese_subtitle_model_file_missing">"Japanese subtitle model file missing: %1$s"</string>
+    <string name="ui_unable_to_create_subtitle_runtime_download_directory" formatted="false">"Unable to create subtitle runtime download directory"</string>
+    <string name="ui_unable_to_clean_subtitle_runtime_archive" formatted="false">"Unable to clean subtitle runtime archive"</string>
+    <string name="ui_please_download_the_japanese_subtitle_component_in_settings" formatted="false">"Please download the Japanese subtitle component in settings first"</string>
+    <string name="ui_the_subtitle_runtime_directory_is_invalid" formatted="false">"The subtitle runtime directory is invalid"</string>
+    <string name="ui_unable_to_create_subtitles_runtime_directory" formatted="false">"Unable to create subtitles runtime directory"</string>
+    <string name="ui_unable_to_clean_old_subtitles_runtime_temp_directory" formatted="false">"Unable to clean old subtitles runtime temp directory"</string>
+    <string name="ui_unable_to_create_subtitle_runtime_temporary_directory" formatted="false">"Unable to create subtitle runtime temporary directory"</string>
+    <string name="ui_the_installation_result_is_invalid_when_subtitles_are" formatted="false">"The installation result is invalid when subtitles are running"</string>
+    <string name="ui_unable_to_replace_old_subtitle_runtime" formatted="false">"Unable to replace old subtitle runtime"</string>
+    <string name="ui_unable_to_save_subtitle_runtime" formatted="false">"Unable to save subtitle runtime"</string>
+    <string name="ui_subtitles_are_missing_or_still_writable_during_runtime" formatted="false">"Subtitles are missing or still writable during runtime"</string>
+    <string name="ui_the_subtitle_runtime_compressed_package_contains_redundant_directories" formatted="false">"The subtitle runtime compressed package contains redundant directories"</string>
+    <string name="ui_the_subtitle_runtime_archive_contains_unknown_files">"The subtitle runtime archive contains unknown files: %1$s"</string>
+    <string name="ui_subtitle_runtime_archive_contains_duplicate_files">"Subtitle runtime archive contains duplicate files: %1$s"</string>
+    <string name="ui_invalid_file_path_when_running_subtitles" formatted="false">"Invalid file path when running subtitles"</string>
+    <string name="ui_the_subtitle_runtime_compressed_package_is_missing_necessary" formatted="false">"The subtitle runtime compressed package is missing necessary files"</string>
+    <string name="ui_file_size_exception_when_running_subtitles">"File size exception when running subtitles: %1$s"</string>
+    <string name="ui_incomplete_subtitle_runtime_file">"Incomplete subtitle runtime file: %1$s"</string>
+    <string name="ui_file_verification_failed_when_running_subtitles">"File verification failed when running subtitles: %1$s"</string>
+    <string name="ui_unable_to_make_subtitle_runtime_file_read_only">"Unable to make subtitle runtime file read-only: %1$s"</string>
+    <string name="ui_file_size_verification_failed">"File size verification failed: %1$s"</string>
+    <string name="ui_file_verification_failed">"File verification failed: %1$s"</string>
+    <string name="ui_the_current_device_does_not_support_the_subtitle">"The current device does not support the %1$s subtitle runtime"</string>
+    <string name="ui_unable_to_clean_up_invalid_temporary_download_files" formatted="false">"Unable to clean up invalid temporary download files"</string>
+    <string name="ui_download_failed">"Download failed: %1$s %2$s"</string>
+    <string name="ui_download_source_returned_invalid_breakpoint_data" formatted="false">"Download source returned invalid breakpoint data"</string>
+    <string name="ui_download_failed_empty_response_body" formatted="false">"Download failed: empty response body"</string>
+    <string name="ui_abnormal_download_file_size" formatted="false">"Abnormal download file size"</string>
+    <string name="ui_incomplete_download_bytes">"Incomplete download (%1$s/%2$s bytes)"</string>
+    <string name="ui_requires_arm64_v8a_64_bit_arm_device" formatted="false">"Requires arm64-v8a 64-bit ARM device"</string>
+    <string name="ui_the_current_device_is_marked_by_the_system" formatted="false">"The current device is marked by the system as a low memory device"</string>
+    <string name="ui_not_enough_memory_6gb" formatted="false">"Not enough memory 6GB"</string>
+    <string name="ui_less_than_cpu_cores">"Less than %1$s CPU cores"</string>
+    <string name="ui_current_device_memory_cores_cpu">"Current device: %1$s memory, %2$s cores CPU"</string>
+    <string name="ui_current_devices_support_local_subtitle_generation">"Current devices support local subtitle generation. %1$s"</string>
+    <string name="ui_the_current_device_does_not_support_local_subtitle">"The current device does not support local subtitle generation: %1$s. %2$s"</string>
+    <string name="ui_unknown" formatted="false">"unknown"</string>
+    <string name="ui_local_transcription_failed_out_of_memory_oom_while" formatted="false">"Local transcription failed: Out of memory (OOM) while running the model. Completed transcription progress is retained;"</string>
+    <string name="ui_please_close_the_applications_that_occupy_memory_and" formatted="false">"Please close the applications that occupy memory and try again. If it still fails, the current device may not be able to run this model stably."</string>
+    <string name="ui_local_transcription_failed_the_subtitle_running_environment_is" formatted="false">"Local transcription failed: The subtitle running environment is incompatible with the current device. Completed transcription progress is retained;"</string>
+    <string name="ui_this_function_only_supports_arm64_v8a_devices_please" formatted="false">"This function only supports arm64-v8a devices. Please confirm system compatibility, or re-download the subtitle component in settings and try again."</string>
+    <string name="ui_local_transcription_failed_the_subtitle_model_or_running" formatted="false">"Local transcription failed: the subtitle model or running component is missing or damaged. Completed transcription progress is retained;"</string>
+    <string name="ui_please_go_to_settings_to_delete_and_re" formatted="false">"Please go to settings to delete and re-download the subtitle model and try again."</string>
+    <string name="ui_local_transcription_failed_audio_reading_or_decoding_failed" formatted="false">"Local transcription failed: Audio reading or decoding failed. Completed transcription progress is retained;"</string>
+    <string name="ui_please_confirm_that_the_file_is_complete_and" formatted="false">"Please confirm that the file is complete and the audio format is supported by the current system and try again."</string>
+    <string name="ui_the_local_transcription_did_not_recognize_the_japanese" formatted="false">"The local transcription did not recognize the Japanese voice that can generate subtitles. Please confirm that the audio contains clear Japanese voice and try again."</string>
+    <string name="ui_the_subtitles_have_been_modified_during_transcription_the" formatted="false">"The subtitles have been modified during transcription, the task has stopped writing, and the user version has not been overwritten."</string>
+    <string name="ui_local_transcription_failed_the_model_is_running_abnormally" formatted="false">"Local transcription failed: The model is running abnormally. Completed transcription progress is retained;"</string>
+    <string name="ui_please_try_again_if_it_continues_to_fail" formatted="false">"Please try again. If it continues to fail, please re-download the subtitle model in the settings."</string>
+    <string name="ui_subtitle_translation_failed_out_of_memory_while_processing" formatted="false">"Subtitle translation failed: Out of memory while processing model response. Please close the memory-consuming applications and try again."</string>
+    <string name="ui_subtitle_translation_failed_api_key_missing_configure_it" formatted="false">"Subtitle translation failed: API key missing. Configure it in Settings and try again."</string>
+    <string name="ui_subtitle_translation_failed_an_unexpected_runtime_error_occurred" formatted="false">"Subtitle translation failed: An unexpected runtime error occurred. Please try again; if it continues to fail, please update the app and try again."</string>
+    <string name="ui_request_timed_out_check_your_network_or_proxy">"%1$s request timed out. Check your network or proxy settings and try again."</string>
+    <string name="ui_unable_to_connect_to_check_your_network_or">"Unable to connect to %1$s. Check your network or proxy settings and try again."</string>
+    <string name="ui_unable_to_connect_securely_to_check_your_system">"Unable to connect securely to %1$s. Check your system time, certificates, or proxy settings."</string>
+    <string name="ui_request_failed_check_your_network_or_proxy_settings">"%1$s request failed. Check your network or proxy settings and try again."</string>
+    <string name="ui_rejected_the_translation_request_http">"%1$s rejected the translation request (HTTP %2$s)"</string>
+    <string name="ui_check_the_api_url_model_and_api_compatibility" formatted="false">"Check the API URL, model, and API compatibility."</string>
+    <string name="ui_please_update_the_app_or_try_again_later" formatted="false">"Please update the app or try again later."</string>
+    <string name="ui_the_api_key_is_invalid_or_expired_update">"The %1$s API key is invalid or expired. Update it in Settings and try again."</string>
+    <string name="ui_insufficient_account_balance_add_funds_and_try_again">"Insufficient %1$s account balance. Add funds and try again."</string>
+    <string name="ui_denied_access_check_your_api_key_and_its">"%1$s denied access. Check your API key and its permissions."</string>
+    <string name="ui_the_url_or_model_is_unavailable_check_your">"The %1$s URL or model is unavailable. Check your translation settings."</string>
+    <string name="ui_the_translation_model_is_unavailable_update_the_app">"The %1$s translation model is unavailable. Update the app and try again."</string>
+    <string name="ui_request_timed_out_check_your_network_and_try">"%1$s request timed out. Check your network and try again."</string>
+    <string name="ui_cannot_process_the_translation_request_right_now_try">"%1$s cannot process the translation request right now. Try again later."</string>
+    <string name="ui_too_many_requests_try_again_later">"Too many %1$s requests. Try again later."</string>
+    <string name="ui_is_temporarily_unavailable_http_try_again_later">"%1$s is temporarily unavailable (HTTP %2$s). Try again later."</string>
+    <string name="ui_translation_request_failed_http">"%1$s translation request failed (HTTP %2$s)"</string>
+    <string name="ui_please_try_again_later" formatted="false">"Please try again later."</string>
+    <string name="ui_prepare_to_download_subtitle_components" formatted="false">"Prepare to download subtitle components"</string>
+    <string name="ui_model_verification_failed_please_download_again">"Model verification failed: %1$s, please download again"</string>
+    <string name="ui_unable_to_replace_old_model_files" formatted="false">"Unable to replace old model files"</string>
+    <string name="ui_unable_to_save_japanese_subtitle_model" formatted="false">"Unable to save Japanese subtitle model"</string>
+    <string name="ui_subtitle_component_download_failed" formatted="false">"Subtitle component download failed"</string>
+    <string name="ui_not_enough_storage_space_at_least_additional_free" formatted="false">"Not enough storage space, at least additional free space is needed"</string>
+    <string name="ui_japanese_subtitle_component_download" formatted="false">"Japanese subtitle component download"</string>
+    <string name="ui_japanese_subtitle_component" formatted="false">"Japanese subtitle component"</string>
+    <string name="ui_downloading_subtitle_runtime" formatted="false">"Downloading subtitle runtime"</string>
+    <string name="ui_verifying_and_installing_subtitle_runtime" formatted="false">"Verifying and installing subtitle runtime"</string>
+    <string name="ui_downloading_japanese_subtitle_model" formatted="false">"Downloading Japanese subtitle model"</string>
+    <string name="ui_verifying_japanese_subtitle_model" formatted="false">"Verifying Japanese subtitle model"</string>
+    <string name="ui_please_download_the_japanese_subtitle_model_first" formatted="false">"Please download the Japanese subtitle model first"</string>
+    <string name="ui_unknown_subtitle_model" formatted="false">"Unknown subtitle model"</string>
+    <string name="ui_the_download_address_is_not_configured_when_subtitles" formatted="false">"The download address is not configured when subtitles are running"</string>
+    <string name="ui_unable_to_delete_japanese_subtitle_model" formatted="false">"Unable to delete Japanese subtitle model"</string>
+    <string name="ui_model_download_failed" formatted="false">"Model download failed"</string>
+    <string name="ui_unable_to_create_model_directory" formatted="false">"Unable to create model directory"</string>
+    <string name="ui_download_and_select_a_subtitle_model_in_settings" formatted="false">"Download and select a subtitle model in Settings → Translation first"</string>
+    <string name="ui_can_t_find_the_corresponding_work_and_can" formatted="false">"Can\'t find the corresponding work and can\'t polish it"</string>
+    <string name="ui_no_audio_to_transcribe" formatted="false">"No audio to transcribe"</string>
+    <string name="ui_the_audio_track_to_which_the_subtitles_belongs" formatted="false">"The audio track to which the subtitles belongs is invalid"</string>
+    <string name="ui_the_current_audio_track_has_no_translatable_local" formatted="false">"The current audio track has no translatable local subtitles"</string>
+    <string name="ui_pending_local_audio_not_found" formatted="false">"Pending local audio not found"</string>
+    <string name="ui_local_audio" formatted="false">"local audio"</string>
+    <string name="ui_audio_items">"%1$s audio items"</string>
+    <string name="ui_unknown_work_number" formatted="false">"Unknown work number"</string>
+    <string name="ui_batch_tasks" formatted="false">"Batch tasks"</string>
+    <string name="ui_the_current_subtitle_task_cannot_be_continued" formatted="false">"The current subtitle task cannot be continued"</string>
+    <string name="ui_the_subtitles_of_have_been_modified_the_current">"The subtitles of %1$s have been modified, the current version has been retained, and the task snapshot has not been restored."</string>
+    <string name="ui_the_last_run_of_the_application_was_interrupted" formatted="false">"The last run of the application was interrupted abnormally, please continue manually."</string>
+    <string name="ui_this_work_is_being_polished_as_a_whole" formatted="false">"This work is being polished as a whole, please wait a moment"</string>
+    <string name="ui_please_wait_until_the_transcription_and_translation_tasks" formatted="false">"Please wait until the transcription and translation tasks of this work are completed before polishing it as a whole."</string>
+    <string name="ui_this_work_is_being_polished_as_a_whole_65005b" formatted="false">"This work is being polished as a whole, please wait until the polishing is completed before trying the translation again."</string>
+    <string name="ui_the_app_has_been_cleared_from_the_background" formatted="false">"The app has been cleared from the background and the subtitle task has been interrupted"</string>
+    <string name="ui_the_system_foreground_service_time_limit_has_expired" formatted="false">"The system foreground service time limit has expired and the subtitle task has been safely interrupted."</string>
+    <string name="ui_subtitle_task_deleted" formatted="false">"Subtitle task deleted"</string>
+    <string name="ui_subtitle_transcription_paused_or_canceled" formatted="false">"Subtitle transcription paused or canceled"</string>
+    <string name="ui_japanese_voice_that_can_generate_subtitles_is_not" formatted="false">"Japanese voice that can generate subtitles is not recognized"</string>
+    <string name="ui_subtitles_have_been_modified_during_transcription_and_the" formatted="false">"Subtitles have been modified during transcription and the user version has not been overwritten"</string>
+    <string name="ui_subtitle_translation_source_has_been_lost" formatted="false">"Subtitle translation source has been lost"</string>
+    <string name="ui_subtitles_have_been_generated_but_the_current_audio" formatted="false">"Subtitles have been generated, but the current audio location does not support exporting LRC files"</string>
+    <string name="ui_subtitles_were_generated_but_writing_to_the_audio">"Subtitles were generated, but writing to the audio directory failed: %1$s"</string>
+    <string name="ui_unknown_error" formatted="false">"unknown error"</string>
+    <string name="ui_please_turn_on_final_touch_in_settings_before" formatted="false">"Please turn on \"Final Touch\" in settings before performing touch-ups."</string>
+    <string name="ui_there_are_currently_no_polished_subtitles_for_this" formatted="false">"There are currently no polished subtitles for this work"</string>
+    <string name="ui_the_subtitles_for_this_work_have_been_polished" formatted="false">"The subtitles for this work have been polished and will be updated automatically when completed."</string>
+    <string name="ui_subtitle_translation_paused_or_canceled" formatted="false">"Subtitle translation paused or canceled"</string>
+    <string name="ui_the_track_was_removed_or_moved" formatted="false">"The track was removed or moved"</string>
+    <string name="ui_subtitles_have_been_modified_during_the_task_and" formatted="false">"Subtitles have been modified during the task and writing has stopped"</string>
+    <string name="ui_subtitle_translation_retries_exhausted" formatted="false">"Subtitle translation retries exhausted"</string>
+    <string name="ui_subtitle_task_failed_please_try_again" formatted="false">"Subtitle task failed, please try again."</string>
+    <string name="ui_subtitle_mission_control_request" formatted="false">"Subtitle mission control request"</string>
+    <string name="ui_transcription">"Transcription: %1$s %2$s%%"</string>
+    <string name="ui_translating">"Translating %1$s/%2$s"</string>
+    <string name="ui_waiting_for_slot">"Waiting for slot %1$s"</string>
+    <string name="ui_waiting_for_network">"Waiting for network %1$s"</string>
+    <string name="ui_checking_subtitle_queue" formatted="false">"Checking subtitle queue"</string>
+    <string name="ui_subtitle_task" formatted="false">"subtitle task"</string>
+    <string name="ui_open" formatted="false">"Open"</string>
+    <string name="ui_pause_all_ee002e" formatted="false">"pause all"</string>
+    <string name="ui_cancel_all" formatted="false">"Cancel all"</string>
+    <string name="ui_subtitle_version_conflict" formatted="false">"Subtitle version conflict"</string>
+    <string name="ui_high_precision" formatted="false">"High precision"</string>
+    <string name="ui_lightweight_and_fast" formatted="false">"Lightweight and fast"</string>
+    <string name="ui_configure_your_api_key_in_settings_first">"Configure your %1$s API key in Settings first"</string>
+    <string name="ui_full_subtitles_cannot_be_empty" formatted="false">"Full subtitles cannot be empty"</string>
+    <string name="ui_subtitle_source_index_cannot_be_repeated" formatted="false">"Subtitle source index cannot be repeated"</string>
+    <string name="ui_tool_call_returned_by_subtitle_translation_model_is" formatted="false">"Tool call returned by subtitle translation model is missing id"</string>
+    <string name="ui_invalid_subtitle_parameter" formatted="false">"Invalid subtitle parameter"</string>
+    <string name="ui_transcript_search_is_not_available" formatted="false">"Transcript search is not available"</string>
+    <string name="ui_the_script_reading_parameter_is_invalid" formatted="false">"The script reading parameter is invalid"</string>
+    <string name="ui_unknown_tool">"Unknown tool: %1$s"</string>
+    <string name="ui_translation_stopped_after_repeated_attempts_without_new_subtitles" formatted="false">"Translation stopped after repeated attempts without new subtitles. Try again manually."</string>
+    <string name="ui_work_title_cannot_be_empty" formatted="false">"Work title cannot be empty"</string>
+    <string name="ui_track_list_cannot_be_empty" formatted="false">"Track list cannot be empty"</string>
+    <string name="ui_audio_track_id_cannot_be_repeated" formatted="false">"Audio track id cannot be repeated"</string>
+    <string name="ui_the_work_display_name_translation_output_reaches_the" formatted="false">"The work display name translation output reaches the length limit"</string>
+    <string name="ui_title_display_name_translation_model_returned_empty_content" formatted="false">"Title display name translation model returned empty content"</string>
+    <string name="ui_the_polish_track_list_cannot_be_empty" formatted="false">"The polish track list cannot be empty"</string>
+    <string name="ui_the_primary_key_for_polished_subtitles_cannot_be" formatted="false">"The primary key for polished subtitles cannot be repeated"</string>
+    <string name="ui_tool_call_returned_by_polish_model_is_missing" formatted="false">"Tool call returned by polish model is missing id"</string>
+    <string name="ui_invalid_polish_parameter" formatted="false">"Invalid polish parameter"</string>
+    <string name="ui_polishing_stopped_after_repeated_attempts_without_new_subtitles" formatted="false">"Polishing stopped after repeated attempts without new subtitles. Try again manually."</string>
+    <string name="ui_unknown_format_error" formatted="false">"Unknown format error"</string>
+    <string name="ui_subtitle_translation_model_returns_format_error">"Subtitle translation model returns format error: %1$s"</string>
+    <string name="ui_subtitle_translation_request_canceled" formatted="false">"Subtitle translation request canceled"</string>
+    <string name="ui_work_title_is_missing" formatted="false">"work_title is missing"</string>
+    <string name="ui_missing_tracks_array" formatted="false">"missing tracks array"</string>
+    <string name="ui_audio_track_translation_item_is_not_an_object" formatted="false">"Audio track translation item is not an object"</string>
+    <string name="ui_audio_track_translation_item_is_missing_track_id" formatted="false">"Audio track translation item is missing track_id"</string>
+    <string name="ui_audio_track_translation_item_is_missing_title" formatted="false">"Audio track translation item is missing title"</string>
+    <string name="ui_track_title_cannot_be_empty_track_id">"Track title cannot be empty: track_id=%1$s"</string>
+    <string name="ui_duplicate_audio_track_translation_index_track_id">"Duplicate audio track translation index: track_id=%1$s"</string>
+    <string name="ui_audio_track_translation_index_mismatch_is_missing">"Audio track translation index mismatch: %1$s is missing"</string>
+    <string name="ui_no_subtitles_to_polish" formatted="false">"No subtitles to polish"</string>
+    <string name="ui_the_polish_tool_call_parameter_is_not_a" formatted="false">"The polish tool call parameter is not a valid JSON object"</string>
+    <string name="ui_polished_items_are_not_objects" formatted="false">"Polished items are not objects"</string>
+    <string name="ui_polish_entry_is_missing_caption_id" formatted="false">"Polish entry is missing caption_id"</string>
+    <string name="ui_the_polish_entry_references_unknown_caption_id">"The polish entry references unknown caption_id: %1$s"</string>
+    <string name="ui_polished_entry_is_missing_chinese" formatted="false">"Polished entry is missing chinese"</string>
+    <string name="ui_polish_chinese_cannot_be_empty" formatted="false">"polish chinese cannot be empty"</string>
+    <string name="ui_polish_entry_caption_id_cannot_be_repeated" formatted="false">"Polish entry caption_id cannot be repeated"</string>
+    <string name="ui_there_is_no_script_file_in_the_work" formatted="false">"There is no script file in the work directory"</string>
+    <string name="ui_the_script_reading_tool_parameter_is_not_a" formatted="false">"The script reading tool parameter is not a valid JSON object"</string>
+    <string name="ui_the_script_reading_tool_is_missing_file_index" formatted="false">"The script reading tool is missing file_index"</string>
+    <string name="ui_file_index_out_of_range">"file_index out of range: %1$s"</string>
+    <string name="ui_unknown_script_file_index">"Unknown script file index: %1$s"</string>
+    <string name="ui_unable_to_read_script_file">"Unable to read script file: %1$s"</string>
+    <string name="ui_unknown_reason" formatted="false">"unknown reason"</string>
+    <string name="ui_all_subtitles_have_been_completed_no_need_to" formatted="false">"All subtitles have been completed, no need to continue writing"</string>
+    <string name="ui_the_subtitle_tool_call_parameters_were_truncated_and" formatted="false">"The subtitle tool call parameters were truncated and did not form a complete JSON object."</string>
+    <string name="ui_the_subtitle_tool_call_parameter_is_not_a" formatted="false">"The subtitle tool call parameter is not a valid JSON object"</string>
+    <string name="ui_subtitle_group_is_not_an_object" formatted="false">"Subtitle group is not an object"</string>
+    <string name="ui_subtitle_group_is_missing_source_indices" formatted="false">"Subtitle group is missing source_indices"</string>
+    <string name="ui_the_subtitle_group_is_missing_start_ms" formatted="false">"The subtitle group is missing start_ms"</string>
+    <string name="ui_the_subtitle_group_is_missing_end_ms" formatted="false">"The subtitle group is missing end_ms"</string>
+    <string name="ui_the_subtitle_group_is_missing_japanese" formatted="false">"The subtitle group is missing japanese"</string>
+    <string name="ui_the_subtitle_group_is_missing_chinese" formatted="false">"The subtitle group is missing chinese"</string>
+    <string name="ui_no_json_object_in_response_body" formatted="false">"No JSON object in response body"</string>
+    <string name="ui_unable_to_parse_json" formatted="false">"Unable to parse JSON"</string>
+    <string name="ui_server_default" formatted="false">"Server default"</string>
+    <string name="ui_close" formatted="false">"Close"</string>
+    <string name="ui_on" formatted="false">"On"</string>
+    <string name="ui_custom_openai_compatible" formatted="false">"Custom (OpenAI-compatible)"</string>
+    <string name="ui_maximum_output_tokens_must_be_a_positive_integer" formatted="false">"Maximum output tokens must be a positive integer"</string>
+    <string name="ui_custom_translation_service" formatted="false">"Custom translation service"</string>
+    <string name="ui_the_api_key_contains_invalid_characters" formatted="false">"The API key contains invalid characters"</string>
+    <string name="ui_configure_a_custom_translation_model_in_settings_first" formatted="false">"Configure a custom translation model in Settings first"</string>
+    <string name="ui_enter_a_valid_http_or_https_api_url" formatted="false">"Enter a valid HTTP or HTTPS API URL"</string>
+    <string name="ui_enter_a_valid_api_url" formatted="false">"Enter a valid API URL"</string>
+    <string name="ui_the_api_url_cannot_include_credentials_query_parameters" formatted="false">"The API URL cannot include credentials, query parameters, or a fragment"</string>
+    <string name="ui_configure_a_custom_translation_service_first" formatted="false">"Configure a custom translation service first"</string>
+    <string name="ui_unable_to_save_translation_service" formatted="false">"Unable to save translation service"</string>
+    <string name="ui_select_a_deepseek_model" formatted="false">"Select a DeepSeek model"</string>
+    <string name="ui_unable_to_save_deepseek_model" formatted="false">"Unable to save DeepSeek model"</string>
+    <string name="ui_unable_to_save_translation_settings" formatted="false">"Unable to save translation settings"</string>
+    <string name="ui_enter_an_api_key_first" formatted="false">"Enter an API key first"</string>
+    <string name="ui_model_list_authentication_failed_check_your_api_key" formatted="false">"Model list authentication failed. Check your API key."</string>
+    <string name="ui_this_service_does_not_provide_a_model_list" formatted="false">"This service does not provide a model list. Enter a model manually."</string>
+    <string name="ui_unable_to_fetch_model_list">"Unable to fetch model list (%1$s)"</string>
+    <string name="ui_invalid_model_list_format" formatted="false">"Invalid model list format"</string>
+    <string name="ui_this_service_returned_no_available_models" formatted="false">"This service returned no available models"</string>
+    <string name="ui_google_has_detected_abnormal_traffic_on_the_current" formatted="false">"Google has detected abnormal traffic on the current network. Please check the proxy or try again later."</string>
+    <string name="ui_the_translation_service_is_temporarily_limited_please_try" formatted="false">"The translation service is temporarily limited, please try again later."</string>
+    <string name="ui_translation_service_is_temporarily_unavailable">"Translation service is temporarily unavailable (%1$s)"</string>
+    <string name="ui_the_translation_service_returned_invalid_content_please_try" formatted="false">"The translation service returned invalid content, please try again later."</string>
+    <string name="ui_page_translation_failed_please_check_the_network_and" formatted="false">"Page translation failed, please check the network and try again"</string>
+    <string name="ui_page_translation_failed_please_try_again_later" formatted="false">"Page translation failed, please try again later"</string>
+    <string name="ui_show_original" formatted="false">"Show original"</string>
+    <string name="ui_translate_page" formatted="false">"Translate page"</string>
+    <string name="ui_translating_8ccb0c" formatted="false">"Translating"</string>
+    <string name="ui_original" formatted="false">"Original"</string>
+    <string name="ui_translation_failed" formatted="false">"Translation failed"</string>
+    <string name="ui_translation_enabled" formatted="false">"Translation enabled"</string>
+    <string name="ui_dlsite_account" formatted="false">"DLsite account"</string>
+    <string name="ui_used_for_purchased_search_authentication" formatted="false">"Used for \"Purchased\" search authentication"</string>
+    <string name="ui_manage" formatted="false">"manage"</string>
+    <string name="ui_log_in" formatted="false">"Log in"</string>
+    <string name="ui_logged_in" formatted="false">"Logged in"</string>
+    <string name="ui_not_logged_in" formatted="false">"Not logged in"</string>
+    <string name="ui_total_duration" formatted="false">"total duration"</string>
+    <string name="ui_audio_track" formatted="false">"audio track"</string>
+    <string name="ui_active_days" formatted="false">"active days"</string>
+    <string name="ui_flow" formatted="false">"flow"</string>
+    <string name="ui_listening_popularity" formatted="false">"Listening popularity"</string>
+    <string name="ui_there_are_no_listening_records_yet_go_and" formatted="false">"There are no listening records yet, go and listen to something~"</string>
+    <string name="ui_years">"%1$s years"</string>
+    <string name="ui_few" formatted="false">"few"</string>
+    <string name="ui_many" formatted="false">"many"</string>
+    <string name="ui_there_are_no_listening_records_for_this_day" formatted="false">"There are no listening records for this day"</string>
+    <string name="ui_unknown_works" formatted="false">"Unknown works"</string>
+    <string name="ui_compared_to">"Compared to %1$s"</string>
+    <string name="ui_listen_today" formatted="false">"Listen today"</string>
+    <string name="ui_listen_this_week" formatted="false">"Listen this week"</string>
+    <string name="ui_listen_this_month" formatted="false">"Listen this month"</string>
+    <string name="ui_listen_this_year" formatted="false">"Listen this year"</string>
+    <string name="ui_">"%1$s"</string>
+    <string name="ui_days">"%1$s days"</string>
+    <string name="ui_months">"%1$s months"</string>
+    <string name="ui_day" formatted="false">"day"</string>
+    <string name="ui_week" formatted="false">"week"</string>
+    <string name="ui_moon" formatted="false">"moon"</string>
+    <string name="ui_year" formatted="false">"Year"</string>
+    <string name="ui_yesterday" formatted="false">"yesterday"</string>
+    <string name="ui_last_week" formatted="false">"last week"</string>
+    <string name="ui_weeks_ago">"%1$s weeks ago"</string>
+    <string name="ui_last_month" formatted="false">"last month"</string>
+    <string name="ui_months_ago">"%1$s months ago"</string>
+    <string name="ui_last_year" formatted="false">"last year"</string>
+    <string name="ui_years_ago">"%1$s years ago"</string>
+    <string name="ui_month_day">"%1$s month %2$s day"</string>
+    <string name="ui_current_options" formatted="false">"Current options"</string>
+    <string name="ui_optional" formatted="false">"Optional"</string>
+    <string name="ui_site_status_test" formatted="false">"Site status test"</string>
+    <string name="ui_preferred_source" formatted="false">"Preferred source"</string>
+    <string name="ui_prefer">"Prefer %1$s"</string>
+    <string name="ui_the_current_volume_to_be_adjusted_to_has">"The current volume to be adjusted to %1$s%% has exceeded 40%% and may cause hearing damage. After confirmation, the prompt will not be repeated during this startup."</string>
+    <string name="ui_confirm" formatted="false">"Confirm"</string>
+    <string name="ui_online" formatted="false">"online"</string>
+    <string name="ui_local" formatted="false">"Local"</string>
+    <string name="ui_back" formatted="false">"Back"</string>
+    <string name="ui_create" formatted="false">"create"</string>
+    <string name="ui_custom" formatted="false">"Custom"</string>
+    <string name="ui_reset" formatted="false">"reset"</string>
+    <string name="ui_sound_effector" formatted="false">"sound effector"</string>
+    <string name="ui_volume_threshold" formatted="false">"volume threshold"</string>
+    <string name="ui_model" formatted="false">"model"</string>
+    <string name="ui_loudness_equalization_pulls_the_overall_loudness_towards_the" formatted="false">"Loudness equalization: pulls the overall loudness towards the target value, suitable for unifying the volume between different audios; threshold: limits the loudness to a range, more like automatic gain + suppression."</string>
+    <string name="ui_loudness_equalization" formatted="false">"Loudness equalization"</string>
+    <string name="ui_threshold" formatted="false">"threshold"</string>
+    <string name="ui_target_loudness" formatted="false">"target loudness"</string>
+    <string name="ui_gradually_pull_the_playback_loudness_towards_the_target" formatted="false">"Gradually pull the playback loudness towards the target value (the change is smoother and more suitable for unification between different audios). Recommended range: -24 to -14."</string>
+    <string name="ui_minimum_threshold" formatted="false">"minimum threshold"</string>
+    <string name="ui_when_the_volume_is_lower_than_this_value" formatted="false">"When the volume is lower than this value, it will automatically amplify to close to the threshold."</string>
+    <string name="ui_maximum_threshold" formatted="false">"maximum threshold"</string>
+    <string name="ui_when_the_volume_is_higher_than_this_value" formatted="false">"When the volume is higher than this value, it will be automatically suppressed to not exceed the threshold."</string>
+    <string name="ui_scene_effects" formatted="false">"Scene effects"</string>
+    <string name="ui_scene_preset" formatted="false">"scene preset"</string>
+    <string name="ui_simulate_common_spaces_or_transmission_media_through_band" formatted="false">"Simulate common spaces or transmission media through band limiting, sound field narrowing, and delayed reflections. It is recommended to select a preset first and then fine-tune the intensity."</string>
+    <string name="ui_default" formatted="false">"Preset"</string>
+    <string name="ui_effect_intensity" formatted="false">"Effect intensity"</string>
+    <string name="ui_the_higher_the_intensity_the_more_obvious_the" formatted="false">"The higher the intensity, the more obvious the scene features are. Presets such as phone sounds and bed muffled sounds will be more recognizable at high intensity."</string>
+    <string name="ui_variable_speed_and_pitch" formatted="false">"Variable speed and pitch"</string>
+    <string name="ui_play_speed" formatted="false">"play speed"</string>
+    <string name="ui_the_bigger_it_is_the_faster_it_plays" formatted="false">"The bigger it is, the faster it plays (affecting the rhythm and duration)."</string>
+    <string name="ui_tone" formatted="false">"tone"</string>
+    <string name="ui_the_larger_the_pitch_the_higher_the_pitch" formatted="false">"The larger the pitch, the higher the pitch, and the smaller the pitch, the lower (not necessarily changing the playback duration)."</string>
+    <string name="ui_stereo" formatted="false">"stereo"</string>
+    <string name="ui_sound_source_distance" formatted="false">"Sound source distance"</string>
+    <string name="ui_the_sound_will_be_softer_and_slightly_attenuated" formatted="false">"The sound will be softer and slightly attenuated the further away it is."</string>
+    <string name="ui_sound_source_direction" formatted="false">"Sound source direction"</string>
+    <string name="ui_0_is_centered_90_is_to_the_right" formatted="false">"0° is centered, 90° is to the right, and 270° is to the left."</string>
+    <string name="ui_sound_source_automatically_surrounds" formatted="false">"Sound source automatically surrounds"</string>
+    <string name="ui_when_turned_on_the_sound_and_image_will" formatted="false">"When turned on, the sound and image will automatically move according to the speed."</string>
+    <string name="ui_orbital_speed" formatted="false">"Orbital speed"</string>
+    <string name="ui_the_higher_the_speed_the_faster_the_sound" formatted="false">"The higher the speed, the faster the sound image moves."</string>
+    <string name="ui_left_and_right_balance" formatted="false">"left and right balance"</string>
+    <string name="ui_shift_the_overall_sound_to_the_left_or" formatted="false">"Shift the overall sound to the left or right channel. Mutually exclusive with \"Sound Source Direction/Auto Surround\"."</string>
+    <string name="ui_left_bias">"Left bias %1$s%%"</string>
+    <string name="ui_rightward">"Rightward %1$s%%"</string>
+    <string name="ui_center" formatted="false">"center"</string>
+    <string name="ui_channel_mode" formatted="false">"channel mode"</string>
+    <string name="ui_invert_swap_left_and_right_channels_clone_copy" formatted="false">"Invert: Swap left and right channels; Clone: ​​Copy one channel to the other."</string>
+    <string name="ui_normal" formatted="false">"normal"</string>
+    <string name="ui_reverse" formatted="false">"reverse"</string>
+    <string name="ui_clone_l_r" formatted="false">"Clone L→R"</string>
+    <string name="ui_clone_r_l" formatted="false">"Clone R→L"</string>
+    <string name="ui_equalizer" formatted="false">"equalizer"</string>
+    <string name="ui_default_c8d09c" formatted="false">"Default"</string>
+    <string name="ui_frequency_band_adjustment" formatted="false">"Frequency band adjustment"</string>
+    <string name="ui_each_slider_corresponds_to_a_center_frequency_band" formatted="false">"Each slider corresponds to a center frequency band. Boosts the energy in this frequency band upwards and cuts it downwards."</string>
+    <string name="ui_save_as_custom_preset" formatted="false">"Save as custom preset"</string>
+    <string name="ui_please_enter_a_custom_preset_name" formatted="false">"Please enter a custom preset name."</string>
+    <string name="ui_default_name" formatted="false">"Default name"</string>
+    <string name="ui_save" formatted="false">"Save"</string>
+    <string name="ui_saved_to_album" formatted="false">"Saved to album"</string>
+    <string name="ui_failed_to_save_to_album" formatted="false">"Failed to save to album"</string>
+    <string name="ui_storage_permission_is_required_to_save_to_album" formatted="false">"Storage permission is required to save to album"</string>
+    <string name="ui_unable_to_open_path_is_empty" formatted="false">"Unable to open: path is empty"</string>
+    <string name="ui_open_picture" formatted="false">"Open picture"</string>
+    <string name="ui_no_app_found_to_open" formatted="false">"No app found to open"</string>
+    <string name="ui_file_does_not_exist" formatted="false">"File does not exist"</string>
+    <string name="ui_the_image_cannot_be_opened" formatted="false">"The image cannot be opened"</string>
+    <string name="ui_open_with_another_app" formatted="false">"Open with another app"</string>
+    <string name="ui_save_to_album" formatted="false">"Save to album"</string>
+    <string name="ui_image_loading_failed" formatted="false">"Image loading failed"</string>
+    <string name="ui_proxy_settings" formatted="false">"proxy settings"</string>
+    <string name="ui_host_or_ip" formatted="false">"Host or IP"</string>
+    <string name="ui_port" formatted="false">"port"</string>
+    <string name="ui_account_password_authentication" formatted="false">"Account password authentication"</string>
+    <string name="ui_username" formatted="false">"username"</string>
+    <string name="ui_password_saved" formatted="false">"Password (saved)"</string>
+    <string name="ui_password" formatted="false">"password"</string>
+    <string name="ui_leave_blank_to_continue_using_encrypted_saved_passwords" formatted="false">"Leave blank to continue using encrypted saved passwords"</string>
+    <string name="ui_the_password_will_be_encrypted_and_saved_locally" formatted="false">"The password will be encrypted and saved locally using Android Keystore"</string>
+    <string name="ui_apply_advanced_proxy" formatted="false">"Apply advanced proxy"</string>
+    <string name="ui_current_agent">"Current agent: %1$s"</string>
+    <string name="ui_dns_service" formatted="false">"DNS service"</string>
+    <string name="ui_dns_server_ip" formatted="false">"DNS server IP"</string>
+    <string name="ui_apply_dns" formatted="false">"Apply DNS"</string>
+    <string name="ui_clear_settings_and_use_system_dns" formatted="false">"Clear settings and use system DNS"</string>
+    <string name="ui_current_dns">"Current DNS: %1$s"</string>
+    <string name="ui_system_vpn" formatted="false">"System/VPN"</string>
+    <string name="ui_account_password" formatted="false">"(account password)"</string>
+    <string name="ui_system_dns" formatted="false">"System DNS"</string>
+    <string name="ui_image_source_is_empty" formatted="false">"Image source is empty"</string>
+    <string name="ui_image_path_is_invalid" formatted="false">"Image path is invalid"</string>
+    <string name="ui_unable_to_create_image_sharing_cache" formatted="false">"Unable to create image sharing cache"</string>
+    <string name="ui_unable_to_update_image_sharing_cache" formatted="false">"Unable to update image sharing cache"</string>
+    <string name="ui_image_download_failed_http">"Image download failed: HTTP %1$s"</string>
+    <string name="ui_image_download_result_is_empty" formatted="false">"Image download result is empty"</string>
+    <string name="ui_unable_to_read_image" formatted="false">"Unable to read image"</string>
+    <string name="ui_unable_to_create_album_file" formatted="false">"Unable to create album file"</string>
+    <string name="ui_unable_to_write_to_album_file" formatted="false">"Unable to write to album file"</string>
+    <string name="ui_unable_to_create_album_directory" formatted="false">"Unable to create album directory"</string>
+    <string name="ui_copy" formatted="false">"copy"</string>
+    <string name="ui_paste" formatted="false">"Paste"</string>
+    <string name="ui_cut" formatted="false">"cut"</string>
+    <string name="ui_select_all" formatted="false">"Select all"</string>
+    <string name="ui_fail" formatted="false">"fail"</string>
+    <string name="ui_under_test" formatted="false">"Under test"</string>
+    <string name="ui_not_tested" formatted="false">"Not tested"</string>
+    <string name="ui_select_site" formatted="false">"Select site"</string>
+    <string name="ui_test" formatted="false">"test"</string>
+    <string name="ui_no_signal_available" formatted="false">"No signal available"</string>
+    <string name="ui_signal_strength_bars">"Signal strength %1$s bars"</string>
+    <string name="ui_subtitles" formatted="false">"Subtitles"</string>
+    <string name="ui_log_out" formatted="false">"Log out"</string>
+    <string name="ui_done" formatted="false">"Done"</string>
+    <string name="ui_current_credentials" formatted="false">"Current credentials"</string>
+    <string name="ui_account_number_email" formatted="false">"Account number (email)"</string>
+    <string name="ui_hide" formatted="false">"hide"</string>
+    <string name="ui_show" formatted="false">"show"</string>
+    <string name="ui_expiration_time">"Expiration time: %1$s"</string>
+    <string name="ui_logged_out" formatted="false">"Logged out"</string>
+    <string name="ui_login_failed" formatted="false">"Login failed"</string>
+    <string name="ui_login_successful" formatted="false">"Login successful"</string>
+    <string name="ui_there_is_already_a_download_task_for_the" formatted="false">"There is already a download task for the same work being processed"</string>
+    <string name="ui_precise_search_by_work_number" formatted="false">"Precise search by work number"</string>
+    <string name="ui_no_download_tasks_yet" formatted="false">"No download tasks yet"</string>
+    <string name="ui_task_not_found">"Task not found: %1$s"</string>
+    <string name="ui_retry_failed_items" formatted="false">"Retry failed items"</string>
+    <string name="ui_pause_download_task" formatted="false">"Pause download task"</string>
+    <string name="ui_continue_downloading_task" formatted="false">"Continue downloading task"</string>
+    <string name="ui_delete_download_task" formatted="false">"Delete download task"</string>
+    <string name="ui_download_directory">"Download directory: %1$s · %2$s"</string>
+    <string name="ui_the_files_in_the_directory_will_be_physically">"The files in the \"%1$s\" directory will be physically deleted and cannot be recovered."</string>
+    <string name="ui_file_will_be_physically_deleted_and_cannot_be">"File \"%1$s\" will be physically deleted and cannot be recovered."</string>
+    <string name="ui_the_subtitle_will_be_deleted_and_will_no">"The subtitle \"%1$s\" will be deleted and will no longer be displayed during playback."</string>
+    <string name="ui_subtitles_under_will_be_deleted_and_will_not">"%2$s subtitles under \"%1$s\" will be deleted and will not be displayed during playback."</string>
+    <string name="ui_delete" formatted="false">"Delete"</string>
+    <string name="ui_download_task" formatted="false">"Download task"</string>
+    <string name="ui_translation_tasks" formatted="false">"Translation tasks"</string>
+    <string name="ui_no_translation_tasks_yet" formatted="false">"No translation tasks yet"</string>
+    <string name="ui_continue_subtitle_task" formatted="false">"Continue subtitle task"</string>
+    <string name="ui_pause_subtitle_task" formatted="false">"Pause subtitle task"</string>
+    <string name="ui_in_polishing" formatted="false">"In polishing"</string>
+    <string name="ui_polish_the_subtitles_of_this_work" formatted="false">"Polish the subtitles of this work"</string>
+    <string name="ui_cancel_subtitle_task" formatted="false">"Cancel subtitle task"</string>
+    <string name="ui_delete_all_subtitles_for_this_work" formatted="false">"Delete all subtitles for this work"</string>
+    <string name="ui_under_overall_polishing" formatted="false">"Under overall polishing"</string>
+    <string name="ui_subtitles_156375">"%1$s subtitles"</string>
+    <string name="ui_no_subtitles_yet" formatted="false">"No subtitles yet"</string>
+    <string name="ui_collapse_task_details" formatted="false">"Collapse task details"</string>
+    <string name="ui_expand_task_details" formatted="false">"Expand task details"</string>
+    <string name="ui_work_cover" formatted="false">"Work cover"</string>
+    <string name="ui_lines_of_subtitles">"%1$s lines of subtitles"</string>
+    <string name="ui_retry_subtitle_task" formatted="false">"Retry subtitle task"</string>
+    <string name="ui_cancel_translation" formatted="false">"Cancel translation"</string>
+    <string name="ui_retranslate" formatted="false">"retranslate"</string>
+    <string name="ui_remove_subtitles" formatted="false">"Remove subtitles"</string>
+    <string name="ui_rows">"%1$s/%2$s rows"</string>
+    <string name="ui_confirmed">"Confirmed %1$s/%2$s"</string>
+    <string name="ui_queue_transcription" formatted="false">"Queue Transcription"</string>
+    <string name="ui_transcribing" formatted="false">"Transcribing"</string>
+    <string name="ui_japanese_text_has_been_generated_waiting_for_translation" formatted="false">"Japanese text has been generated, waiting for translation"</string>
+    <string name="ui_waiting_for_translation_slot" formatted="false">"Waiting for translation slot"</string>
+    <string name="ui_waiting_for_network_9267a3" formatted="false">"Waiting for network"</string>
+    <string name="ui_ai_is_confirming_subtitles" formatted="false">"AI is confirming subtitles"</string>
+    <string name="ui_retry_waiting_4">"Retry waiting %1$s/4%2$s"</string>
+    <string name="ui_paused" formatted="false">"Paused"</string>
+    <string name="ui_suspended" formatted="false">"Suspended"</string>
+    <string name="ui_abnormal_interruption">"Abnormal interruption %1$s"</string>
+    <string name="ui_canceling" formatted="false">"Canceling"</string>
+    <string name="ui_completed" formatted="false">"Completed"</string>
+    <string name="ui_canceled" formatted="false">"Canceled"</string>
+    <string name="ui_exception" formatted="false">"Exception"</string>
+    <string name="ui_processing" formatted="false">"Processing"</string>
+    <string name="ui_downloading" formatted="false">"Downloading"</string>
+    <string name="ui_waiting" formatted="false">"Waiting"</string>
+    <string name="ui_local_subtitles" formatted="false">"local subtitles"</string>
+    <string name="ui_task_deleted" formatted="false">"Task deleted"</string>
+    <string name="ui_deleted_file">"Deleted file: %1$s"</string>
+    <string name="ui_the_corresponding_subtitle_task_has_been_canceled_first" formatted="false">"The corresponding subtitle task has been canceled first, and the subtitles can be deleted after the cleanup is completed."</string>
+    <string name="ui_failed_to_delete_subtitles" formatted="false">"Failed to delete subtitles"</string>
+    <string name="ui_subtitles_deleted">"%1$s subtitles deleted"</string>
+    <string name="ui_this_audio_already_has_a_subtitle_task_that" formatted="false">"This audio already has a subtitle task that can be continued"</string>
+    <string name="ui_joined_the_global_translation_queue" formatted="false">"Joined the global translation queue"</string>
+    <string name="ui_unable_to_re_translate_subtitles" formatted="false">"Unable to re-translate subtitles"</string>
+    <string name="ui_can_t_find_the_corresponding_work_and_can_f77a32" formatted="false">"Can\'t find the corresponding work and can\'t polish it"</string>
+    <string name="ui_unable_to_retry_subtitle_task" formatted="false">"Unable to retry subtitle task"</string>
+    <string name="ui_this_group_has_no_content_yet" formatted="false">"This group has no content yet"</string>
+    <string name="ui_are_you_sure_you_want_to_remove_from">"Are you sure you want to remove \"%2$s\" from \"%1$s\"?"</string>
+    <string name="ui_unnamed" formatted="false">"Unnamed"</string>
+    <string name="ui_remove" formatted="false">"Remove"</string>
+    <string name="ui_are_you_sure_you_want_to_remove_the">"Are you sure you want to remove the album \"%2$s\" from \"%1$s\"?"</string>
+    <string name="ui_audio">"Tracks: %1$s"</string>
+    <string name="ui_album" formatted="false">"Album"</string>
+    <string name="ui_move_to_top" formatted="false">"Move to top"</string>
+    <string name="ui_move_to_end" formatted="false">"move to end"</string>
+    <string name="ui_remove_from_group" formatted="false">"Remove from group"</string>
+    <string name="ui_removed_from_group" formatted="false">"Removed from group"</string>
+    <string name="ui_moved_to_top" formatted="false">"Moved to top"</string>
+    <string name="ui_moved_to_end" formatted="false">"Moved to end"</string>
+    <string name="ui_select_group" formatted="false">"Select group"</string>
+    <string name="ui_new_group_name" formatted="false">"New group name"</string>
+    <string name="ui_there_are_currently_no_optional_groups" formatted="false">"There are currently no optional groups"</string>
+    <string name="ui_total_albums_songs">"Total %1$s albums · %2$s songs"</string>
+    <string name="ui_no_group_has_been_created_yet" formatted="false">"No group has been created yet"</string>
+    <string name="ui_are_you_sure_you_want_to_delete_group">"Are you sure you want to delete group \"%1$s\"? This action cannot be undone."</string>
+    <string name="ui_please_enter_a_new_group_name" formatted="false">"Please enter a new group name."</string>
+    <string name="ui_group_name" formatted="false">"Group name"</string>
+    <string name="ui_please_enter_a_new_group_name_d88c11" formatted="false">"Please enter a new group name."</string>
+    <string name="ui_ok" formatted="false">"OK"</string>
+    <string name="ui_group_created">"Group created: %1$s"</string>
+    <string name="ui_group_name_already_exists">"Group name already exists: %1$s"</string>
+    <string name="ui_deleted_group">"Deleted group: %1$s"</string>
+    <string name="ui_renamed_to">"Renamed to: %1$s"</string>
+    <string name="ui_group_name_cannot_be_empty" formatted="false">"Group name cannot be empty"</string>
+    <string name="ui_group_does_not_exist" formatted="false">"Group does not exist"</string>
+    <string name="ui_failed_to_add_to_group_please_try_again" formatted="false">"Failed to add to group, please try again"</string>
+    <string name="ui_added_to_group">"Added to group: %1$s"</string>
+    <string name="ui_days_c3304d" formatted="false">"Days"</string>
+    <string name="ui_ranking_period" formatted="false">"Ranking period"</string>
+    <string name="ui_expanded" formatted="false">"Expanded"</string>
+    <string name="ui_collapsed" formatted="false">"Collapsed"</string>
+    <string name="ui_frequency" formatted="false">"frequency"</string>
+    <string name="ui_duration" formatted="false">"duration"</string>
+    <string name="ui_blocked_word_already_exists">"Blocked word already exists: %1$s"</string>
+    <string name="ui_blocked_word_added">"Blocked word added: %1$s"</string>
+    <string name="ui_data_loading_failed" formatted="false">"Data loading failed"</string>
+    <string name="ui_retry" formatted="false">"Retry"</string>
+    <string name="ui_no_ranking_data_yet" formatted="false">"No ranking data yet"</string>
+    <string name="ui_content" formatted="false">"content"</string>
+    <string name="ui_items_are_blocked">"%1$s items are blocked"</string>
+    <string name="ui_fold" formatted="false">"fold"</string>
+    <string name="ui_expand" formatted="false">"Expand"</string>
+    <string name="ui_backend_not_configured" formatted="false">"Backend not configured"</string>
+    <string name="ui_request_failed" formatted="false">"Request failed"</string>
+    <string name="ui_loading_failed" formatted="false">"Loading failed"</string>
+    <string name="ui_100_million" formatted="false">"100 million"</string>
+    <string name="ui_ten_thousand" formatted="false">"Ten thousand"</string>
+    <string name="ui_1_minute" formatted="false">"&lt;1 minute"</string>
+    <string name="ui_minutes">"%1$s minutes"</string>
+    <string name="ui_billion">"%1$s billion"</string>
+    <string name="ui_million">"%1$s million"</string>
+    <string name="ui_hours">"%1$s hours"</string>
+    <string name="ui_select_file_to_download" formatted="false">"Select file to download"</string>
+    <string name="ui_start_downloading" formatted="false">"Start downloading"</string>
+    <string name="ui_downloaded" formatted="false">"Downloaded"</string>
+    <string name="ui_no_files_available_for_download" formatted="false">"No files available for download"</string>
+    <string name="ui_select_file_to_save" formatted="false">"Select file to save"</string>
+    <string name="ui_save_to_local_library" formatted="false">"Save to local library"</string>
+    <string name="ui_saved" formatted="false">"saved"</string>
+    <string name="ui_no_files_to_save" formatted="false">"No files to save"</string>
+    <string name="ui_selected_optional">"Selected %1$s / Optional %2$s"</string>
+    <string name="ui_select_none" formatted="false">"Select none"</string>
+    <string name="ui_open_file" formatted="false">"open file"</string>
+    <string name="ui_the_file_cannot_be_opened" formatted="false">"The file cannot be opened"</string>
+    <string name="ui_previous_item" formatted="false">"Previous item"</string>
+    <string name="ui_next_item" formatted="false">"Next item"</string>
+    <string name="ui_exit_full_screen" formatted="false">"Exit full screen"</string>
+    <string name="ui_full_screen" formatted="false">"full screen"</string>
+    <string name="ui_loading" formatted="false">"loading..."</string>
+    <string name="ui_content_is_empty" formatted="false">"Content is empty"</string>
+    <string name="ui_online_files_do_not_currently_support_content_preview" formatted="false">"Online files do not currently support content preview. Please use external applications to open them."</string>
+    <string name="ui_read_failed" formatted="false">"Read failed"</string>
+    <string name="ui_pdf_files_do_not_currently_support_direct_preview" formatted="false">"PDF files do not currently support direct preview"</string>
+    <string name="ui_please_use_an_external_application_to_open" formatted="false">"Please use an external application to open"</string>
+    <string name="ui_preview_of_this_file_type_is_not_currently" formatted="false">"Preview of this file type is not currently supported"</string>
+    <string name="ui_root_directory" formatted="false">"Root"</string>
+    <string name="ui_directory_operations" formatted="false">"Directory operations"</string>
+    <string name="ui_delete_directory" formatted="false">"delete directory"</string>
+    <string name="ui_generate_and_translate_subtitles" formatted="false">"Generate and translate subtitles"</string>
+    <string name="ui_favorites_d07cee" formatted="false">"Favorites"</string>
+    <string name="ui_list" formatted="false">"list"</string>
+    <string name="ui_queue" formatted="false">"queue"</string>
+    <string name="ui_there_are_no_files_in_the_current_directory" formatted="false">"There are no files in the current directory"</string>
+    <string name="ui_items_selected">"%1$s items selected"</string>
+    <string name="ui_media_items">"Media %1$s items"</string>
+    <string name="ui_click_on_the_file_to_increase_or_decrease" formatted="false">"Click on the file to increase or decrease the selection"</string>
+    <string name="ui_long_press_to_perform_batch_operations" formatted="false">"Long press to perform batch operations"</string>
+    <string name="ui_translate_selected" formatted="false">"Translate selected"</string>
+    <string name="ui_batch_translation" formatted="false">"Batch translation"</string>
+    <string name="ui_open_by_default" formatted="false">"Open by default"</string>
+    <string name="ui_selected" formatted="false">"Selected"</string>
+    <string name="ui_remove_custom_cover" formatted="false">"Remove custom cover"</string>
+    <string name="ui_set_as_cover" formatted="false">"Set as cover"</string>
+    <string name="ui_more_actions" formatted="false">"More actions"</string>
+    <string name="ui_download" formatted="false">"Download"</string>
+    <string name="ui_add_to_play_queue" formatted="false">"Add to play queue"</string>
+    <string name="ui_add_to_my_list" formatted="false">"add to my list"</string>
+    <string name="ui_tag_management" formatted="false">"tag management"</string>
+    <string name="ui_remove_from_album" formatted="false">"Remove from album"</string>
+    <string name="ui_import_content" formatted="false">"Import content"</string>
+    <string name="ui_download_content" formatted="false">"Download content"</string>
+    <string name="ui_audio_461189" formatted="false">"Audio"</string>
+    <string name="ui_video" formatted="false">"video"</string>
+    <string name="ui_picture" formatted="false">"picture"</string>
+    <string name="ui_text" formatted="false">"text"</string>
+    <string name="ui_compressed_package" formatted="false">"Compressed package"</string>
+    <string name="ui_document" formatted="false">"document"</string>
+    <string name="ui_sheet" formatted="false">"sheet"</string>
+    <string name="ui_presentation" formatted="false">"presentation"</string>
+    <string name="ui_code" formatted="false">"code"</string>
+    <string name="ui_e_book" formatted="false">"e-book"</string>
+    <string name="ui_font" formatted="false">"font"</string>
+    <string name="ui_installation_package_4f4d1a" formatted="false">"Installation package"</string>
+    <string name="ui_document_49deaf" formatted="false">"document"</string>
+    <string name="ui_online_audio" formatted="false">"online audio"</string>
+    <string name="ui_sample_image_not_loaded" formatted="false">"Sample image not loaded"</string>
+    <string name="ui_a_total_of_photos_click_preview_in_the">"A total of %1$s photos · Click \"Preview\" in the upper right corner to load them locally"</string>
+    <string name="ui_after_obtaining_the_sample_link_you_can_click" formatted="false">"After obtaining the sample link, you can click \"Preview\" in the upper right corner to load it."</string>
+    <string name="ui_one_included" formatted="false">"ONE (included)"</string>
+    <string name="ui_source" formatted="false">"Source"</string>
+    <string name="ui_refresh" formatted="false">"refresh"</string>
+    <string name="ui_not_available_on_yet">"Not available on %1$s yet"</string>
+    <string name="ui_preview" formatted="false">"Preview"</string>
+    <string name="ui_no_sample_picture_yet" formatted="false">"No sample picture yet"</string>
+    <string name="ui_listen_preview" formatted="false">"Listen / Preview"</string>
+    <string name="ui_no_audition_preview_yet" formatted="false">"No audition / preview yet"</string>
+    <string name="ui_you_need_to_log_in_to_dlsite_before" formatted="false">"You need to log in to DLsite before you can use purchased playback/downloads"</string>
+    <string name="ui_go_to_login" formatted="false">"Go to login"</string>
+    <string name="ui_purchased_content" formatted="false">"Purchased content"</string>
+    <string name="ui_log_in_switch_account" formatted="false">"Log in/switch account"</string>
+    <string name="ui_missing_work_number_unable_to_load" formatted="false">"Missing work number, unable to load"</string>
+    <string name="ui_no_playback_resources_available_yet" formatted="false">"No playback resources available yet"</string>
+    <string name="ui_subtitles_already_exist_they_will_be_overwritten_and" formatted="false">"Subtitles already exist, they will be overwritten and regenerated and translated."</string>
+    <string name="ui_the_selected_audio_already_has_a_subtitle_task" formatted="false">"The selected audio already has a subtitle task that can be continued"</string>
+    <string name="ui_already_added_to_subtitle_task_queue" formatted="false">"Already added to subtitle task queue"</string>
+    <string name="ui_unable_to_start_generating_and_translating_subtitles" formatted="false">"Unable to start generating and translating subtitles"</string>
+    <string name="ui_delete_directory_9295d5" formatted="false">"Delete directory?"</string>
+    <string name="ui_delete_files" formatted="false">"Delete files?"</string>
+    <string name="ui_directory_and_its_entire_contents_will_be_permanently">"Directory \"%1$s\" and its entire contents will be permanently deleted, and associated local library records will be removed. This operation is irreversible."</string>
+    <string name="ui_and_the_online_resources_it_contains_will_be">"\'%1$s\' and the online resources it contains will be removed from the local library tree."</string>
+    <string name="ui_file_will_be_permanently_deleted_this_operation_is">"File \"%1$s\" will be permanently deleted. This operation is irreversible."</string>
+    <string name="ui_resource_will_be_removed_from_the_local_library">"Resource \'%1$s\' will be removed from the local library tree."</string>
+    <string name="ui_list_of_community_works" formatted="false">"List of community works"</string>
+    <string name="ui_works_with_the_same_voice_actor" formatted="false">"Works with the same voice actor"</string>
+    <string name="ui_people_who_bought_this_work_also_bought_these" formatted="false">"People who bought this work also bought these works"</string>
+    <string name="ui_select_local_audio_to_translate_first" formatted="false">"Select local audio to translate first"</string>
+    <string name="ui_no_audio_to_translate_select_local_audio_files" formatted="false">"No audio to translate. Select local audio files."</string>
+    <string name="ui_batch_translation_requires_local_audio_download_it_first" formatted="false">"Batch translation requires local audio. Download it first."</string>
+    <string name="ui_batch_translation_does_not_support_the_selected_audio" formatted="false">"Batch translation does not support the selected audio format"</string>
+    <string name="ui_no_local_tracks_to_translate_rescan_your_library" formatted="false">"No local tracks to translate. Rescan your library and try again."</string>
+    <string name="ui_experience_video" formatted="false">"Experience video"</string>
+    <string name="ui_experience_audio" formatted="false">"Experience audio"</string>
+    <string name="ui_failed_to_read_local_file_status_please_try" formatted="false">"Failed to read local file status, please try again later"</string>
+    <string name="ui_set_as_default_directory_to_open" formatted="false">"Set as default directory to open"</string>
+    <string name="ui_not_downloaded_to_local" formatted="false">"Not downloaded to local"</string>
+    <string name="ui_title" formatted="false">"title"</string>
+    <string name="ui_work_id" formatted="false">"Work ID"</string>
+    <string name="ui_circle" formatted="false">"Circle"</string>
+    <string name="ui_similar_works" formatted="false">"Similar works"</string>
+    <string name="ui_similar_works_failed_to_load" formatted="false">"Similar works failed to load"</string>
+    <string name="ui_there_are_currently_no_similar_works_recommended" formatted="false">"There are currently no similar works recommended"</string>
+    <string name="ui_recommended_similar_works" formatted="false">"Recommended similar works"</string>
+    <string name="ui_people_are_listening">"Listening now: %1$s"</string>
+    <string name="ui_voice_actor" formatted="false">"Voice actor"</string>
+    <string name="ui_label" formatted="false">"Tag"</string>
+    <string name="ui_lossless_download" formatted="false">"Lossless download"</string>
+    <string name="ui_group" formatted="false">"Group"</string>
+    <string name="ui_open_webpage" formatted="false">"Website"</string>
+    <string name="ui_simplified_chinese" formatted="false">"CHS"</string>
+    <string name="ui_traditional_chinese" formatted="false">"CHT"</string>
+    <string name="ui_japanese" formatted="false">"JPN"</string>
+    <string name="ui_please_enter_a_valid_work_number" formatted="false">"Please enter a valid work number"</string>
+    <string name="ui_only_supports_manual_binding_of_work_numbers_to" formatted="false">"Only supports manual binding of work numbers to local library albums"</string>
+    <string name="ui_finish_or_cancel_the_local_file_task_before" formatted="false">"Finish or cancel the local file task before syncing"</string>
+    <string name="ui_is_already_in_your_library">"%1$s is already in your library"</string>
+    <string name="ui_album_does_not_exist" formatted="false">"Album does not exist"</string>
+    <string name="ui_has_been_bound_and_cloud_synchronization_completed">"%1$s has been bound and cloud synchronization completed"</string>
+    <string name="ui_sync_failed_album_information_not_found" formatted="false">"Sync failed: Album information not found"</string>
+    <string name="ui_synchronization_failed_please_try_again_later" formatted="false">"Synchronization failed, please try again later"</string>
+    <string name="ui_custom_cover_removed" formatted="false">"Custom cover removed"</string>
+    <string name="ui_cover_set" formatted="false">"Cover set"</string>
+    <string name="ui_failed_to_set_cover_please_check_and_try" formatted="false">"Failed to set cover, please check and try again"</string>
+    <string name="ui_unable_to_load_jp_asmr_tracks_try_again" formatted="false">"Unable to load jp-asmr tracks. Try again."</string>
+    <string name="ui_audition_refresh_failed_please_try_again_later" formatted="false">"Audition refresh failed, please try again later."</string>
+    <string name="ui_jp_asmr_tracks_have_not_been_synced_yet" formatted="false">"jp-asmr tracks have not been synced yet"</string>
+    <string name="ui_dlsite_play_failed_to_load_please_try_again" formatted="false">"DLsite Play failed to load, please try again later."</string>
+    <string name="ui_the_work_has_been_deleted" formatted="false">"The work has been deleted"</string>
+    <string name="ui_no_matching_audio_download_link_found" formatted="false">"No matching audio download link found"</string>
+    <string name="ui_unable_to_determine_dlsite_play_title_number" formatted="false">"Unable to determine DLsite Play title number"</string>
+    <string name="ui_it_already_exists_locally_and_has_not_been" formatted="false">"It already exists locally and has not been saved repeatedly."</string>
+    <string name="ui_saved_to_local_library_item_skip_existing_item">"Saved to local library (%1$s item), skip existing (%2$s item)"</string>
+    <string name="ui_saved_to_local_library_item">"Saved to local library (%1$s item)"</string>
+    <string name="ui_change_to">"Use %1$s as:"</string>
+    <string name="ui_copy_to_pasteboard" formatted="false">"Copy to clipboard"</string>
+    <string name="ui_search_as_keyword" formatted="false">"Search"</string>
+    <string name="ui_create_list_as_name" formatted="false">"Create playlist"</string>
+    <string name="ui_create_group_as_name" formatted="false">"Create group"</string>
+    <string name="ui_block_as_a_block_word" formatted="false">"Block keyword"</string>
+    <string name="ui_copied">"%1$s copied"</string>
+    <string name="ui_pending_confirmation">"Pending confirmation %1$s / %2$s"</string>
+    <string name="ui_cloud_synchronization_candidates_suspected_results_click_the_correspon">"Cloud synchronization candidates: %1$s suspected results (click the corresponding work to confirm synchronization)"</string>
+    <string name="ui_current_album" formatted="false">"current album"</string>
+    <string name="ui_ignore_all" formatted="false">"ignore all"</string>
+    <string name="ui_cancel_current" formatted="false">"Cancel current"</string>
+    <string name="ui_the_source_file_is_missing_download_the_online" formatted="false">"The source file is missing. Download the online audio?"</string>
+    <string name="ui_source_files_for_tracks_are_missing_download_their">"Source files for %1$s tracks are missing. Download their online audio?"</string>
+    <string name="ui_download_online_audio" formatted="false">"Download online audio"</string>
+    <string name="ui_source_c63f79" formatted="false">"source"</string>
+    <string name="ui_search_tags" formatted="false">"Search tags"</string>
+    <string name="ui_no_matching_tags" formatted="false">"No matching tags"</string>
+    <string name="ui_search_communities" formatted="false">"Search communities"</string>
+    <string name="ui_no_matching_groups" formatted="false">"No matching groups"</string>
+    <string name="ui_search_cv" formatted="false">"Search CV"</string>
+    <string name="ui_no_matching_cv" formatted="false">"No matching CV"</string>
+    <string name="ui_no_filter_presets_yet" formatted="false">"No filter presets yet"</string>
+    <string name="ui_delete_preset" formatted="false">"Delete preset"</string>
+    <string name="ui_please_enter_a_filter_preset_name" formatted="false">"Please enter a filter preset name."</string>
+    <string name="ui_please_enter_the_default_name" formatted="false">"Please enter the default name"</string>
+    <string name="ui_filter_local_library" formatted="false">"Filter local library"</string>
+    <string name="ui_not_applied" formatted="false">"Not applied"</string>
+    <string name="ui_manage_tags" formatted="false">"Manage tags"</string>
+    <string name="ui_turn_off_filtering" formatted="false">"Turn off filtering"</string>
+    <string name="ui_no_limit" formatted="false">"No limit"</string>
+    <string name="ui_local_only" formatted="false">"local only"</string>
+    <string name="ui_download_only" formatted="false">"download only"</string>
+    <string name="ui_local_download" formatted="false">"Local + download"</string>
+    <string name="ui_save_draft" formatted="false">"save draft"</string>
+    <string name="ui_application" formatted="false">"application"</string>
+    <string name="ui_selected_f34565">"Selected %1$s"</string>
+    <string name="ui_no_filter_selected" formatted="false">"No filter selected"</string>
+    <string name="ui_tag">"Tag %1$s"</string>
+    <string name="ui_society">"Circle %1$s"</string>
+    <string name="ui_exclude_tag">"Exclude tag %1$s"</string>
+    <string name="ui_scanning_local_library" formatted="false">"Scanning local library"</string>
+    <string name="ui_cloud_sync_in_progress" formatted="false">"Cloud sync in progress"</string>
+    <string name="ui_progress">"Progress %1$s/%2$s"</string>
+    <string name="ui_scanning">"Scanning: %1$s"</string>
+    <string name="ui_local_library_results" formatted="false">"Local library results"</string>
+    <string name="ui_no_matching_local_content" formatted="false">"No matching local content"</string>
+    <string name="ui_the_local_album_has_not_been_scanned_yet" formatted="false">"The local album has not been scanned yet"</string>
+    <string name="ui_reset_filter" formatted="false">"Reset filter"</string>
+    <string name="ui_add_to_group" formatted="false">"Add to group"</string>
+    <string name="ui_local_sync" formatted="false">"local sync"</string>
+    <string name="ui_cloud_sync" formatted="false">"Cloud sync"</string>
+    <string name="ui_cancel_synchronization" formatted="false">"Cancel synchronization"</string>
+    <string name="ui_the_album_will_be_removed_from_the_local" formatted="false">"The album will be removed from the local library and an attempt will be made to delete the local files."</string>
+    <string name="ui_societies_cv_tags" formatted="false">"Circles / Voice actors / Tags..."</string>
+    <string name="ui_recently_played" formatted="false">"Recently played"</string>
+    <string name="ui_recently_joined" formatted="false">"Recently joined"</string>
+    <string name="ui_album_title" formatted="false">"album title"</string>
+    <string name="ui_filtering_is_enabled" formatted="false">"Filtering is enabled"</string>
+    <string name="ui_filtering_is_not_enabled" formatted="false">"Filtering is not enabled"</string>
+    <string name="ui_add_to_playlist" formatted="false">"add to playlist"</string>
+    <string name="ui_sync_failed" formatted="false">"Sync failed"</string>
+    <string name="ui_finish_or_cancel_the_local_file_task_before_8d9564">"Finish or cancel the local file task before proceeding: %1$s"</string>
+    <string name="ui_batch_tasks_are_being_executed_please_cancel_first">"Batch tasks are being executed, please cancel first and then %1$s"</string>
+    <string name="ui_the_album_is_executing">"The album is executing %1$s"</string>
+    <string name="ui_there_are_no_tasks_to_cancel" formatted="false">"There are no tasks to cancel"</string>
+    <string name="ui_task_canceled" formatted="false">"Task canceled"</string>
+    <string name="ui_the_remaining_items_to_be_confirmed_in_this" formatted="false">"The remaining items to be confirmed in this round have been ignored"</string>
+    <string name="ui_scan_directory_already_exists" formatted="false">"Scan directory already exists"</string>
+    <string name="ui_this_directory_is_already_included_in_an_existing" formatted="false">"This directory is already included in an existing scan directory"</string>
+    <string name="ui_this_directory_contains_an_existing_scan_directory_please" formatted="false">"This directory contains an existing scan directory, please remove the subdirectory first"</string>
+    <string name="ui_scan_directory_added" formatted="false">"Scan directory added"</string>
+    <string name="ui_refresh_local" formatted="false">"Refresh local"</string>
+    <string name="ui_scan_completed" formatted="false">"Scan completed"</string>
+    <string name="ui_scan_canceled" formatted="false">"Scan canceled"</string>
+    <string name="ui_scan_failed">"Scan failed: %1$s"</string>
+    <string name="ui_scan_target_download_directory" formatted="false">"Scan target download directory"</string>
+    <string name="ui_target_download_directory_scan_completed" formatted="false">"Target download directory scan completed"</string>
+    <string name="ui_target_directory_scan_canceled" formatted="false">"Target directory scan canceled"</string>
+    <string name="ui_target_directory_scan_failed">"Target directory scan failed: %1$s"</string>
+    <string name="ui_refresh_directory" formatted="false">"refresh directory"</string>
+    <string name="ui_directory_refresh_completed" formatted="false">"Directory refresh completed"</string>
+    <string name="ui_refresh_canceled" formatted="false">"Refresh canceled"</string>
+    <string name="ui_refresh_failed">"Refresh failed: %1$s"</string>
+    <string name="ui_fully_synchronized" formatted="false">"Fully synchronized"</string>
+    <string name="ui_cloud_sync_canceled" formatted="false">"Cloud sync canceled"</string>
+    <string name="ui_cloud_sync_failed">"Cloud sync failed: %1$s"</string>
+    <string name="ui_cloud_synchronization_completed" formatted="false">"Cloud synchronization completed"</string>
+    <string name="ui_the_main_process_has_been_completed_and_items">"The main process has been completed, and %1$s items remain to be confirmed."</string>
+    <string name="ui_metadata_synchronization_successful" formatted="false">"Metadata synchronization successful"</string>
+    <string name="ui_synchronization_failed_search_results_are_not_unique" formatted="false">"Synchronization failed: search results are not unique"</string>
+    <string name="ui_synchronization_exception">"Synchronization exception: %1$s"</string>
+    <string name="ui_the_directory_does_not_exist_and_has_been" formatted="false">"The directory does not exist and has been removed from the local library"</string>
+    <string name="ui_rescan_completed" formatted="false">"Rescan completed"</string>
+    <string name="ui_rescan_canceled" formatted="false">"Rescan canceled"</string>
+    <string name="ui_rescan_failed" formatted="false">"Rescan failed"</string>
+    <string name="ui_rescan_failed_d1fca6">"Rescan failed: %1$s"</string>
+    <string name="ui_a_batch_task_is_being_executed_please_cancel" formatted="false">"A batch task is being executed, please cancel first and then delete it."</string>
+    <string name="ui_album_deleted" formatted="false">"Album deleted"</string>
+    <string name="ui_delete_failed">"Delete failed: %1$s"</string>
+    <string name="ui_delete_failed_invalid_directory_entry_path" formatted="false">"Delete failed: Invalid directory entry path"</string>
+    <string name="ui_unable_to_delete_directory_please_check_storage_permissions" formatted="false">"Unable to delete directory, please check storage permissions"</string>
+    <string name="ui_unable_to_delete_file_please_check_storage_permissions" formatted="false">"Unable to delete file, please check storage permissions"</string>
+    <string name="ui_directory_deleted" formatted="false">"Directory deleted"</string>
+    <string name="ui_deleted_file_918f79" formatted="false">"Deleted file"</string>
+    <string name="ui_file_deleted_and_removed" formatted="false">"File deleted and removed"</string>
+    <string name="ui_removed_from_album" formatted="false">"Removed from album"</string>
+    <string name="ui_directory_authorization_address_is_invalid" formatted="false">"Directory authorization address is invalid"</string>
+    <string name="ui_unable_to_read_directory_authorization" formatted="false">"Unable to read directory authorization"</string>
+    <string name="ui_unable_to_access_directory_please_re_authorize_storage" formatted="false">"Unable to access directory, please re-authorize storage permissions"</string>
+    <string name="ui_unable_to_read_download_folder" formatted="false">"Unable to read download folder"</string>
+    <string name="ui_scan_folder_unavailable" formatted="false">"Scan folder unavailable"</string>
+    <string name="ui_files_changed_during_the_scan_scan_again" formatted="false">"Files changed during the scan. Scan again."</string>
+    <string name="ui_the_scan_folder_was_moved_deleted_or_is" formatted="false">"The scan folder was moved, deleted, or is inaccessible"</string>
+    <string name="ui_unable_to_read_scan_folder" formatted="false">"Unable to read scan folder"</string>
+    <string name="ui_scan_folder_permission_expired" formatted="false">"Scan folder permission expired"</string>
+    <string name="ui_unable_to_check_scan_folder" formatted="false">"Unable to check scan folder"</string>
+    <string name="ui_already_tagged" formatted="false">"Already tagged"</string>
+    <string name="ui_user_tag" formatted="false">"User tag"</string>
+    <string name="ui_not_added" formatted="false">"Not added"</string>
+    <string name="ui_click_on_user_label_to_remove" formatted="false">"Click on user label to remove"</string>
+    <string name="ui_search_existing_tags" formatted="false">"Search existing tags"</string>
+    <string name="ui_add_custom_labels" formatted="false">"Add custom labels"</string>
+    <string name="ui_custom_tag_management" formatted="false">"Custom tag management"</string>
+    <string name="ui_not_used" formatted="false">"Not used"</string>
+    <string name="ui_user_annotation" formatted="false">"User annotation"</string>
+    <string name="ui_total" formatted="false">"total"</string>
+    <string name="ui_click_to_rename_or_delete" formatted="false">"Click to rename or delete"</string>
+    <string name="ui_modify_the_label_name_or_delete_this_user" formatted="false">"Modify the label name, or delete this user label."</string>
+    <string name="ui_the_label_will_be_removed_from_all_user" formatted="false">"The label will be removed from all user annotations."</string>
+    <string name="ui_switch" formatted="false">"switch"</string>
+    <string name="ui_jump_to_play">"Jump to %1$s play"</string>
+    <string name="ui_jump_to_play_220241" formatted="false">"Jump to play"</string>
+    <string name="ui_not_played" formatted="false">"Not played"</string>
+    <string name="ui_cancel_favorites" formatted="false">"Cancel favorites"</string>
+    <string name="ui_sound_effects_panel" formatted="false">"Sound effects panel"</string>
+    <string name="ui_enabled" formatted="false">"Enabled"</string>
+    <string name="ui_disabled" formatted="false">"Disabled"</string>
+    <string name="ui_slice_play" formatted="false">"Slice play"</string>
+    <string name="ui_play_mode" formatted="false">"play mode"</string>
+    <string name="ui_fast_forward_10_seconds" formatted="false">"Fast forward 10 seconds"</string>
+    <string name="ui_there_are_no_synchronized_lyrics_in_the_current" formatted="false">"There are no synchronized lyrics in the current audio"</string>
+    <string name="ui_long_press_to_adjust_volume" formatted="false">"Long press to adjust volume"</string>
+    <string name="ui_volume" formatted="false">"volume"</string>
+    <string name="ui_play_queue" formatted="false">"play queue"</string>
+    <string name="ui_first">"%1$s first"</string>
+    <string name="ui_collapse_playlist" formatted="false">"Collapse playlist"</string>
+    <string name="ui_expand_playlist" formatted="false">"Expand playlist"</string>
+    <string name="ui_play_queue_is_empty" formatted="false">"Play queue is empty"</string>
+    <string name="ui_playing" formatted="false">"Playing"</string>
+    <string name="ui_clip_trimming" formatted="false">"Clip trimming"</string>
+    <string name="ui_set_as_current" formatted="false">"Set as current"</string>
+    <string name="ui_set_to_0" formatted="false">"set to 0"</string>
+    <string name="ui_set_to_end" formatted="false">"set to end"</string>
+    <string name="ui_manually_bind_lyrics" formatted="false">"Manually bind lyrics"</string>
+    <string name="ui_add_lyrics" formatted="false">"Add lyrics"</string>
+    <string name="ui_play_queue_animation_only_belongs_to_tablet_horizontal" formatted="false">"Play queue animation only belongs to tablet horizontal screen layout"</string>
+    <string name="ui_audio_spectrum_animation_only_belongs_to_horizontal_screen" formatted="false">"Audio spectrum animation only belongs to horizontal screen layout"</string>
+    <string name="ui_the_current_audio_cannot_be_listened_to_together" formatted="false">"The current audio cannot be listened to together"</string>
+    <string name="ui_people_are_listening_with_you" formatted="false">"People are listening with you."</string>
+    <string name="ui_appreciating_loneliness" formatted="false">"Appreciating loneliness"</string>
+    <string name="ui_swipe_up_to_switch_cover_layout" formatted="false">"Swipe up to switch cover layout"</string>
+    <string name="ui_lyrics" formatted="false">"Lyrics"</string>
+    <string name="ui_slice_management" formatted="false">"Slice management"</string>
+    <string name="ui_clear" formatted="false">"Clear"</string>
+    <string name="ui_no_slices_yet" formatted="false">"No slices yet"</string>
+    <string name="ui_play_slice" formatted="false">"Play slice"</string>
+    <string name="ui_delete_slice" formatted="false">"Delete slice"</string>
+    <string name="ui_modify_starting_point" formatted="false">"Modify starting point"</string>
+    <string name="ui_modify_end_point" formatted="false">"Modify end point"</string>
+    <string name="ui_if_you_need_to_replace_lyrics_with_online" formatted="false">"If you need to replace lyrics with online audio, please download the audio to your local computer first."</string>
+    <string name="ui_setup_successful_is_expected_to_pause_playback">"Setup successful, %1$s is expected to pause playback"</string>
+    <string name="ui_canceled_favorites" formatted="false">"Canceled favorites"</string>
+    <string name="ui_added_to_my_favorites" formatted="false">"Added to my favorites"</string>
+    <string name="ui_online_audio_does_not_currently_support_tag_management" formatted="false">"Online audio does not currently support tag management"</string>
+    <string name="ui_lyrics_added" formatted="false">"Lyrics added"</string>
+    <string name="ui_failed_to_add_lyrics" formatted="false">"Failed to add lyrics"</string>
+    <string name="ui_only_supports_lrc_srt_vtt_lyric_files" formatted="false">"Only supports LRC, SRT, VTT lyric files"</string>
+    <string name="ui_queued_items_skipped_items">"Queued %1$s items, skipped %2$s items"</string>
+    <string name="ui_items_have_been_added_to_the_play_queue">"%1$s items have been added to the play queue"</string>
+    <string name="ui_the_selected_item_is_already_in_the_play" formatted="false">"The selected item is already in the play queue"</string>
+    <string name="ui_play_only_slices_is_on" formatted="false">"Play only slices is on"</string>
+    <string name="ui_play_only_slices_is_off" formatted="false">"Play only slices is off"</string>
+    <string name="ui_slice_deleted" formatted="false">"Slice deleted"</string>
+    <string name="ui_failed_to_delete_slice" formatted="false">"Failed to delete slice"</string>
+    <string name="ui_slice_cleared" formatted="false">"Slice cleared"</string>
+    <string name="ui_failed_to_clear_slices" formatted="false">"Failed to clear slices"</string>
+    <string name="ui_end_time_cannot_be_earlier_than_start_time" formatted="false">"End time cannot be earlier than start time"</string>
+    <string name="ui_the_slice_overlaps_an_existing_slice" formatted="false">"The slice overlaps an existing slice"</string>
+    <string name="ui_failed_to_update_slice" formatted="false">"Failed to update slice"</string>
+    <string name="ui_there_are_currently_no_tracks_to_play" formatted="false">"There are currently no tracks to play"</string>
+    <string name="ui_unable_to_get_duration" formatted="false">"Unable to get duration"</string>
+    <string name="ui_the_starting_point_falls_within_an_existing_slice" formatted="false">"The starting point falls within an existing slice"</string>
+    <string name="ui_starting_point_marked" formatted="false">"Starting point marked"</string>
+    <string name="ui_slice_created" formatted="false">"Slice created"</string>
+    <string name="ui_failed_to_create_slice" formatted="false">"Failed to create slice"</string>
+    <string name="ui_single_loop" formatted="false">"single loop"</string>
+    <string name="ui_shuffle" formatted="false">"shuffle"</string>
+    <string name="ui_list_loop" formatted="false">"List loop"</string>
+    <string name="ui_play_mode_2a61bc">"Play mode: %1$s"</string>
+    <string name="ui_no_playable_audio_track_found" formatted="false">"No playable audio track found"</string>
+    <string name="ui_player_not_connected" formatted="false">"Player not connected"</string>
+    <string name="ui_current_play_queue" formatted="false">"Current play queue"</string>
+    <string name="ui_remaining">"%1$s remaining"</string>
+    <string name="ui_no_scheduled_shutdown_is_set" formatted="false">"No scheduled shutdown is set"</string>
+    <string name="ui_scheduled_shutdown" formatted="false">"Scheduled shutdown"</string>
+    <string name="ui_enter_the_number_of_minutes" formatted="false">"Enter the number of minutes"</string>
+    <string name="ui_cancel_timer" formatted="false">"Cancel timer"</string>
+    <string name="ui_enter_the_number_of_minutes_for_the_scheduled" formatted="false">"Enter the number of minutes for the scheduled shutdown."</string>
+    <string name="ui_your_favorites_will_appear_here" formatted="false">"Your favorites will appear here"</string>
+    <string name="ui_this_list_has_no_content_yet" formatted="false">"This list has no content yet"</string>
+    <string name="ui_removed_from_my_list" formatted="false">"Removed from my list"</string>
+    <string name="ui_select_list" formatted="false">"select list"</string>
+    <string name="ui_new_list_name" formatted="false">"New list name"</string>
+    <string name="ui_no_optional_list_yet" formatted="false">"No optional list yet"</string>
+    <string name="ui_items_will_be_added">"%1$s items will be added"</string>
+    <string name="ui_total_first">"Total %1$s first"</string>
+    <string name="ui_no_list_created_yet" formatted="false">"No list created yet"</string>
+    <string name="ui_are_you_sure_you_want_to_delete_list">"Are you sure you want to delete list \"%1$s\"? This action cannot be undone."</string>
+    <string name="ui_please_enter_a_new_list_name" formatted="false">"Please enter a new list name."</string>
+    <string name="ui_please_enter_a_list_name" formatted="false">"Please enter a list name"</string>
+    <string name="ui_please_enter_a_new_list_name_761c9f" formatted="false">"Please enter a new list name."</string>
+    <string name="ui_playlist_created">"Playlist created: %1$s"</string>
+    <string name="ui_list_name_already_exists">"List name already exists: %1$s"</string>
+    <string name="ui_deleted_playlist">"Deleted playlist: %1$s"</string>
+    <string name="ui_list_name_cannot_be_empty" formatted="false">"List name cannot be empty"</string>
+    <string name="ui_list_does_not_exist" formatted="false">"List does not exist"</string>
+    <string name="ui_failed_to_add_to_favorites_please_try_again" formatted="false">"Failed to add to favorites, please try again"</string>
+    <string name="ui_failed_to_add_to_list_please_try_again" formatted="false">"Failed to add to list, please try again"</string>
+    <string name="ui_added_items_to_skipping_items">"Added %1$s items to %2$s, skipping %3$s items"</string>
+    <string name="ui_added_items_to">"Added %1$s items to %2$s"</string>
+    <string name="ui_the_selected_item_is_already_in">"The selected item is already in %1$s"</string>
+    <string name="ui_search_history" formatted="false">"Search history"</string>
+    <string name="ui_clear_search_history" formatted="false">"Clear search history"</string>
+    <string name="ui_no_search_history_yet" formatted="false">"No search history yet"</string>
+    <string name="ui_popular_voice_actors" formatted="false">"Popular voice actors"</string>
+    <string name="ui_popular_tags" formatted="false">"Popular tags"</string>
+    <string name="ui_guess_you_like" formatted="false">"Guess you like"</string>
+    <string name="ui_recommended" formatted="false">"Recommended"</string>
+    <string name="ui_change_a_batch" formatted="false">"Change a batch"</string>
+    <string name="ui_already_finished_reading" formatted="false">"Already finished reading"</string>
+    <string name="ui_clear_search_history_334950" formatted="false">"Clear search history?"</string>
+    <string name="ui_recommended_works" formatted="false">"Recommended works"</string>
+    <string name="ui_chinese_works" formatted="false">"Chinese works"</string>
+    <string name="ui_all_works" formatted="false">"All works"</string>
+    <string name="ui_pre_sale" formatted="false">"Pre-sale"</string>
+    <string name="ui_purchased" formatted="false">"Purchased"</string>
+    <string name="ui_search_albums_circles_voice_actors" formatted="false">"Search albums, circles, voice actors…"</string>
+    <string name="ui_the_search_is_being_processed_please_try_again" formatted="false">"The search is being processed, please try again later."</string>
+    <string name="ui_pull_down_to_refresh" formatted="false">"Pull down to refresh"</string>
+    <string name="ui_release_to_refresh" formatted="false">"Release to refresh"</string>
+    <string name="ui_refreshing" formatted="false">"Refreshing"</string>
+    <string name="ui_no_search_results_yet" formatted="false">"No search results yet"</string>
+    <string name="ui_no_matching_results_found" formatted="false">"No matching results found"</string>
+    <string name="ui_there_s_something_wrong_with_the_network_connection" formatted="false">"There\'s something wrong with the network connection"</string>
+    <string name="ui_pull_up_next_page" formatted="false">"Pull up next page"</string>
+    <string name="ui_let_go_and_turn_the_page" formatted="false">"Let go and turn the page"</string>
+    <string name="ui_turning_pages" formatted="false">"Turning pages"</string>
+    <string name="ui_the_current_scope_does_not_support_work_filtering" formatted="false">"The current scope does not support work filtering"</string>
+    <string name="ui_item_filtering_is_not_enabled" formatted="false">"Item filtering is not enabled"</string>
+    <string name="ui_1_item_filter_enabled" formatted="false">"1 item filter enabled"</string>
+    <string name="ui_2_item_filters_enabled" formatted="false">"2 item filters enabled"</string>
+    <string name="ui_work_screening" formatted="false">"Work screening"</string>
+    <string name="ui_with_subtitles" formatted="false">"With subtitles"</string>
+    <string name="ui_all_ages" formatted="false">"all ages"</string>
+    <string name="ui_language_of_work" formatted="false">"language of work"</string>
+    <string name="ui_app_language" formatted="false">"App language"</string>
+    <string name="ui_filtered" formatted="false">"filtered"</string>
+    <string name="ui_unfiltered" formatted="false">"Unfiltered"</string>
+    <string name="ui_return_to_first_page" formatted="false">"Return to first page"</string>
+    <string name="ui_previous_page" formatted="false">"Previous page"</string>
+    <string name="ui_page">"Page %1$s"</string>
+    <string name="ui_next_page" formatted="false">"Next page"</string>
+    <string name="ui_popularity_order" formatted="false">"Popularity order"</string>
+    <string name="ui_latest_sale" formatted="false">"latest sale"</string>
+    <string name="ui_highest_sales_volume" formatted="false">"highest sales volume"</string>
+    <string name="ui_highest_price" formatted="false">"highest price"</string>
+    <string name="ui_latest_collection" formatted="false">"Latest collection"</string>
+    <string name="ui_top_rated" formatted="false">"Top rated"</string>
+    <string name="ui_please_log_in_to_dlsite_before_using_purchased" formatted="false">"Please log in to DLsite before using \"Purchased\" search"</string>
+    <string name="ui_search_canceled_please_try_again" formatted="false">"Search canceled, please try again"</string>
+    <string name="ui_search_failed_please_try_again_later" formatted="false">"Search failed, please try again later"</string>
+    <string name="ui_connection_timed_out_please_try_again_later" formatted="false">"Connection timed out, please try again later"</string>
+    <string name="ui_network_connection_failed_please_check_the_network_and" formatted="false">"Network connection failed, please check the network and try again"</string>
+    <string name="ui_login_has_expired_please_log_in_again" formatted="false">"Login has expired, please log in again"</string>
+    <string name="ui_access_is_restricted_please_try_again_later" formatted="false">"Access is restricted, please try again later"</string>
+    <string name="ui_request_failed_please_try_again_later" formatted="false">"Request failed, please try again later"</string>
+    <string name="ui_access_is_restricted_or_risk_control_is_triggered" formatted="false">"Access is restricted or risk control is triggered, please try again later."</string>
+    <string name="ui_collected_works" formatted="false">"Collected works"</string>
+    <string name="ui_saving_failed_please_try_again_later" formatted="false">"Saving failed, please try again later"</string>
+    <string name="ui_page_translation" formatted="false">"Page translation"</string>
+    <string name="ui_page_translation_cache_cleared" formatted="false">"Page translation cache cleared"</string>
+    <string name="ui_clearing_failed_please_try_again_later" formatted="false">"Clearing failed, please try again later"</string>
+    <string name="ui_clear_page_translation_cache" formatted="false">"Clear page translation cache"</string>
+    <string name="ui_clearing" formatted="false">"Clearing"</string>
+    <string name="ui_target_language" formatted="false">"Target language"</string>
+    <string name="ui_translate_pages_automatically" formatted="false">"Translate pages automatically"</string>
+    <string name="ui_collected" formatted="false">"Collapsed"</string>
+    <string name="ui_manage_scan_directories_refresh_local_content_and_synchronize" formatted="false">"Manage scan directories, refresh local content and synchronize metadata"</string>
+    <string name="ui_blocked_keywords" formatted="false">"Blocked keywords"</string>
+    <string name="ui_filter_keywords_you_don_t_want_to_see" formatted="false">"Filter keywords you don’t want to see in search results"</string>
+    <string name="ui_appearance" formatted="false">"Appearance"</string>
+    <string name="ui_adjust_theme_theme_color_and_playback_page_background" formatted="false">"Adjust theme, theme color and playback page background"</string>
+    <string name="ui_playback" formatted="false">"Playback"</string>
+    <string name="ui_manage_audio_output_and_fades" formatted="false">"Manage audio output and fades"</string>
+    <string name="ui_configure_the_display_effect_of_lyrics_page_and" formatted="false">"Configure the display effect of lyrics page and floating lyrics"</string>
+    <string name="ui_language_and_translation" formatted="false">"Language and translation"</string>
+    <string name="ui_manage_page_translation_subtitle_models_and_translation_apis" formatted="false">"Manage page translation, subtitle models, and translation APIs"</string>
+    <string name="ui_services_and_proxy" formatted="false">"Services and proxy"</string>
+    <string name="ui_test_service_connectivity_and_configure_proxy_and_dns" formatted="false">"Test service connectivity and configure proxy and DNS"</string>
+    <string name="ui_app_cache" formatted="false">"App cache"</string>
+    <string name="ui_set_cache_capacity_limit_and_clear_cache" formatted="false">"Set cache capacity limit and clear cache"</string>
+    <string name="ui_about" formatted="false">"About"</string>
+    <string name="ui_view_version_information_and_check_for_app_updates" formatted="false">"View version information and check for app updates"</string>
+    <string name="ui_unable_to_obtain_read_and_write_permissions_for" formatted="false">"Unable to obtain read and write permissions for the download directory"</string>
+    <string name="ui_download_catalog" formatted="false">"Download catalog"</string>
+    <string name="ui_select_directory" formatted="false">"Select directory"</string>
+    <string name="ui_reset_default" formatted="false">"reset default"</string>
+    <string name="ui_add_directory" formatted="false">"Add directory"</string>
+    <string name="ui_album_456ccf">"Album %1$s/%2$s: %3$s"</string>
+    <string name="ui_directory_added" formatted="false">"Directory added"</string>
+    <string name="ui_none_yet" formatted="false">"None yet"</string>
+    <string name="ui_theme_mode" formatted="false">"Theme mode"</string>
+    <string name="ui_system" formatted="false">"System"</string>
+    <string name="ui_light_color" formatted="false">"Light"</string>
+    <string name="ui_dark" formatted="false">"Dark"</string>
+    <string name="ui_soft_dark_color" formatted="false">"Dim"</string>
+    <string name="ui_theme_color" formatted="false">"Theme color"</string>
+    <string name="ui_cover_dynamic_theme_global" formatted="false">"Cover colors (global)"</string>
+    <string name="ui_player_lyrics_background" formatted="false">"Player / lyrics background"</string>
+    <string name="ui_solid_color" formatted="false">"Solid color"</string>
+    <string name="ui_flowing_light" formatted="false">"Flowing"</string>
+    <string name="ui_animated_flowing_background" formatted="false">"Animated flowing background"</string>
+    <string name="ui_play_page_lyric_page_cover_background" formatted="false">"Play page/lyric page cover background"</string>
+    <string name="ui_background_cover_preview_method" formatted="false">"Background cover preview method"</string>
+    <string name="ui_slide" formatted="false">"slide"</string>
+    <string name="ui_turn" formatted="false">"turn"</string>
+    <string name="ui_cover_background_clarity">"Cover background clarity: %1$s%%"</string>
+    <string name="ui_sfw_switch" formatted="false">"SFW switch"</string>
+    <string name="ui_when_turned_on_it_will_try_to_hide" formatted="false">"When turned on, it will try to hide the media control buttons in the system lock screen and notification bar, but still retain the foreground notifications required for background playback."</string>
+    <string name="ui_system_sound_effects_some_systems_will_turn_on" formatted="false">"System sound effects: Some systems will turn on the Dolby Atmos effect by default. You can choose whether to turn it on or off."</string>
+    <string name="ui_pause_playback_immediately_when_speakers_wired_bluetooth_headphones" formatted="false">"Pause playback immediately when speakers, wired/Bluetooth headphones are disconnected, or Bluetooth is turned off"</string>
+    <string name="ui_automatic_pause_when_output_is_disconnected" formatted="false">"Automatic pause when output is disconnected"</string>
+    <string name="ui_if_the_external_amplifier_headphone_or_bluetooth_output" formatted="false">"If the external amplifier, headphone or Bluetooth output is removed during playback, it will be paused immediately to avoid sudden sound playback."</string>
+    <string name="ui_continue_playback_when_connected_to_wired_bluetooth_headphones" formatted="false">"Continue playback when connected to wired/Bluetooth headphones or other external output"</string>
+    <string name="ui_output_access_automatic_recovery" formatted="false">"Output access automatic recovery"</string>
+    <string name="ui_when_an_external_output_such_as_headphones_bluetooth" formatted="false">"When an external output such as headphones, Bluetooth headsets, USB audio, HDMI or AUX is detected, if the player is currently paused, it will automatically try to resume playback; the phone speaker will not be triggered."</string>
+    <string name="ui_gradually_increase_volume_while_playing_ms">"Gradually increase volume while playing: %1$sms"</string>
+    <string name="ui_play_fade_in" formatted="false">"Play fade in"</string>
+    <string name="ui_when_you_click_play_the_volume_will_smoothly" formatted="false">"When you click play, the volume will smoothly increase from low to high to normal within the set time period."</string>
+    <string name="ui_gradually_lower_volume_while_paused_ms">"Gradually lower volume while paused: %1$sms"</string>
+    <string name="ui_pause_fade" formatted="false">"Pause fade"</string>
+    <string name="ui_when_you_click_pause_the_volume_will_gradually" formatted="false">"When you click Pause, the volume will gradually drop to 0 within the set time period before actually pausing again."</string>
+    <string name="ui_pause_when_other_applications_play_audio_video" formatted="false">"Pause when other applications play audio/video"</string>
+    <string name="ui_audio_focus_paused" formatted="false">"Audio focus paused"</string>
+    <string name="ui_pause_playback_when_another_music_or_video_app" formatted="false">"Pause playback when another music or video app seizes audio focus; normal notification sounds will not be triggered."</string>
+    <string name="ui_turn_on_floating_lyrics" formatted="false">"Turn on floating lyrics"</string>
+    <string name="ui_unable_to_open_overlay_permission_settings" formatted="false">"Unable to open overlay permission settings"</string>
+    <string name="ui_suspended_lyrics_details" formatted="false">"suspended lyrics details"</string>
+    <string name="ui_font_size">"Font size: %1$s"</string>
+    <string name="ui_vertical_position_y_axis" formatted="false">"Vertical position (Y-axis)"</string>
+    <string name="ui_alignment" formatted="false">"Alignment"</string>
+    <string name="ui_lyrics_color" formatted="false">"lyrics color"</string>
+    <string name="ui_click_to_penetrate_lock_position" formatted="false">"Click to penetrate (lock position)"</string>
+    <string name="ui_final_touches" formatted="false">"Final touches"</string>
+    <string name="ui_after_the_translation_is_completed_you_can_swipe" formatted="false">"After the translation is completed, you can swipe the work card left in task management to make overall polish on the existing Chinese subtitles. This operation will consume additional Tokens."</string>
+    <string name="ui_current_version_4f5e78">"Current version: %1$s (%2$s)"</string>
+    <string name="ui_automatically_check_for_updates_on_startup" formatted="false">"Automatically check for updates on startup"</string>
+    <string name="ui_checking" formatted="false">"Checking…"</string>
+    <string name="ui_check_for_updates" formatted="false">"Check for updates"</string>
+    <string name="ui_already_latest">"Already latest: %1$s"</string>
+    <string name="ui_download_and_install" formatted="false">"Download and install"</string>
+    <string name="ui_downloading_460547">"Downloading: %1$s"</string>
+    <string name="ui_download_completed">"Download completed: %1$s"</string>
+    <string name="ui_install_updates" formatted="false">"Install updates"</string>
+    <string name="ui_the_directory_will_be_removed_from_the_list" formatted="false">"The directory will be removed from the list and will not be scanned further."</string>
+    <string name="ui_after_the_switch_the_local_libraries_download_tasks" formatted="false">"After the switch, the local libraries, download tasks and subtitle translation task records downloaded by the App in the old directory will be cleared, but the physical files will not be deleted or moved; other works imported manually in the same directory will be retained. After the switch is successful, the new target directory will be automatically scanned. Continue?"</string>
+    <string name="ui_the_cache_generated_by_online_images_online_audio" formatted="false">"The cache generated by online images, online audio playback and online preview will be cleared, and downloaded content, local media or collection data will not be deleted."</string>
+    <string name="ui_clean_up" formatted="false">"clean up"</string>
+    <string name="ui_are_you_sure_you_want_to_delete_the">"Are you sure you want to delete the \"%1$s\" model? Approximately 29 MiB of the common runtime is retained and does not require repeated installation when downloading any model later."</string>
+    <string name="ui_delete_model" formatted="false">"Delete model"</string>
+    <string name="ui_play_page_lyrics" formatted="false">"play page lyrics"</string>
+    <string name="ui_display_multiple_lines_in_full" formatted="false">"Display multiple lines in full"</string>
+    <string name="ui_the_vertical_screen_classic_layout_uses_a_fixed" formatted="false">"The vertical screen classic layout uses a fixed subtitle area, and the height of the floating lyrics is adjusted according to the actual number of lines. Extra-long subtitles can be read by sliding up and down; floating lyrics can be adjusted by dragging the edge of the subtitle area, and cannot be slid after turning on click penetration."</string>
+    <string name="ui_highlight_font_size_sp">"Highlight font size: %1$ssp"</string>
+    <string name="ui_subtitle_translation" formatted="false">"Subtitle translation"</string>
+    <string name="ui_batch_translation_requires_local_audio_a_downloaded_and" formatted="false">"Batch translation requires local audio, a downloaded and selected subtitle model, and saved translation API settings."</string>
+    <string name="ui_download_online_audio_first_once_configured_tap_batch" formatted="false">"Download online audio first. Once configured, tap “Batch translate” or “Translate selected” in a local album\'s details to start. Saving an API key does not start a task."</string>
+    <string name="ui_token_balance">"Token %1$s · Balance %2$s"</string>
+    <string name="ui_api_key_configured" formatted="false">"API Key configured"</string>
+    <string name="ui_replace" formatted="false">"replace"</string>
+    <string name="ui_thinking_model" formatted="false">"Thinking model"</string>
+    <string name="ui_thinking_level" formatted="false">"Thinking level"</string>
+    <string name="ui_current">"%1$s · Current"</string>
+    <string name="ui_currently_in_use" formatted="false">"currently in use"</string>
+    <string name="ui_current_not_installed" formatted="false">"Current (not installed)"</string>
+    <string name="ui_installed" formatted="false">"Installed"</string>
+    <string name="ui_not_installed" formatted="false">"Not installed"</string>
+    <string name="ui_waiting_to_download_subtitle_component" formatted="false">"Waiting to download subtitle component"</string>
+    <string name="ui_cancel_download" formatted="false">"Cancel download"</string>
+    <string name="ui_the_device_does_not_support" formatted="false">"The device does not support"</string>
+    <string name="ui_source_not_available" formatted="false">"Source not available"</string>
+    <string name="ui_other_models_are_being_downloaded" formatted="false">"Other models are being downloaded"</string>
+    <string name="ui_download_again" formatted="false">"Download again"</string>
+    <string name="ui_download_model" formatted="false">"Download model"</string>
+    <string name="ui_current_occupation">"Current occupation: %1$s"</string>
+    <string name="ui_the_space_is_shared_by_network_pictures_online" formatted="false">"The space is shared by network pictures, online audio playback and online preview caching. When the cache is full, resources used earlier will be cleared first."</string>
+    <string name="ui_cache_space_limit_mb">"Cache space limit: %1$s MB"</string>
+    <string name="ui_minimum_mb">"Minimum %1$s MB"</string>
+    <string name="ui_maximum_mb">"Maximum %1$s MB"</string>
+    <string name="ui_cleaning_up" formatted="false">"Cleaning up…"</string>
+    <string name="ui_clear_app_cache" formatted="false">"Clear APP cache"</string>
+    <string name="ui_lyrics_page" formatted="false">"Lyrics page"</string>
+    <string name="ui_font_size_sp">"Font size: %1$ssp"</string>
+    <string name="ui_font_shadow_sp">"Font-Shadow: %1$ssp"</string>
+    <string name="ui_line_spacing_x">"Line spacing: %1$sx"</string>
+    <string name="ui_display_area" formatted="false">"display area"</string>
+    <string name="ui_upper_1_4" formatted="false">"upper 1/4"</string>
+    <string name="ui_medium_1_4" formatted="false">"Medium 1/4"</string>
+    <string name="ui_next_1_4" formatted="false">"Next 1/4"</string>
+    <string name="ui_block_keywords" formatted="false">"Block keywords"</string>
+    <string name="ui_search_advanced_usage" formatted="false">"Search advanced usage"</string>
+    <string name="ui_add_to" formatted="false">"Add to"</string>
+    <string name="ui_no_blocked_keywords_yet" formatted="false">"No blocked keywords yet"</string>
+    <string name="ui_knew" formatted="false">"knew"</string>
+    <string name="ui_and_search_separated_by_spaces_rain_sound_helps" formatted="false">"And search (separated by spaces): \"Rain sound helps sleep\", indicating that it also contains the specified keywords"</string>
+    <string name="ui_or_search_separated_by_vertical_lines_in_english" formatted="false">"Or search (separated by vertical lines in English): \"Rain sound|sleep aid\", which means it can contain one or more specified keywords"</string>
+    <string name="ui_exclude_search_space_and_minus_sign_rain_sound" formatted="false">"Exclude search (space and minus sign): \"Rain Sound - Sleep Aid\" means excluding specified keywords"</string>
+    <string name="ui_complete_search_wrapped_in_english_double_quotes_simplified" formatted="false">"Complete search (wrapped in English double quotes): \"\"[Simplified Chinese] Rain Sound\"\" means searching multiple words as a complete phrase"</string>
+    <string name="ui_block_keywords_such_as_fanfic" formatted="false">"Block keywords, such as fanfic"</string>
+    <string name="ui_delete_b7bef2">"Delete %1$s"</string>
+    <string name="ui_enter">"Enter %1$s"</string>
+    <string name="ui_return_to_settings" formatted="false">"Return to settings"</string>
+    <string name="ui_description">"%1$sDescription"</string>
+    <string name="ui_off_the_background_and_cover_remain_centered_and" formatted="false">"Off: The background and cover remain centered and still"</string>
+    <string name="ui_sliding_both_the_play_page_cover_and_lyrics" formatted="false">"Sliding: Both the play page cover and lyrics page background can be previewed by dragging with two fingers, and the left menu side sliding will be temporarily blocked."</string>
+    <string name="ui_rotate_preview_other_areas_of_the_cover_by" formatted="false">"Rotate: Preview other areas of the cover by turning your phone"</string>
+    <string name="ui_please_complete_or_delete_unfinished_tasks_first" formatted="false">"Please complete or delete unfinished tasks first"</string>
+    <string name="ui_the_download_directory_has_been_switched_and_the" formatted="false">"The download directory has been switched and the target directory is being scanned."</string>
+    <string name="ui_the_download_directory_is_currently_in_use" formatted="false">"The download directory is currently in use"</string>
+    <string name="ui_failed_to_switch_download_directory" formatted="false">"Failed to switch download directory"</string>
+    <string name="ui_unable_to_open_system_sound_settings" formatted="false">"Unable to open system sound settings"</string>
+    <string name="ui_unable_to_start_model_download" formatted="false">"Unable to start model download"</string>
+    <string name="ui_api_key_failed_to_save" formatted="false">"API Key failed to save"</string>
+    <string name="ui_unable_to_fetch_deepseek_model_list" formatted="false">"Unable to fetch DeepSeek model list"</string>
+    <string name="ui_api_url_changed_enter_your_api_key_again" formatted="false">"API URL changed. Enter your API key again."</string>
+    <string name="ui_unable_to_fetch_model_list_7c8fa4" formatted="false">"Unable to fetch model list"</string>
+    <string name="ui_translation_settings_saved" formatted="false">"Translation settings saved"</string>
+    <string name="ui_check_for_updates_failed" formatted="false">"Check for updates failed"</string>
+    <string name="ui_download_file_is_invalid" formatted="false">"Download file is invalid"</string>
+    <string name="ui_download_failed_e0dab2" formatted="false">"Download failed"</string>
+    <string name="ui_translation_service" formatted="false">"Translation service"</string>
+    <string name="ui_api_settings" formatted="false">"API settings"</string>
+    <string name="ui_api_url" formatted="false">"API URL"</string>
+    <string name="ui_configured" formatted="false">"Configured"</string>
+    <string name="ui_generation_settings" formatted="false">"Generation settings"</string>
+    <string name="ui_maximum_output_tokens" formatted="false">"Maximum output tokens"</string>
+    <string name="ui_enter_a_positive_integer" formatted="false">"Enter a positive integer"</string>
+    <string name="ui_reasoning_effort" formatted="false">"Reasoning effort"</string>
+    <string name="ui_invalid_input" formatted="false">"Invalid input"</string>
+    <string name="ui_select_model" formatted="false">"Select model"</string>
+    <string name="ui_enter_manually" formatted="false">"Enter manually"</string>
+    <string name="ui_model_98fd0c" formatted="false">"Model"</string>
+    <string name="ui_fetch_models" formatted="false">"Fetch models"</string>
+    <string name="ui_model_name" formatted="false">"Model name"</string>
+    <string name="ui_unable_to_open_installation_authorization_page" formatted="false">"Unable to open installation authorization page"</string>
+    <string name="ui_unable_to_open_system_installer" formatted="false">"Unable to open system installer"</string>
+    <string name="ui_asmr_one_request_failed_please_go_to_settings" formatted="false">"ASMR One request failed, please go to \"Settings → Service Status and Proxy\" and try to switch the mirror site and try again."</string>
+    <string name="ui_the_current_site_connection_failed_please_try_switching" formatted="false">"The current site connection failed, please try switching to other sites"</string>
+    <string name="ui_operation_failed_please_try_again_later" formatted="false">"Operation failed, please try again later"</string>
+    <string name="ui_login_status_has_expired_please_log_in_again" formatted="false">"Login status has expired. Please log in again and try again."</string>
+    <string name="ui_access_is_currently_restricted_please_try_again_later" formatted="false">"Access is currently restricted, please try again later."</string>
+    <string name="ui_no_relevant_content_found_please_check_and_try" formatted="false">"No relevant content found, please check and try again"</string>
+    <string name="ui_the_request_is_too_frequent_please_try_again" formatted="false">"The request is too frequent, please try again later"</string>
+    <string name="ui_request_timed_out_please_try_again_later" formatted="false">"Request timed out, please try again later"</string>
+    <string name="ui_playback_failed_please_try_again_later" formatted="false">"Playback failed, please try again later"</string>
+    <string name="ui_online_resource_loading_failed_please_try_again_later" formatted="false">"Online resource loading failed, please try again later."</string>
+    <string name="ui_scan_failed_please_check_directory_permissions_and_try" formatted="false">"Scan failed, please check directory permissions and try again"</string>
+    <string name="ui_refresh_failed_please_try_again_later" formatted="false">"Refresh failed, please try again later"</string>
+    <string name="ui_deletion_failed_please_try_again_later" formatted="false">"Deletion failed, please try again later"</string>
+    <string name="ui_rescan_failed_please_check_the_directory_and_try" formatted="false">"Rescan failed, please check the directory and try again"</string>
+    <string name="ui_a_local_file_task_is_running_try_again" formatted="false">"A local file task is running. Try again later."</string>
+    <string name="ui_invalid_local_file_path" formatted="false">"Invalid local file path"</string>
+    <string name="ui_the_local_file_was_moved_deleted_or_is" formatted="false">"The local file was moved, deleted, or is inaccessible"</string>
+    <string name="ui_the_local_file_was_moved_or_deleted" formatted="false">"The local file was moved or deleted"</string>
+    <string name="ui_unable_to_check_local_file" formatted="false">"Unable to check local file"</string>
+    <string name="ui_the_local_file_changed_during_this_task_writing" formatted="false">"The local file changed during this task. Writing stopped."</string>
+    <string name="app_language">App language</string>
+    <string name="follow_system">System default</string>
+    <string name="ui_add_to_my_lists">Add to my lists</string>
+    <string name="ui_album_details">Album details</string>
+    <string name="ui_purchased_login_required">Sign in before searching purchased works</string>
+    <string name="ui_trial_zip">Trial download (ZIP)</string>
+    <string name="ui_translation_service_name">%1$s translation service</string>
+    <string name="ui_http_message_action">%1$s. %2$s</string>
+    <string name="ui_http_message_detail_action">%1$s: %2$s. %3$s</string>
+    <string name="language_simplified_chinese">Simplified Chinese</string>
+    <string name="language_traditional_chinese">Traditional Chinese</string>
+    <string name="language_japanese">Japanese</string>
+    <string name="language_english">English</string>
+    <string name="language_russian">Russian</string>
+    <string name="language_korean">Korean</string>
+    <string name="eq_bright">Bright</string>
+    <string name="eq_bass_boost">Bass Boost</string>
+    <string name="eq_tapping_crisp">Tapping – Crisp</string>
+    <string name="eq_tapping_dull">Tapping – Dull</string>
+    <string name="eq_vocal">Vocal</string>
 </resources>

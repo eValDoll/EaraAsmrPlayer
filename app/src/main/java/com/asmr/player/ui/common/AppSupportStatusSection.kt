@@ -1,5 +1,8 @@
 package com.asmr.player.ui.common
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.MaterialTheme
@@ -54,7 +57,7 @@ fun SiteStatusSection(
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
-            text = "站点状态测试",
+            text = appString(R.string.ui_site_status_test),
             style = MaterialTheme.typography.labelSmall,
             color = colorScheme.textSecondary
         )
@@ -80,9 +83,9 @@ fun SiteStatusSection(
             onTest = viewModel::testJapaneseAsmr
         )
         SettingsDropdownSelector(
-            label = "资源站点优先级",
+            label = appString(R.string.ui_preferred_source),
             value = preferredSource.name,
-            options = AlbumResourceSource.entries.associate { it.name to "${it.label} 优先" },
+            options = AlbumResourceSource.entries.associate { it.name to appString(R.string.ui_prefer, it.label) },
             onSelect = { viewModel.setPreferredResourceSource(AlbumResourceSource.valueOf(it)) },
             tagPrefix = "resource_source_priority",
             flatTrigger = true

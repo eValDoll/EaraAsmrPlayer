@@ -1,6 +1,5 @@
 package com.asmr.player.playback
 
-import android.app.Application
 import android.os.Bundle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -12,7 +11,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(manifest = Config.NONE, application = Application::class)
+@Config(manifest = Config.NONE, application = com.asmr.player.LocalizedTestApplication::class)
 class PlaybackQueuePruningTest {
     @Test
     fun shouldRemovePlaybackItem_matchesAlbumMetadataAndLegacyMediaId() {

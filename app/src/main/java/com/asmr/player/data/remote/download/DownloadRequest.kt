@@ -18,6 +18,7 @@ data class DownloadBatchRequest(
     val albumCircle: String = "",
     val albumCv: String = "",
     val albumTagsCsv: String = "",
+    val albumTagDetailsJson: String = "[]",
     val albumCoverUrl: String = "",
     val albumDescription: String = "",
     val albumWorkId: String = "",

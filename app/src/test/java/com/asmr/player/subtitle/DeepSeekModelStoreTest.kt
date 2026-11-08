@@ -9,8 +9,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [28])
-class DeepSeekModelStoreTest {
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [28])
+class DeepSeekModelStoreTest : com.asmr.player.LocalizedRobolectricTest() {
     @Test
     fun selection_isPersistedUsedByConfigurationAndDoesNotChangeProvider() {
         val context = ApplicationProvider.getApplicationContext<Application>()

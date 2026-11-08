@@ -1,5 +1,8 @@
 package com.asmr.player.ui.dlsite
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -70,12 +73,12 @@ fun DlsiteLoginScreen(
             ) {
                 OutlinedButton(onClick = {
                     viewModel.clear()
-                }, enabled = uiState.isLoggedIn) { Text("退出登录") }
+                }, enabled = uiState.isLoggedIn) { Text(androidx.compose.ui.res.stringResource(R.string.ui_log_out)) }
                 Spacer(modifier = Modifier.weight(1f))
                 Button(onClick = {
                     onDone()
                 }, enabled = uiState.isLoggedIn) {
-                    Text("完成")
+                    Text(androidx.compose.ui.res.stringResource(R.string.ui_done))
                 }
             }
     
@@ -86,7 +89,7 @@ fun DlsiteLoginScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 if (uiState.isLoggedIn) {
-                    Text("当前凭证", style = MaterialTheme.typography.titleMedium)
+                    Text(androidx.compose.ui.res.stringResource(R.string.ui_current_credentials), style = MaterialTheme.typography.titleMedium)
 
                     CredentialBlock(
                         title = "dlsite.com Cookie",
@@ -106,7 +109,7 @@ fun DlsiteLoginScreen(
                     OutlinedTextField(
                         value = loginId,
                         onValueChange = { loginId = it },
-                        label = { Text("账号（邮箱）") },
+                        label = { Text(androidx.compose.ui.res.stringResource(R.string.ui_account_number_email)) },
                         singleLine = true,
                         enabled = !uiState.isLoading,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
@@ -115,7 +118,7 @@ fun DlsiteLoginScreen(
                     OutlinedTextField(
                         value = password,
                         onValueChange = { password = it },
-                        label = { Text("密码") },
+                        label = { Text(androidx.compose.ui.res.stringResource(R.string.ui_password)) },
                         singleLine = true,
                         enabled = !uiState.isLoading,
                         visualTransformation = PasswordVisualTransformation(),
@@ -135,7 +138,7 @@ fun DlsiteLoginScreen(
                                 size = 18.dp
                             )
                         } else {
-                            Text("登录")
+                            Text(androidx.compose.ui.res.stringResource(R.string.ui_log_in))
                         }
                     }
                 }
@@ -159,7 +162,7 @@ private fun CredentialBlock(
     val expiresText = if (value.isBlank()) {
         "-"
     } else {
-        expiresAtMs?.let { formatEpochMs(it) } ?: "未知"
+        expiresAtMs?.let { formatEpochMs(it) } ?: appString(R.string.ui_unknown)
     }
 
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -177,14 +180,14 @@ private fun CredentialBlock(
                         IconButton(onClick = onToggleRevealed, enabled = value.isNotBlank()) {
                             Icon(
                                 imageVector = if (revealed) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
-                                contentDescription = if (revealed) "隐藏" else "显示"
+                                contentDescription = if (revealed) appString(R.string.ui_hide) else appString(R.string.ui_show)
                             )
                         }
                     },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
-            Text("过期时间：$expiresText", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(androidx.compose.ui.res.stringResource(R.string.ui_expiration_time, expiresText), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

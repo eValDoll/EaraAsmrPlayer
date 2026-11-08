@@ -1,5 +1,7 @@
 package com.asmr.player.ui.player
 
+import com.asmr.player.i18n.appString
+
 import android.os.SystemClock
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -302,7 +304,7 @@ private fun PlaybackActionButtons(
     ) {
         Icon(
             imageVector = if (isFavorite) Icons.Rounded.Favorite else Icons.Outlined.FavoriteBorder,
-            contentDescription = if (isFavorite) "取消收藏" else "收藏",
+            contentDescription = if (isFavorite) appString(R.string.ui_cancel_favorites) else appString(R.string.ui_favorites_d07cee),
             tint = if (isFavorite) Color.Red else contentColor.copy(alpha = 0.8f),
             modifier = Modifier.size(actionIconSize)
         )
@@ -315,7 +317,7 @@ private fun PlaybackActionButtons(
     ) {
         Icon(
             Icons.AutoMirrored.Outlined.PlaylistAdd,
-            contentDescription = "添加到播放列表",
+            contentDescription = appString(R.string.ui_add_to_playlist),
             tint = contentColor.copy(alpha = 0.8f),
             modifier = Modifier.size(actionIconSize)
         )
@@ -332,7 +334,7 @@ private fun PlaybackActionButtons(
         ) {
             Icon(
                 imageVector = if (isOnlineMedia) Icons.AutoMirrored.Outlined.LabelOff else Icons.AutoMirrored.Rounded.Label,
-                contentDescription = "标签管理",
+                contentDescription = appString(R.string.ui_tag_management),
                 tint = contentColor.copy(alpha = if (isOnlineMedia) 0.38f else 0.8f),
                 modifier = Modifier.size(actionIconSize)
             )
@@ -346,7 +348,7 @@ private fun PlaybackActionButtons(
     ) {
         Icon(
             imageVector = Icons.Rounded.Tune,
-            contentDescription = "音效面板",
+            contentDescription = appString(R.string.ui_sound_effects_panel),
             tint = contentColor.copy(alpha = 0.8f),
             modifier = Modifier.size(actionIconSize)
         )
@@ -365,7 +367,7 @@ private fun PlaybackActionButtons(
                 .size(actionButtonSize)
                 .semantics {
                     selected = sliceEnabled
-                    stateDescription = if (sliceEnabled) "已开启" else "已关闭"
+                    stateDescription = if (sliceEnabled) appString(R.string.ui_enabled) else appString(R.string.ui_disabled)
                 },
             colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
         ) {
@@ -375,7 +377,7 @@ private fun PlaybackActionButtons(
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_segment),
-                    contentDescription = "切片播放",
+                    contentDescription = appString(R.string.ui_slice_play),
                     tint = tint,
                     modifier = Modifier.size(actionIconSize)
                 )
@@ -422,7 +424,7 @@ private fun PlaybackCoreButtons(
         }
         Icon(
             icon,
-            contentDescription = "播放模式",
+            contentDescription = appString(R.string.ui_play_mode),
             tint = contentColor,
             modifier = Modifier.size(modeIconSize)
         )
@@ -435,7 +437,7 @@ private fun PlaybackCoreButtons(
     ) {
         Icon(
             Icons.Rounded.SkipPrevious,
-            contentDescription = "上一首",
+            contentDescription = appString(R.string.ui_previous_track),
             tint = contentColor,
             modifier = Modifier.size(skipIconSize)
         )
@@ -456,7 +458,7 @@ private fun PlaybackCoreButtons(
         ) { playing ->
             Icon(
                 imageVector = if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                contentDescription = if (playing) "暂停" else "播放",
+                contentDescription = if (playing) appString(R.string.ui_pause) else appString(R.string.ui_play),
                 tint = contentColor,
                 modifier = Modifier.size(playIconSize)
             )
@@ -470,7 +472,7 @@ private fun PlaybackCoreButtons(
     ) {
         Icon(
             Icons.Rounded.SkipNext,
-            contentDescription = "下一首",
+            contentDescription = appString(R.string.ui_next_track),
             tint = contentColor,
             modifier = Modifier.size(skipIconSize)
         )
@@ -483,7 +485,7 @@ private fun PlaybackCoreButtons(
     ) {
         Icon(
             Icons.Rounded.FastForward,
-            contentDescription = "快进10秒",
+            contentDescription = appString(R.string.ui_fast_forward_10_seconds),
             tint = contentColor,
             modifier = Modifier.size(modeIconSize)
         )
@@ -597,7 +599,7 @@ internal fun NowPlayingLyricsPreview(
     marqueeCurrentLine: Boolean = false,
     contentTopPadding: Dp = 0.dp,
     onCurrentLineAnchorChanged: ((Float) -> Unit)? = null,
-    emptyText: String = "当前音频暂无同步歌词",
+    emptyText: String = appString(R.string.ui_there_are_no_synchronized_lyrics_in_the_current),
     modifier: Modifier = Modifier
 ) {
     val sortedLyrics = remember(lyrics) {
@@ -1214,7 +1216,7 @@ internal fun VolumeControl(
                 )
                 Spacer(modifier = Modifier.width(if (compactLayout) 8.dp else 10.dp))
                 Text(
-                    text = "长按调整音量",
+                    text = appString(R.string.ui_long_press_to_adjust_volume),
                     style = if (compactLayout) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall,
                     color = playerSupportingTextColor(colorScheme.isDark)
                 )
@@ -1254,7 +1256,7 @@ internal fun VolumeControl(
                     )
                     Spacer(modifier = Modifier.width(if (compactLayout) 8.dp else 10.dp))
                     Text(
-                        text = "音量",
+                        text = appString(R.string.ui_volume),
                         style = if (compactLayout) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall,
                         color = playerSupportingTextColor(colorScheme.isDark)
                     )

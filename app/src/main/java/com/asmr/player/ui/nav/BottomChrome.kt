@@ -1,5 +1,8 @@
 package com.asmr.player.ui.nav
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Spring
@@ -213,14 +216,14 @@ private fun bottomChromeMetrics(largeLayout: Boolean): BottomChromeMetrics =
     }
 
 fun bottomChromeNavItems(): List<BottomChromeNavItem> = listOf(
-    BottomChromeNavItem(Icons.Rounded.Home, "本地库", Routes.Library),
-    BottomChromeNavItem(Icons.Rounded.Search, "在线搜索", Routes.Search),
-    BottomChromeNavItem(Icons.Rounded.Whatshot, "热门收听", Routes.HotListening),
-    BottomChromeNavItem(Icons.Rounded.Favorite, "我的收藏", "playlist_system/favorites"),
-    BottomChromeNavItem(Icons.AutoMirrored.Rounded.QueueMusic, "我的列表", "playlists"),
-    BottomChromeNavItem(Icons.Rounded.Folder, "我的分组", "groups"),
-    BottomChromeNavItem(Icons.Rounded.Route, "ASMR 看板", "listening_calendar"),
-    BottomChromeNavItem(Icons.Rounded.Settings, "设置", "settings")
+    BottomChromeNavItem(Icons.Rounded.Home, appString(R.string.ui_library), Routes.Library),
+    BottomChromeNavItem(Icons.Rounded.Search, appString(R.string.ui_search), Routes.Search),
+    BottomChromeNavItem(Icons.Rounded.Whatshot, appString(R.string.ui_popular), Routes.HotListening),
+    BottomChromeNavItem(Icons.Rounded.Favorite, appString(R.string.ui_favorites), "playlist_system/favorites"),
+    BottomChromeNavItem(Icons.AutoMirrored.Rounded.QueueMusic, appString(R.string.ui_playlists), "playlists"),
+    BottomChromeNavItem(Icons.Rounded.Folder, appString(R.string.ui_groups), "groups"),
+    BottomChromeNavItem(Icons.Rounded.Route, appString(R.string.ui_asmr_dashboard), "listening_calendar"),
+    BottomChromeNavItem(Icons.Rounded.Settings, appString(R.string.ui_settings), "settings")
 )
 
 fun isPrimaryRoute(route: String?): Boolean {
@@ -290,7 +293,7 @@ private fun buildBottomNavRailEntries(
 
     if (showsGroupToggle) {
         entries += BottomNavRailEntry(
-            item = BottomChromeNavItem(Icons.Rounded.SwapHoriz, "切换", BottomNavOverflowTag),
+            item = BottomChromeNavItem(Icons.Rounded.SwapHoriz, appString(R.string.ui_switch), BottomNavOverflowTag),
             width = metrics.itemSlotWidth,
             isGroupToggle = true
         )

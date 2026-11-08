@@ -5,7 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class SubtitleGenerationFeedbackTest {
+class SubtitleGenerationFeedbackTest : com.asmr.player.LocalizedRobolectricTest() {
     @Test
     fun onlineAudioRequiresDownloadEvenWhenSavedInLibrary() {
         val file = audioFile("https://example.com/track.mp3", local = false)

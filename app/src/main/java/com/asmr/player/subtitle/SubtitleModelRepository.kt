@@ -1,5 +1,8 @@
 package com.asmr.player.subtitle
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.work.BackoffPolicy
@@ -84,11 +87,13 @@ internal data class InstalledSubtitleModel(
     val directory: File
 )
 
-internal enum class SubtitleModelInstallStage(val displayName: String) {
-    Runtime("正在下载字幕运行时"),
-    RuntimeVerification("正在校验并安装字幕运行时"),
-    Model("正在下载日语字幕模型"),
-    ModelVerification("正在校验日语字幕模型")
+internal enum class SubtitleModelInstallStage(private val displayNameProvider: () -> String) {
+    Runtime( { appString(R.string.ui_downloading_subtitle_runtime) }),
+    RuntimeVerification( { appString(R.string.ui_verifying_and_installing_subtitle_runtime) }),
+    Model( { appString(R.string.ui_downloading_japanese_subtitle_model) }),
+    ModelVerification( { appString(R.string.ui_verifying_japanese_subtitle_model) });
+
+    val displayName: String get() = displayNameProvider()
 }
 
 internal fun subtitleModelDownloadBaseUrl(
@@ -158,13 +163,13 @@ internal class SubtitleModelRepository private constructor(context: Context) {
     }
 
     fun selectModel(modelId: String) {
-        require(isModelAvailable(modelId)) { "请先下载该日语字幕模型" }
+        require(isModelAvailable(modelId)) { appString(R.string.ui_please_download_the_japanese_subtitle_model_first) }
         preferences.edit().putString(KEY_ACTIVE_MODEL_ID, modelId).apply()
         refreshState()
     }
 
     fun enqueueDownload(modelId: String, source: SubtitleModelDownloadSource) {
-        val model = requireNotNull(SubtitleTranscriptionModels.fromId(modelId)) { "未知的字幕模型" }
+        val model = requireNotNull(SubtitleTranscriptionModels.fromId(modelId)) { appString(R.string.ui_unknown_subtitle_model) }
         if (isModelAvailable(model.id)) {
             refreshState()
             return
@@ -172,7 +177,7 @@ internal class SubtitleModelRepository private constructor(context: Context) {
         val baseUrl = subtitleModelDownloadBaseUrl(model, source).trim()
         require(baseUrl.startsWith("https://")) { "模型下载地址未配置" }
         require(runtimeRepository.descriptor.url.trim().startsWith("https://")) {
-            "字幕运行时下载地址未配置"
+            appString(R.string.ui_the_download_address_is_not_configured_when_subtitles)
         }
         refreshState(SubtitleModelOperation.Queued(model.id, source))
         val request = OneTimeWorkRequestBuilder<SubtitleModelDownloadWorker>()
@@ -215,7 +220,7 @@ internal class SubtitleModelRepository private constructor(context: Context) {
     }
 
     suspend fun deleteModel(modelId: String) = withContext(Dispatchers.IO) {
-        val model = requireNotNull(SubtitleTranscriptionModels.fromId(modelId)) { "未知的字幕模型" }
+        val model = requireNotNull(SubtitleTranscriptionModels.fromId(modelId)) { appString(R.string.ui_unknown_subtitle_model) }
         val operation = _state.value.operation
         if (operation?.modelId == model.id) {
             WorkManager.getInstance(appContext)
@@ -227,7 +232,7 @@ internal class SubtitleModelRepository private constructor(context: Context) {
             deleteIfPresent(artifactFile(model, artifact)) &&
                 deleteIfPresent(partialArtifactFile(model, artifact))
         }
-        check(deletedModel) { "无法删除日语字幕模型" }
+        check(deletedModel) { appString(R.string.ui_unable_to_delete_japanese_subtitle_model) }
         modelDirectory(model).takeIf { it.isDirectory && it.list().isNullOrEmpty() }?.delete()
 
         val editor = preferences.edit().remove(installedSourceKey(model.id))
@@ -284,7 +289,7 @@ internal class SubtitleModelRepository private constructor(context: Context) {
             SubtitleModelOperation.Failed(
                 modelId = modelId,
                 source = source,
-                message = message.trim().ifBlank { "模型下载失败" }
+                message = message.trim().ifBlank { appString(R.string.ui_model_download_failed) }
             )
         )
     }
@@ -331,7 +336,7 @@ internal class SubtitleModelRepository private constructor(context: Context) {
 
     internal fun ensureModelDirectory(model: SubtitleTranscriptionModel): File =
         modelDirectory(model).apply {
-            check(exists() || mkdirs()) { "无法创建模型目录" }
+            check(exists() || mkdirs()) { appString(R.string.ui_unable_to_create_model_directory) }
         }
 
     private fun refreshState(operation: SubtitleModelOperation? = _state.value.operation) {
@@ -379,7 +384,7 @@ internal class SubtitleModelRepository private constructor(context: Context) {
     private fun deleteIfPresent(file: File): Boolean = !file.exists() || file.delete()
 
     companion object {
-        const val MODEL_REQUIRED_MESSAGE = "请先在设置 → 翻译配置中下载并选用字幕模型"
+        val MODEL_REQUIRED_MESSAGE: String get() = appString(R.string.ui_download_and_select_a_subtitle_model_in_settings)
 
         private const val MODEL_ROOT_DIRECTORY_NAME = "subtitle-models"
         private const val PREFERENCES_NAME = "subtitle_model_preferences"

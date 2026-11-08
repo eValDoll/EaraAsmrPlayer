@@ -111,6 +111,7 @@ class PlaybackQueueRestorer @Inject constructor(
                 circle = albumEntity?.circle.orEmpty(),
                 cv = albumEntity?.cv.orEmpty(),
                 tags = albumEntity?.tags?.split(",")?.filter { it.isNotBlank() }.orEmpty(),
+                tagDetails = com.asmr.player.domain.model.AlbumTagCodec.decode(albumEntity?.tagDetailsJson),
                 coverUrl = albumEntity?.coverUrl.orEmpty(),
                 coverPath = albumEntity?.manualCoverPath.orEmpty().ifBlank { albumEntity?.coverPath.orEmpty() },
                 manualCoverPath = albumEntity?.manualCoverPath.orEmpty(),

@@ -39,7 +39,7 @@ import org.robolectric.shadows.ShadowContentResolver
 import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
-@Config(manifest = Config.NONE, application = Application::class, sdk = [34])
+@Config(manifest = Config.NONE, application = com.asmr.player.LocalizedTestApplication::class, sdk = [34])
 class PlaybackQueueRestorerTest {
     private lateinit var context: Context
     private lateinit var database: AppDatabase

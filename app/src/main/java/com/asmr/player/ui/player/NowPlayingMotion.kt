@@ -1,5 +1,8 @@
 package com.asmr.player.ui.player
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.animation.core.Transition
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
@@ -127,14 +130,14 @@ internal object NowPlayingMotionSpec {
     ): NowPlayingMotionSlot = when (slot) {
         NowPlayingMotionSlot.QUEUE -> {
             require(layout == NowPlayingMotionLayout.SPLIT_LANDSCAPE) {
-                "播放队列动效只属于平板横屏布局"
+                appString(R.string.ui_play_queue_animation_only_belongs_to_tablet_horizontal)
             }
             NowPlayingMotionSlot.PROGRESS
         }
         NowPlayingMotionSlot.SPECTRUM -> when (layout) {
             NowPlayingMotionLayout.PHONE_LANDSCAPE -> NowPlayingMotionSlot.LYRICS
             NowPlayingMotionLayout.SPLIT_LANDSCAPE -> NowPlayingMotionSlot.INFO_PANEL
-            NowPlayingMotionLayout.PORTRAIT -> error("音频频谱动效只属于横屏布局")
+            NowPlayingMotionLayout.PORTRAIT -> error(appString(R.string.ui_audio_spectrum_animation_only_belongs_to_horizontal_screen))
         }
         else -> slot
     }

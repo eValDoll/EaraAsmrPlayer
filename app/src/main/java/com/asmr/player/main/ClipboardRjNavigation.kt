@@ -1,5 +1,8 @@
 package com.asmr.player
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.content.ClipboardManager
 import android.content.Context
 import android.os.Build
@@ -265,15 +268,15 @@ internal fun ClipboardRjNavigationPrompt(
     prompt?.takeIf { enabled }?.let { currentPrompt ->
         val rjCode = currentPrompt.rjCode
         FlatActionDialog(
-            message = "检测到剪贴板中的 $rjCode，是否快速跳转至该作品的专辑详情？",
+            message = appString(R.string.ui_in_the_clipboard_was_detected_quickly_jump_to, rjCode),
             onDismissRequest = { prompt = null },
             actions = listOf(
                 FlatDialogAction(
-                    text = "取消",
+                    text = appString(R.string.ui_cancel),
                     onClick = { prompt = null }
                 ),
                 FlatDialogAction(
-                    text = "立即跳转",
+                    text = appString(R.string.ui_jump_now),
                     tone = FlatDialogActionTone.Primary,
                     onClick = {
                         prompt = null

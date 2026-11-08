@@ -1,5 +1,8 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.ui.common.AlbumRowRasterCacheScope
 import com.asmr.player.ui.common.rememberLightweightVerticalOverscrollState
 
@@ -274,9 +277,9 @@ private fun LibraryScreenContent(
         val exists = searchBlockedKeywords.any { it.equals(keyword, ignoreCase = true) }
         settingsViewModel.addSearchBlockedKeyword(keyword)
         if (exists) {
-            viewModel.messageManager.showInfo("屏蔽词已存在：$keyword")
+            viewModel.messageManager.showInfo(appString(R.string.ui_blocked_word_already_exists, keyword))
         } else {
-            viewModel.messageManager.showSuccess("已添加屏蔽词：$keyword")
+            viewModel.messageManager.showSuccess(appString(R.string.ui_blocked_word_added, keyword))
         }
     }
 
@@ -420,8 +423,8 @@ private fun LibraryScreenContent(
                     ) {
                         Text(
                             text = when (progress.phase) {
-                                com.asmr.player.ui.library.BulkPhase.ScanningLocal -> "正在扫描本地库"
-                                com.asmr.player.ui.library.BulkPhase.SyncingCloud -> "正在云同步"
+                                com.asmr.player.ui.library.BulkPhase.ScanningLocal -> appString(R.string.ui_scanning_local_library)
+                                com.asmr.player.ui.library.BulkPhase.SyncingCloud -> appString(R.string.ui_cloud_sync_in_progress)
                             },
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = colorScheme.textPrimary
@@ -439,7 +442,7 @@ private fun LibraryScreenContent(
                         }
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = "进度 ${progress.current}/${progress.total}",
+                            text = appString(R.string.ui_progress, progress.current, progress.total),
                             style = MaterialTheme.typography.bodySmall,
                             color = colorScheme.textSecondary
                         )
@@ -456,7 +459,7 @@ private fun LibraryScreenContent(
                         if (progress.currentFile.isNotBlank()) {
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "正在扫描：${progress.currentFile}",
+                                text = appString(R.string.ui_scanning, progress.currentFile),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = colorScheme.textSecondary,
                                 maxLines = 1,
@@ -464,7 +467,7 @@ private fun LibraryScreenContent(
                             )
                         }
                         Spacer(modifier = Modifier.height(18.dp))
-                        Button(onClick = { viewModel.cancelBulkTask() }) { Text("取消") }
+                        Button(onClick = { viewModel.cancelBulkTask() }) { Text(androidx.compose.ui.res.stringResource(R.string.ui_cancel)) }
                     }
                 }
                 is LibraryUiState.Success -> {
@@ -517,8 +520,8 @@ private fun LibraryScreenContent(
                                         querySpec.source != null
 
                                 EaraBrandedEmptyState(
-                                    sectionTitle = if (hasAnyQuery) "本地库结果" else "本地库",
-                                    headline = if (hasAnyQuery) "没有匹配的本地内容" else "还没有扫描到本地专辑",
+                                    sectionTitle = if (hasAnyQuery) appString(R.string.ui_local_library_results) else appString(R.string.ui_library),
+                                    headline = if (hasAnyQuery) appString(R.string.ui_no_matching_local_content) else appString(R.string.ui_the_local_album_has_not_been_scanned_yet),
                                     sectionIcon = if (hasAnyQuery) Icons.Rounded.Search else Icons.Rounded.FolderOpen,
                                     modifier = Modifier
                                         .fillMaxSize()
@@ -540,7 +543,7 @@ private fun LibraryScreenContent(
                                                     contentColor = colorScheme.onPrimaryContainer
                                                 )
                                             ) {
-                                                Text("重置筛选")
+                                                Text(androidx.compose.ui.res.stringResource(R.string.ui_reset_filter))
                                             }
                                         }
                                     } else {
@@ -978,7 +981,7 @@ private fun LibraryScreenContent(
                 val isSyncing = syncStatus is SyncStatus.Syncing
                 val hasLocalPaths = remember(album) { album.getAllLocalPaths().isNotEmpty() }
                 ListItem(
-                    headlineContent = { Text("删除") },
+                    headlineContent = { Text(androidx.compose.ui.res.stringResource(R.string.ui_delete)) },
                     leadingContent = { Icon(Icons.Rounded.Delete, contentDescription = null) },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -989,7 +992,7 @@ private fun LibraryScreenContent(
                         }
                 )
                 ListItem(
-                    headlineContent = { Text("标签管理") },
+                    headlineContent = { Text(androidx.compose.ui.res.stringResource(R.string.ui_tag_management)) },
                     leadingContent = { Icon(Icons.AutoMirrored.Rounded.Label, contentDescription = null) },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1007,7 +1010,7 @@ private fun LibraryScreenContent(
                         }
                 )
                 ListItem(
-                    headlineContent = { Text("添加到分组") },
+                    headlineContent = { Text(androidx.compose.ui.res.stringResource(R.string.ui_add_to_group)) },
                     leadingContent = { Icon(Icons.Rounded.CreateNewFolder, contentDescription = null) },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1018,7 +1021,7 @@ private fun LibraryScreenContent(
                         }
                 )
                 ListItem(
-                    headlineContent = { Text("本地同步") },
+                    headlineContent = { Text(androidx.compose.ui.res.stringResource(R.string.ui_local_sync)) },
                     leadingContent = { Icon(Icons.Rounded.Sync, contentDescription = null) },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1029,7 +1032,7 @@ private fun LibraryScreenContent(
                         }
                 )
                 ListItem(
-                    headlineContent = { Text("云同步") },
+                    headlineContent = { Text(androidx.compose.ui.res.stringResource(R.string.ui_cloud_sync)) },
                     leadingContent = { Icon(Icons.Rounded.CloudSync, contentDescription = null) },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1041,7 +1044,7 @@ private fun LibraryScreenContent(
                 )
                 if (isSyncing) {
                     ListItem(
-                        headlineContent = { Text("取消同步") },
+                        headlineContent = { Text(androidx.compose.ui.res.stringResource(R.string.ui_cancel_synchronization)) },
                         leadingContent = { Icon(Icons.Rounded.Close, contentDescription = null) },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1065,11 +1068,11 @@ private fun LibraryScreenContent(
         if (album != null) {
             FlatActionDialog(
                 onDismissRequest = { showDeleteConfirm = false },
-                message = "将从本地库中移除该专辑，并尝试删除本地文件。",
+                message = appString(R.string.ui_the_album_will_be_removed_from_the_local),
                 actions = listOf(
-                    FlatDialogAction("取消", onClick = { showDeleteConfirm = false }),
+                    FlatDialogAction(appString(R.string.ui_cancel), onClick = { showDeleteConfirm = false }),
                     FlatDialogAction(
-                        text = "删除",
+                        text = appString(R.string.ui_delete),
                         tone = FlatDialogActionTone.Danger,
                         onClick = {
                             showDeleteConfirm = false
@@ -1122,7 +1125,7 @@ private fun LibraryScreenContent(
             onCreatePlaylist = playlistsViewModel::createPlaylist,
             onCreateGroup = albumGroupsViewModel::createGroup,
             onAddBlockedKeyword = ::addMetaBlockedKeyword,
-            onCopy = { copyMeta("内容", it) },
+            onCopy = { copyMeta(appString(R.string.ui_content), it) },
         )
     }
 
@@ -1176,7 +1179,7 @@ internal fun LibraryChrome(
         CustomSearchBar(
             value = searchText,
             onValueChange = onSearchTextChange,
-            placeholder = "社团 / CV / 标签...",
+            placeholder = appString(R.string.ui_societies_cv_tags),
             modifier = Modifier
                 .weight(1f),
             inputTestTag = LIBRARY_SEARCH_INPUT_TAG,
@@ -1225,7 +1228,7 @@ internal fun LibraryChrome(
                     modifier = Modifier.background(chromeActionContainerColor)
                 ) {
                     ActiveDropdownMenuItem(
-                        label = "最近播放",
+                        label = appString(R.string.ui_recently_played),
                         selected = currentSort == LibrarySort.LastPlayedDesc,
                         testTag = LIBRARY_SORT_LAST_PLAYED_ITEM_TAG,
                         activeColor = materialColorScheme.primary,
@@ -1241,7 +1244,7 @@ internal fun LibraryChrome(
                         color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
                     )
                     ActiveDropdownMenuItem(
-                        label = "最近加入",
+                        label = appString(R.string.ui_recently_joined),
                         selected = currentSort == LibrarySort.AddedDesc,
                         testTag = LIBRARY_SORT_ADDED_ITEM_TAG,
                         activeColor = materialColorScheme.primary,
@@ -1257,7 +1260,7 @@ internal fun LibraryChrome(
                         color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
                     )
                     ActiveDropdownMenuItem(
-                        label = "专辑标题",
+                        label = appString(R.string.ui_album_title),
                         selected = currentSort == LibrarySort.TitleAsc,
                         testTag = LIBRARY_SORT_TITLE_ITEM_TAG,
                         activeColor = materialColorScheme.primary,
@@ -1276,7 +1279,7 @@ internal fun LibraryChrome(
             onClick = onOpenFilterScreen,
             modifier = Modifier
                 .testTag(LIBRARY_FILTER_BUTTON_TAG)
-                .semantics { stateDescription = if (filterActive) "筛选已启用" else "筛选未启用" },
+                .semantics { stateDescription = if (filterActive) appString(R.string.ui_filtering_is_enabled) else appString(R.string.ui_filtering_is_not_enabled) },
             active = filterActive
         )
     }
@@ -1349,7 +1352,7 @@ private fun TrackAlbumHeader(
         Spacer(modifier = Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
-                text = translatedPageText(albumTitle).ifBlank { rjCode.ifBlank { "专辑" } },
+                text = translatedPageText(albumTitle).ifBlank { rjCode.ifBlank { appString(R.string.ui_album) } },
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                 color = colorScheme.textPrimary,
                 maxLines = 2,
@@ -1358,7 +1361,7 @@ private fun TrackAlbumHeader(
 
             val footerSegments = buildList {
                 if (rjCode.isNotBlank()) add(rjCode)
-                add("$trackCount 音频")
+                add(appString(R.string.ui_audio, trackCount))
                 Formatting.formatTrackSeconds(totalDurationSeconds).takeIf { it.isNotBlank() }?.let(::add)
                 totalSizeBytes?.takeIf { it > 0L }?.let(Formatting::formatFileSize)?.let(::add)
             }
@@ -1439,14 +1442,14 @@ private fun TrackListRow(
         actions = buildList {
             add(
                 AudioItemMenuAction(
-                    label = "添加到播放队列",
+                    label = appString(R.string.ui_add_to_play_queue),
                     onClick = onAddToQueue,
                     icon = Icons.AutoMirrored.Rounded.QueueMusic
                 )
             )
             add(
                 AudioItemMenuAction(
-                    label = "添加到播放列表",
+                    label = appString(R.string.ui_add_to_playlist),
                     onClick = onAddToPlaylist,
                     icon = Icons.AutoMirrored.Rounded.PlaylistAdd,
                     showDividerBefore = true
@@ -1455,7 +1458,7 @@ private fun TrackListRow(
             if (onManageTags != null) {
                 add(
                     AudioItemMenuAction(
-                        label = "标签管理",
+                        label = appString(R.string.ui_tag_management),
                         onClick = onManageTags,
                         icon = Icons.AutoMirrored.Rounded.Label,
                         showDividerBefore = true
@@ -1464,7 +1467,7 @@ private fun TrackListRow(
             }
             add(
                 AudioItemMenuAction(
-                    label = "从专辑移除",
+                    label = appString(R.string.ui_remove_from_album),
                     onClick = onRemove,
                     icon = Icons.Rounded.Delete,
                     showDividerBefore = true
@@ -1504,7 +1507,7 @@ private fun AlbumSyncStatusOverlay(
         ) {
             Icon(
                 imageVector = Icons.Rounded.ErrorOutline,
-                contentDescription = "同步失败",
+                contentDescription = appString(R.string.ui_sync_failed),
                 tint = Color.White,
                 modifier = Modifier.size(indicatorSize),
             )

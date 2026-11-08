@@ -1,6 +1,5 @@
 package com.asmr.player.playback
 
-import android.app.Application
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.mutablePreferencesOf
@@ -23,7 +22,7 @@ import org.robolectric.annotation.Config
 import java.lang.reflect.Proxy
 
 @RunWith(RobolectricTestRunner::class)
-@Config(manifest = Config.NONE, application = Application::class, sdk = [34])
+@Config(manifest = Config.NONE, application = com.asmr.player.LocalizedTestApplication::class, sdk = [34])
 class PlaybackStateStoreTest {
     private val legacyKey = stringPreferencesKey("persisted_playback_state_v1")
     private val stateKey = stringPreferencesKey("persisted_playback_state_v2")

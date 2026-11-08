@@ -1,5 +1,8 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.util.sanitizeFolderName
 
 import com.asmr.player.data.remote.crawler.AlbumResourceSource
@@ -335,10 +338,11 @@ internal fun buildDisplayAlbum(
     fallbackCv: String = "",
     fallbackCoverUrl: String = ""
 ): Album {
-    val base = dlsiteInfo ?: localAlbum ?: Album(title = rjCode.ifBlank { "专辑" }, path = "")
+    val base = dlsiteInfo ?: localAlbum ?: Album(title = rjCode.ifBlank { appString(R.string.ui_album) }, path = "")
     val displayTitle = localAlbum?.displayTitle?.takeIf { it.isNotBlank() }
     return base.copy(
         title = displayTitle ?: base.title,
+        tagDetails = com.asmr.player.domain.model.mergeAlbumTags(localAlbum?.tagDetails, base.tagDetails),
         displayTitle = displayTitle.orEmpty(),
         workId = asmrOneWorkId?.takeIf { it.isNotBlank() } ?: base.workId,
         rjCode = rjCode.ifBlank { base.rjCode.ifBlank { base.workId } },
@@ -367,23 +371,27 @@ internal fun mergeDetailHeaderAlbum(
     preserveHeaderAlbumMetadata: Boolean
 ): Album {
     if (preserveHeaderAlbumMetadata) {
-        return currentDisplayAlbum.withCurrentLocalCover(localAlbum).withResolvedWorkIdentity(
+        return currentDisplayAlbum.copy(
+            tagDetails = com.asmr.player.domain.model.mergeAlbumTags(currentDisplayAlbum.tagDetails, fetchedDlsiteInfo?.tagDetails)
+        ).withCurrentLocalCover(localAlbum).withResolvedWorkIdentity(
             rjCode = rjCode,
             asmrOneWorkId = asmrOneWorkId
         )
     }
     return if (fetchedDlsiteInfo != null) {
         val mergedOnlineInfo = fetchedDlsiteInfo.copy(
+            metadataLocale = currentDisplayAlbum.metadataLocale,
             title = fetchedDlsiteInfo.title
                 .takeUnless { title ->
                     title.isBlank() ||
-                        title == "专辑" ||
+                        title in setOf("专辑", "Album") ||
                         title.equals(fetchedDlsiteInfo.rjCode, ignoreCase = true)
                 }
                 ?: currentDisplayAlbum.title,
             circle = fetchedDlsiteInfo.circle.ifBlank { currentDisplayAlbum.circle },
             cv = fetchedDlsiteInfo.cv.ifBlank { currentDisplayAlbum.cv },
             tags = fetchedDlsiteInfo.tags.ifEmpty { currentDisplayAlbum.tags },
+            tagDetails = com.asmr.player.domain.model.mergeAlbumTags(currentDisplayAlbum.tagDetails, fetchedDlsiteInfo.tagDetails),
             coverUrl = fetchedDlsiteInfo.coverUrl.ifBlank { currentDisplayAlbum.coverUrl },
             ratingValue = fetchedDlsiteInfo.ratingValue ?: currentDisplayAlbum.ratingValue,
             ratingCount = fetchedDlsiteInfo.ratingCount.takeIf { it > 0 }
@@ -431,6 +439,7 @@ internal fun mergeAsmrOneHeaderAlbum(
                 .filter { it.isNotBlank() }
                 .distinct()
                 .joinToString(", "),
+            tagDetails = details.tags.orEmpty().map { it.toAlbumTag() },
             tags = details.tags.orEmpty()
                 .map { it.name.trim() }
                 .filter { it.isNotBlank() }
@@ -445,16 +454,18 @@ internal fun mergeAsmrOneHeaderAlbum(
         fetchedDlsiteInfo == null -> asmrOneInfo
         asmrOneInfo == null -> fetchedDlsiteInfo
         else -> fetchedDlsiteInfo.copy(
+            metadataLocale = currentDisplayAlbum.metadataLocale,
             title = fetchedDlsiteInfo.title
                 .takeUnless { title ->
                     title.isBlank() ||
-                        title == "专辑" ||
+                        title in setOf("专辑", "Album") ||
                         title.equals(fetchedDlsiteInfo.rjCode, ignoreCase = true)
                 }
                 ?: asmrOneInfo.title,
             circle = fetchedDlsiteInfo.circle.ifBlank { asmrOneInfo.circle },
             cv = fetchedDlsiteInfo.cv.ifBlank { asmrOneInfo.cv },
             tags = fetchedDlsiteInfo.tags.ifEmpty { asmrOneInfo.tags },
+            tagDetails = com.asmr.player.domain.model.mergeAlbumTags(asmrOneInfo.tagDetails, fetchedDlsiteInfo.tagDetails),
             coverUrl = fetchedDlsiteInfo.coverUrl.ifBlank { asmrOneInfo.coverUrl },
             workId = fetchedDlsiteInfo.workId.ifBlank { asmrOneInfo.workId },
             rjCode = fetchedDlsiteInfo.rjCode.ifBlank { asmrOneInfo.rjCode },
@@ -668,7 +679,7 @@ internal fun buildDlsiteTrialDownloadTree(trialTracks: List<Track>): List<AsmrOn
 
         val mediaType = inferDlsiteTrialMediaType(track.title, url) ?: return@mapNotNull null
         val ext = inferDlsiteTrialDownloadExtension(url, mediaType) ?: return@mapNotNull null
-        val fallbackTitle = if (mediaType == TreeFileType.Video) "体验视频" else "体验音频"
+        val fallbackTitle = if (mediaType == TreeFileType.Video) appString(R.string.ui_experience_video) else appString(R.string.ui_experience_audio)
         val safeTitle = sanitizeDlsiteTrialFileBaseName(track.title, fallbackTitle)
         val fileName = "${mediaIndex.toString().padStart(2, '0')}_$safeTitle.$ext"
         mediaIndex += 1

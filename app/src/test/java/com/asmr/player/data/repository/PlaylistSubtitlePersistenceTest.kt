@@ -30,7 +30,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [34])
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [34])
 class PlaylistSubtitlePersistenceTest {
     private val context get() = RuntimeEnvironment.getApplication()
     // Keep SQLite's WAL paths below the Windows path limit in Robolectric's method directories.

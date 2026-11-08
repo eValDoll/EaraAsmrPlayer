@@ -1,5 +1,8 @@
 package com.asmr.player.data.remote.dlsite
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.content.Context
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.remote.withSearchTimeouts
@@ -68,7 +71,7 @@ class DlsitePlayLibraryClient @Inject constructor(
         
         if (cookie.isBlank()) {
             android.util.Log.e(TAG, "No play cookie available. Login required.")
-            throw IllegalStateException("请先登录 DLsite（需要 play.dlsite.com 的 Cookie）")
+            throw IllegalStateException(appString(R.string.ui_please_log_in_to_dlsite_first_requires_cookies))
         }
 
         android.util.Log.d(TAG, "Fetching sales...")
@@ -144,9 +147,9 @@ class DlsitePlayLibraryClient @Inject constructor(
         requestClient.newCall(request).execute().use { resp ->
             if (!resp.isSuccessful) {
                 if (resp.code == 401) {
-                    throw IllegalStateException("已购库鉴权失败（401），请重新登录 DLsite")
+                    throw IllegalStateException(appString(R.string.ui_authentication_of_the_purchased_library_failed_401_please))
                 }
-                throw IllegalStateException("获取已购列表失败（${resp.code}）")
+                throw IllegalStateException(appString(R.string.ui_failed_to_obtain_purchased_list, resp.code))
             }
             val body = resp.body ?: return emptyMap()
             val type = object : TypeToken<List<Map<String, Any?>>>() {}.type
@@ -189,7 +192,7 @@ class DlsitePlayLibraryClient @Inject constructor(
             requestClient.newCall(reqBuilder.build()).execute().use { resp ->
                     if (!resp.isSuccessful) {
                         if (resp.code == 401) {
-                            throw IllegalStateException("已购库鉴权失败（401），请重新登录 DLsite")
+                            throw IllegalStateException(appString(R.string.ui_authentication_of_the_purchased_library_failed_401_please))
                         }
                         return@use
                     }

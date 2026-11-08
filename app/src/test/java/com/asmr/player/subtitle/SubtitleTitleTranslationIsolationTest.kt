@@ -42,11 +42,11 @@ import org.robolectric.annotation.Implements
 
 @RunWith(RobolectricTestRunner::class)
 @Config(
-    application = Application::class, sdk = [34], manifest = Config.NONE,
+    application = com.asmr.player.LocalizedTestApplication::class, sdk = [34], manifest = Config.NONE,
     shadows = [SubtitleTitleTranslationIsolationTest.StoreShadow::class],
     instrumentedPackages = ["com.asmr.player.subtitle.TranslationApiStore"]
 )
-class SubtitleTitleTranslationIsolationTest {
+class SubtitleTitleTranslationIsolationTest : com.asmr.player.LocalizedRobolectricTest() {
     private lateinit var database: AppDatabase
     private lateinit var service: SubtitleTaskService
     private lateinit var scope: CoroutineScope

@@ -1,6 +1,5 @@
 package com.asmr.player.ui.player
 
-import android.app.Application
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,7 +28,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [28], qualifiers = "w500dp-h900dp-mdpi")
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [28], qualifiers = "w500dp-h900dp-mdpi")
 class PlayerSupportingTextTest {
     @get:Rule
     val compose = createEaraComposeRule()

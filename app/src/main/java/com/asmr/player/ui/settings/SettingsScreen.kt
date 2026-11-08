@@ -1,5 +1,8 @@
 package com.asmr.player.ui.settings
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.ui.common.LocalTabletLayout
 import com.asmr.player.ui.common.LocalMainHeaderPadding
 import com.asmr.player.ui.common.DeferredPageItem
@@ -134,19 +137,23 @@ private const val SettingsDetailExitDurationMs = 420
 private val SettingsDetailSlideEasing = CubicBezierEasing(0.215f, 0.61f, 0.355f, 1f)
 
 private enum class SettingsSection(
-    val title: String,
-    val description: String,
+    private val titleProvider: () -> String,
+    private val descriptionProvider: () -> String,
     private val iconProvider: () -> ImageVector,
 ) {
-    LocalLibrary("本地库", "管理扫描目录、刷新本地内容与同步元数据", { Icons.Rounded.Folder }),
-    BlockedKeywords("屏蔽词", "过滤搜索结果中不想看到的关键词", { Icons.Rounded.Block }),
-    Appearance("外观", "调整主题、主题色与播放页背景", { Icons.Rounded.Palette }),
-    Playback("播放设置", "管理音频输出与淡入淡出", { Icons.Rounded.Headphones }),
-    Lyrics("歌词", "配置歌词页与悬浮歌词的显示效果", { Icons.Rounded.Lyrics }),
-    Translation("翻译配置", "管理页面翻译、字幕模型与翻译 API", { Icons.Rounded.Translate }),
-    SupportStatus("服务状态与代理", "测试服务连通性并配置代理与 DNS", { Icons.Rounded.Router }),
-    AppCache("APP 缓存", "设置缓存容量上限并清理缓存", { Icons.Rounded.Storage }),
-    About("关于", "查看版本信息并检查应用更新", { Icons.Rounded.Info });
+    LocalLibrary( { appString(R.string.ui_library) }, { appString(R.string.ui_manage_scan_directories_refresh_local_content_and_synchronize) }, { Icons.Rounded.Folder }),
+    BlockedKeywords( { appString(R.string.ui_blocked_keywords) }, { appString(R.string.ui_filter_keywords_you_don_t_want_to_see) }, { Icons.Rounded.Block }),
+    Appearance( { appString(R.string.ui_appearance) }, { appString(R.string.ui_adjust_theme_theme_color_and_playback_page_background) }, { Icons.Rounded.Palette }),
+    Playback( { appString(R.string.ui_playback) }, { appString(R.string.ui_manage_audio_output_and_fades) }, { Icons.Rounded.Headphones }),
+    Lyrics( { appString(R.string.ui_lyrics) }, { appString(R.string.ui_configure_the_display_effect_of_lyrics_page_and) }, { Icons.Rounded.Lyrics }),
+    Translation( { appString(R.string.ui_language_and_translation) }, { appString(R.string.ui_manage_page_translation_subtitle_models_and_translation_apis) }, { Icons.Rounded.Translate }),
+    SupportStatus( { appString(R.string.ui_services_and_proxy) }, { appString(R.string.ui_test_service_connectivity_and_configure_proxy_and_dns) }, { Icons.Rounded.Router }),
+    AppCache( { appString(R.string.ui_app_cache) }, { appString(R.string.ui_set_cache_capacity_limit_and_clear_cache) }, { Icons.Rounded.Storage }),
+    About( { appString(R.string.ui_about) }, { appString(R.string.ui_view_version_information_and_check_for_app_updates) }, { Icons.Rounded.Info });
+
+    val title: String get() = titleProvider()
+    val description: String get() = descriptionProvider()
+
 
     val icon: ImageVector get() = iconProvider()
 }
@@ -330,7 +337,7 @@ fun SettingsScreen(
                         label = formatTreeRootLabel(uri.toString()),
                     )
                 } else {
-                    libraryViewModel.messageManager.showError("无法获取下载目录读写权限")
+                    libraryViewModel.messageManager.showError(appString(R.string.ui_unable_to_obtain_read_and_write_permissions_for))
                 }
             }
         },
@@ -439,7 +446,7 @@ fun SettingsScreen(
                     contentColor = if (isDark) colorScheme.onPrimaryContainer else colorScheme.primaryStrong
                 )
 
-                Text("下载目录", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                Text(androidx.compose.ui.res.stringResource(R.string.ui_download_catalog), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                 Surface(
                     shape = RoundedCornerShape(14.dp),
                     color = Color.Transparent,
@@ -474,7 +481,7 @@ fun SettingsScreen(
                             ) {
                                 Icon(Icons.Rounded.FolderOpen, contentDescription = null, tint = buttonColors.contentColor)
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("选择目录")
+                                Text(androidx.compose.ui.res.stringResource(R.string.ui_select_directory))
                             }
                             TextButton(
                                 onClick = {
@@ -486,7 +493,7 @@ fun SettingsScreen(
                                 },
                                 enabled = downloadDestination is DownloadDestination.DocumentTree && !isGlobalSyncRunning,
                             ) {
-                                Text("重置默认")
+                                Text(androidx.compose.ui.res.stringResource(R.string.ui_reset_default))
                             }
                         }
                     }
@@ -504,7 +511,7 @@ fun SettingsScreen(
                     ) {
                         Icon(Icons.Rounded.Refresh, contentDescription = null, tint = buttonColors.contentColor)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("刷新本地")
+                        Text(androidx.compose.ui.res.stringResource(R.string.ui_refresh_local))
                     }
                     FilledTonalButton(
                         onClick = { libraryViewModel.syncMetadata() },
@@ -514,7 +521,7 @@ fun SettingsScreen(
                     ) {
                         Icon(Icons.Rounded.CloudSync, contentDescription = null, tint = buttonColors.contentColor)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("云同步")
+                        Text(androidx.compose.ui.res.stringResource(R.string.ui_cloud_sync))
                     }
                 }
 
@@ -525,13 +532,13 @@ fun SettingsScreen(
                 ) {
                     Icon(Icons.Rounded.FolderOpen, contentDescription = null, tint = buttonColors.contentColor)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("添加目录")
+                    Text(androidx.compose.ui.res.stringResource(R.string.ui_add_directory))
                 }
 
                 bulkProgress?.let { progress ->
                     val title = when (progress.phase) {
-                        BulkPhase.ScanningLocal -> "正在扫描本地库"
-                        BulkPhase.SyncingCloud -> "正在云同步"
+                        BulkPhase.ScanningLocal -> appString(R.string.ui_scanning_local_library)
+                        BulkPhase.SyncingCloud -> appString(R.string.ui_cloud_sync_in_progress)
                     }
                     Surface(
                         shape = RoundedCornerShape(14.dp),
@@ -547,7 +554,7 @@ fun SettingsScreen(
                                     Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                                     if (progress.currentAlbumTitle.isNotBlank()) {
                                         Text(
-                                            text = "专辑 ${progress.current}/${progress.total}：${progress.currentAlbumTitle}",
+                                            text = appString(R.string.ui_album_456ccf, progress.current, progress.total, progress.currentAlbumTitle),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = colorScheme.textSecondary,
                                             maxLines = 1,
@@ -555,13 +562,13 @@ fun SettingsScreen(
                                         )
                                     } else {
                                         Text(
-                                            text = "进度 ${progress.current}/${progress.total}",
+                                            text = appString(R.string.ui_progress, progress.current, progress.total),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = colorScheme.textSecondary
                                         )
                                     }
                                 }
-                                TextButton(onClick = { libraryViewModel.cancelBulkTask() }) { Text("取消") }
+                                TextButton(onClick = { libraryViewModel.cancelBulkTask() }) { Text(androidx.compose.ui.res.stringResource(R.string.ui_cancel)) }
                             }
                             if (progress.total > 0) {
                                 LinearProgressIndicator(
@@ -573,7 +580,7 @@ fun SettingsScreen(
                             }
                             if (progress.currentFile.isNotBlank()) {
                                 Text(
-                                    text = "正在扫描：${progress.currentFile}",
+                                    text = appString(R.string.ui_scanning, progress.currentFile),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = colorScheme.textSecondary,
                                     maxLines = 1,
@@ -585,9 +592,9 @@ fun SettingsScreen(
                 }
 
                 Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("已添加目录", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    Text(androidx.compose.ui.res.stringResource(R.string.ui_directory_added), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                     if (scanRoots.isEmpty()) {
-                        Text("暂无", style = MaterialTheme.typography.bodySmall, color = colorScheme.textSecondary)
+                        Text(androidx.compose.ui.res.stringResource(R.string.ui_none_yet), style = MaterialTheme.typography.bodySmall, color = colorScheme.textSecondary)
                     } else {
                         scanRoots.forEach { root ->
                             val label = remember(root) { formatTreeRootLabel(root) }
@@ -645,31 +652,31 @@ fun SettingsScreen(
                 if (currentSection == SettingsSection.Appearance) {
                     item(key = "group:appearance") {
                         SettingsDetailCard {
-                            Text("主题模式", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            Text(androidx.compose.ui.res.stringResource(R.string.ui_theme_mode), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                                 ThemeModeChip(
-                                    label = "系统",
+                                    label = appString(R.string.ui_system),
                                     selected = themeMode == "system",
                                     onClick = { viewModel.setThemeMode("system") }
                                 )
                                 ThemeModeChip(
-                                    label = "浅色",
+                                    label = appString(R.string.ui_light_color),
                                     selected = themeMode == "light",
                                     onClick = { viewModel.setThemeMode("light") }
                                 )
                                 ThemeModeChip(
-                                    label = "深色",
+                                    label = appString(R.string.ui_dark),
                                     selected = themeMode == "dark",
                                     onClick = { viewModel.setThemeMode("dark") }
                                 )
                                 ThemeModeChip(
-                                    label = "柔和深色",
+                                    label = appString(R.string.ui_soft_dark_color),
                                     selected = themeMode == "soft_dark",
                                     onClick = { viewModel.setThemeMode("soft_dark") }
                                 )
                             }
 
-                            Text("主题色", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            Text(androidx.compose.ui.res.stringResource(R.string.ui_theme_color), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -715,7 +722,7 @@ fun SettingsScreen(
                             }
                             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
                         SettingsToggleRow(
-                            text = "封面动态主题（全局）",
+                            text = appString(R.string.ui_cover_dynamic_theme_global),
                             checked = dynamicPlayerHueEnabled,
                             onCheckedChange = viewModel::setDynamicPlayerHueEnabled
                         )
@@ -724,7 +731,7 @@ fun SettingsScreen(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text("播放页/歌词页背景模式", style = MaterialTheme.typography.bodyMedium)
+                            Text(androidx.compose.ui.res.stringResource(R.string.ui_player_lyrics_background), style = MaterialTheme.typography.bodyMedium)
                             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                                 SegmentedButton(
                                     selected = playerBackgroundMode == PlayerBackgroundMode.Theme,
@@ -732,7 +739,7 @@ fun SettingsScreen(
                                     shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
                                     colors = segmentedButtonColors,
                                     icon = {},
-                                    label = { Text("主题色") }
+                                    label = { Text(androidx.compose.ui.res.stringResource(R.string.ui_theme_color)) }
                                 )
                                 SegmentedButton(
                                     selected = playerBackgroundMode == PlayerBackgroundMode.Solid,
@@ -743,7 +750,7 @@ fun SettingsScreen(
                                     shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
                                     colors = segmentedButtonColors,
                                     icon = {},
-                                    label = { Text("纯色") }
+                                    label = { Text(androidx.compose.ui.res.stringResource(R.string.ui_solid_color)) }
                                 )
                                 SegmentedButton(
                                     selected = playerBackgroundMode == PlayerBackgroundMode.Flowing,
@@ -754,19 +761,19 @@ fun SettingsScreen(
                                     shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
                                     colors = segmentedButtonColors,
                                     icon = {},
-                                    label = { Text("流光") }
+                                    label = { Text(androidx.compose.ui.res.stringResource(R.string.ui_flowing_light)) }
                                 )
                             }
                         }
                         if (playerBackgroundMode == PlayerBackgroundMode.Flowing) {
                             SettingsToggleRow(
-                                text = "动态流光背景",
+                                text = appString(R.string.ui_animated_flowing_background),
                                 checked = dynamicFlowingBackgroundEnabled,
                                 onCheckedChange = viewModel::setDynamicFlowingBackgroundEnabled
                             )
                         } else if (playerBackgroundMode == PlayerBackgroundMode.Theme) {
                             SettingsToggleRow(
-                                text = "播放页/歌词页封面背景",
+                                text = appString(R.string.ui_play_page_lyric_page_cover_background),
                                 checked = coverBackgroundEnabled,
                                 onCheckedChange = viewModel::setCoverBackgroundEnabled
                             )
@@ -774,7 +781,7 @@ fun SettingsScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("背景封面预览方式", style = MaterialTheme.typography.bodyMedium)
+                                Text(androidx.compose.ui.res.stringResource(R.string.ui_background_cover_preview_method), style = MaterialTheme.typography.bodyMedium)
                                 PreviewModeInfoTip(
                                     active = activeTipKey == "cover_preview_mode",
                                     onToggle = {
@@ -789,7 +796,7 @@ fun SettingsScreen(
                                         shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
                                         colors = segmentedButtonColors,
                                         icon = {},
-                                        label = { Text("关闭") }
+                                        label = { Text(androidx.compose.ui.res.stringResource(R.string.ui_close)) }
                                     )
                                     SegmentedButton(
                                         selected = coverPreviewMode == CoverPreviewMode.Drag,
@@ -797,7 +804,7 @@ fun SettingsScreen(
                                         shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
                                         colors = segmentedButtonColors,
                                         icon = {},
-                                        label = { Text("滑动") }
+                                        label = { Text(androidx.compose.ui.res.stringResource(R.string.ui_slide)) }
                                     )
                                     SegmentedButton(
                                         selected = coverPreviewMode == CoverPreviewMode.Motion,
@@ -805,7 +812,7 @@ fun SettingsScreen(
                                         shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
                                         colors = segmentedButtonColors,
                                         icon = {},
-                                        label = { Text("转动") }
+                                        label = { Text(androidx.compose.ui.res.stringResource(R.string.ui_turn)) }
                                     )
                                 }
                             }
@@ -816,7 +823,7 @@ fun SettingsScreen(
                                         range = 0f..1f,
                                         stepSize = 0.05f,
                                         textForValue = { value ->
-                                            "封面背景清晰度：${(value.coerceIn(0f, 1f) * 100).toInt()}%"
+                                            appString(R.string.ui_cover_background_clarity, (value.coerceIn(0f, 1f) * 100).toInt())
                                         },
                                         onValueCommitted = viewModel::setCoverBackgroundClarity,
                                         onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
@@ -832,12 +839,12 @@ fun SettingsScreen(
                     item(key = "group:playback") {
                         SettingsDetailCard {
                             SettingsToggleRow(
-                                text = "SFW开关",
+                                text = appString(R.string.ui_sfw_switch),
                                 checked = sfwHideSystemControls,
                                 onCheckedChange = viewModel::setSfwHideSystemControls,
                                 infoKey = "sfw_hide_system_controls",
                                 infoTitle = "SFW",
-                                infoText = "开启后会尽量隐藏系统锁屏和通知栏里的媒体控制按钮，但仍保留后台播放所需的前台通知。",
+                                infoText = appString(R.string.ui_when_turned_on_it_will_try_to_hide),
                                 activeTipKey = activeTipKey,
                                 onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
                             )
@@ -853,7 +860,7 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "系统音效：部分系统会默认开启杜比全景声效果，可自行选择是否开启",
+                                text = appString(R.string.ui_system_sound_effects_some_systems_will_turn_on),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = colorScheme.textPrimary,
                                 modifier = Modifier.weight(1f)
@@ -866,22 +873,22 @@ fun SettingsScreen(
                             )
                         }
                         SettingsToggleRow(
-                            text = "断开扬声器、有线/蓝牙耳机或蓝牙关闭时立刻暂停播放",
+                            text = appString(R.string.ui_pause_playback_immediately_when_speakers_wired_bluetooth_headphones),
                             checked = pauseOnOutputDisconnect,
                             onCheckedChange = viewModel::setPauseOnOutputDisconnect,
                             infoKey = "pause_on_output_disconnect",
-                            infoTitle = "输出断开自动暂停",
-                            infoText = "播放中如果外放、耳机或蓝牙输出被移除，会立刻暂停，避免声音突然外放。",
+                            infoTitle = appString(R.string.ui_automatic_pause_when_output_is_disconnected),
+                            infoText = appString(R.string.ui_if_the_external_amplifier_headphone_or_bluetooth_output),
                             activeTipKey = activeTipKey,
                             onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
                         )
                         SettingsToggleRow(
-                            text = "连接有线/蓝牙耳机或其他外接输出时继续播放",
+                            text = appString(R.string.ui_continue_playback_when_connected_to_wired_bluetooth_headphones),
                             checked = resumeOnOutputConnect,
                             onCheckedChange = viewModel::setResumeOnOutputConnect,
                             infoKey = "resume_on_output_connect",
-                            infoTitle = "输出接入自动恢复",
-                            infoText = "检测到耳机、蓝牙耳机、USB 音频、HDMI 或 AUX 等外接输出接入时，如果播放器当前处于暂停，会自动尝试恢复播放；手机扬声器不触发。",
+                            infoTitle = appString(R.string.ui_output_access_automatic_recovery),
+                            infoText = appString(R.string.ui_when_an_external_output_such_as_headphones_bluetooth),
                             activeTipKey = activeTipKey,
                             onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
                         )
@@ -889,11 +896,11 @@ fun SettingsScreen(
                             committedValue = playFadeInMs.toFloat(),
                             range = 0f..3000f,
                             stepSize = 100f,
-                            textForValue = { value -> "播放时逐渐增强音量: ${value.toInt()}ms" },
+                            textForValue = { value -> appString(R.string.ui_gradually_increase_volume_while_playing_ms, value.toInt()) },
                             onValueCommitted = { viewModel.setPlayFadeInMs(it.toInt()) },
                             infoKey = "play_fade_in",
-                            infoTitle = "播放淡入",
-                            infoText = "点击播放时，音量会在设定时长内从低到高平滑升到正常值。",
+                            infoTitle = appString(R.string.ui_play_fade_in),
+                            infoText = appString(R.string.ui_when_you_click_play_the_volume_will_smoothly),
                             activeTipKey = activeTipKey,
                             onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key },
                             onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
@@ -902,22 +909,22 @@ fun SettingsScreen(
                             committedValue = pauseFadeOutMs.toFloat(),
                             range = 0f..3000f,
                             stepSize = 100f,
-                            textForValue = { value -> "暂停时逐渐降低音量: ${value.toInt()}ms" },
+                            textForValue = { value -> appString(R.string.ui_gradually_lower_volume_while_paused_ms, value.toInt()) },
                             onValueCommitted = { viewModel.setPauseFadeOutMs(it.toInt()) },
                             infoKey = "pause_fade_out",
-                            infoTitle = "暂停淡出",
-                            infoText = "点击暂停时，音量会在设定时长内逐渐降到 0，然后再真正暂停。",
+                            infoTitle = appString(R.string.ui_pause_fade),
+                            infoText = appString(R.string.ui_when_you_click_pause_the_volume_will_gradually),
                             activeTipKey = activeTipKey,
                             onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key },
                             onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
                         )
                         SettingsToggleRow(
-                            text = "其他应用播放音/视频时暂停",
+                            text = appString(R.string.ui_pause_when_other_applications_play_audio_video),
                             checked = pauseOnOtherAudio,
                             onCheckedChange = viewModel::setPauseOnOtherAudio,
                             infoKey = "pause_on_other_audio",
-                            infoTitle = "音频焦点暂停",
-                            infoText = "当其他音乐或视频应用抢占音频焦点时暂停播放；普通通知提示音不会触发。",
+                            infoTitle = appString(R.string.ui_audio_focus_paused),
+                            infoText = appString(R.string.ui_pause_playback_when_another_music_or_video_app),
                             activeTipKey = activeTipKey,
                             onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
                         )
@@ -930,7 +937,7 @@ fun SettingsScreen(
                     item(key = "group:lyrics") {
                         SettingsDetailCard {
                             SettingsToggleRow(
-                                text = "开启悬浮歌词",
+                                text = appString(R.string.ui_turn_on_floating_lyrics),
                                 checked = floatingLyricsEnabled && overlayGranted,
                                 onCheckedChange = { enabled ->
                                     overlayGranted = Settings.canDrawOverlays(context)
@@ -945,7 +952,7 @@ fun SettingsScreen(
                                         }.recoverCatching {
                                             overlayLauncher.launch(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))
                                         }.onFailure {
-                                            libraryViewModel.messageManager.showError("无法打开悬浮窗权限设置")
+                                            libraryViewModel.messageManager.showError(appString(R.string.ui_unable_to_open_overlay_permission_settings))
                                         }
                                     }
                                 }
@@ -967,11 +974,11 @@ fun SettingsScreen(
                             )
 
                         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
-                        Text("悬浮歌词细节", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Text(androidx.compose.ui.res.stringResource(R.string.ui_suspended_lyrics_details), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
 
                         if (floatingLyricsEnabled && overlayGranted) {
                             SettingsSliderRow(
-                                text = "字体大小: ${floatingSettings.size.toInt()}",
+                                text = appString(R.string.ui_font_size, floatingSettings.size.toInt()),
                                 value = floatingSettings.size,
                                 range = 12f..32f,
                                 onValueChange = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(size = it)) },
@@ -979,7 +986,7 @@ fun SettingsScreen(
                             )
 
                             SettingsSliderRow(
-                                text = "垂直位置 (Y轴)",
+                                text = appString(R.string.ui_vertical_position_y_axis),
                                 value = floatingSettings.yOffset.toFloat(),
                                 range = 0f..2000f,
                                 onValueChange = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(yOffset = it.toInt())) },
@@ -990,7 +997,7 @@ fun SettingsScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("对齐方式", style = MaterialTheme.typography.bodyMedium)
+                                Text(androidx.compose.ui.res.stringResource(R.string.ui_alignment), style = MaterialTheme.typography.bodyMedium)
                                 Spacer(modifier = Modifier.weight(1f))
                                 SingleChoiceSegmentedButtonRow {
                                     SegmentedButton(
@@ -1030,7 +1037,7 @@ fun SettingsScreen(
                                 )
                             }
                             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Text("歌词颜色", style = MaterialTheme.typography.bodyMedium)
+                                Text(androidx.compose.ui.res.stringResource(R.string.ui_lyrics_color), style = MaterialTheme.typography.bodyMedium)
                                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                     presetColors.forEach { c ->
                                         val selected = floatingSettings.color == c
@@ -1051,7 +1058,7 @@ fun SettingsScreen(
                             }
 
                             SettingsToggleRow(
-                                text = "点击穿透(锁定位置)",
+                                text = appString(R.string.ui_click_to_penetrate_lock_position),
                                 checked = !floatingSettings.touchable,
                                 onCheckedChange = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(touchable = !it)) }
                             )
@@ -1060,6 +1067,7 @@ fun SettingsScreen(
                 }
                 }
                 if (currentSection == SettingsSection.Translation) {
+                    item(key = "app_language") { SettingsDetailCard { AppLanguageSettings() } }
                     item(key = "group:page_translation") {
                         SettingsDetailCard { PageTranslationSettingsSection(isActive = translationDataActive) }
                     }
@@ -1115,12 +1123,12 @@ fun SettingsScreen(
                             },
                             customOptions = {
                                 SettingsToggleRow(
-                                    text = "最终润色",
+                                    text = appString(R.string.ui_final_touches),
                                     checked = deepSeekTranslationSettings.finalPolishEnabled,
                                     onCheckedChange = viewModel::setDeepSeekFinalPolishEnabled,
                                     infoKey = "final_polish",
-                                    infoTitle = "最终润色",
-                                    infoText = "翻译完成后，可在任务管理中左滑作品卡片，对现有中文字幕进行整体润色。此操作会额外消耗 Token。",
+                                    infoTitle = appString(R.string.ui_final_touches),
+                                    infoText = appString(R.string.ui_after_the_translation_is_completed_you_can_swipe),
                                     activeTipKey = activeTipKey,
                                     onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
                                 )
@@ -1139,13 +1147,13 @@ fun SettingsScreen(
                         )
 
                         Text(
-                            text = "当前版本：${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                            text = appString(R.string.ui_current_version_4f5e78, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold
                         )
 
                         SettingsToggleRow(
-                            text = "启动时自动检查更新",
+                            text = appString(R.string.ui_automatically_check_for_updates_on_startup),
                             checked = autoUpdateCheckEnabled,
                             onCheckedChange = viewModel::setAutoUpdateCheckEnabled
                         )
@@ -1160,23 +1168,23 @@ fun SettingsScreen(
                             if (updateState is AppUpdateState.Checking) {
                                 EaraLogoLoadingIndicator(size = 18.dp)
                                 Spacer(modifier = Modifier.width(10.dp))
-                                Text("检查中…")
+                                Text(androidx.compose.ui.res.stringResource(R.string.ui_checking))
                             } else {
-                                Text("检查更新")
+                                Text(androidx.compose.ui.res.stringResource(R.string.ui_check_for_updates))
                             }
                         }
 
                         when (val s = updateState) {
                             is AppUpdateState.UpToDate -> {
                                 Text(
-                                    text = "已是最新：${s.latestVersionName}",
+                                    text = appString(R.string.ui_already_latest, s.latestVersionName),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = colorScheme.textSecondary
                                 )
                             }
                             is AppUpdateState.UpdateAvailable -> {
                                 Text(
-                                    text = "发现新版本：${s.release.tagName}",
+                                    text = appString(R.string.ui_new_version_found, s.release.tagName),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = colorScheme.textSecondary
                                 )
@@ -1186,7 +1194,7 @@ fun SettingsScreen(
                                     colors = buttonColors,
                                     enabled = !busy
                                 ) {
-                                    Text("下载并安装")
+                                    Text(androidx.compose.ui.res.stringResource(R.string.ui_download_and_install))
                                 }
                             }
                             is AppUpdateState.Downloading -> {
@@ -1195,7 +1203,7 @@ fun SettingsScreen(
                                 val progress = if (total > 0L) (downloaded.toFloat() / total.toFloat()).coerceIn(0f, 1f) else null
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text(
-                                        text = "正在下载：${s.release.apkName}",
+                                        text = appString(R.string.ui_downloading_460547, s.release.apkName),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = colorScheme.textSecondary,
                                         maxLines = 1,
@@ -1210,7 +1218,7 @@ fun SettingsScreen(
                             }
                             is AppUpdateState.ReadyToInstall -> {
                                 Text(
-                                    text = "下载完成：${s.release.tagName}",
+                                    text = appString(R.string.ui_download_completed, s.release.tagName),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = colorScheme.textSecondary
                                 )
@@ -1221,7 +1229,7 @@ fun SettingsScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                     colors = buttonColors
                                 ) {
-                                    Text("安装更新")
+                                    Text(androidx.compose.ui.res.stringResource(R.string.ui_install_updates))
                                 }
                             }
                             is AppUpdateState.Failed -> {
@@ -1234,7 +1242,7 @@ fun SettingsScreen(
                                     onClick = { viewModel.resetUpdateState() },
                                     modifier = Modifier.align(Alignment.End)
                                 ) {
-                                    Text("关闭")
+                                    Text(androidx.compose.ui.res.stringResource(R.string.ui_close))
                                 }
                             }
                             else -> {}
@@ -1282,11 +1290,11 @@ fun SettingsScreen(
     if (removeRoot != null) {
         FlatActionDialog(
             onDismissRequest = { pendingRemoveRoot = null },
-            message = "将从列表中移除该目录，后续不会再扫描它。",
+            message = appString(R.string.ui_the_directory_will_be_removed_from_the_list),
             actions = listOf(
-                FlatDialogAction("取消", onClick = { pendingRemoveRoot = null }),
+                FlatDialogAction(appString(R.string.ui_cancel), onClick = { pendingRemoveRoot = null }),
                 FlatDialogAction(
-                    text = "移除",
+                    text = appString(R.string.ui_remove),
                     tone = FlatDialogActionTone.Danger,
                     onClick = {
                         val uri = runCatching { Uri.parse(removeRoot) }.getOrNull()
@@ -1305,11 +1313,11 @@ fun SettingsScreen(
     if (nextDownloadDestination != null) {
         FlatActionDialog(
             onDismissRequest = { pendingDownloadDestination = null },
-            message = "切换后将清理旧目录中由 App 下载的本地库、下载任务和字幕翻译任务记录，但不会删除或移动物理文件；同一目录内手动导入的其他作品会保留。切换成功后会自动扫描新的目标目录。是否继续？",
+            message = appString(R.string.ui_after_the_switch_the_local_libraries_download_tasks),
             actions = listOf(
-                FlatDialogAction("取消", onClick = { pendingDownloadDestination = null }),
+                FlatDialogAction(appString(R.string.ui_cancel), onClick = { pendingDownloadDestination = null }),
                 FlatDialogAction(
-                    text = if (nextDownloadDestination is DownloadDestination.Default) "重置" else "切换",
+                    text = if (nextDownloadDestination is DownloadDestination.Default) appString(R.string.ui_reset) else appString(R.string.ui_switch),
                     tone = FlatDialogActionTone.Danger,
                     onClick = {
                         pendingDownloadDestination = null
@@ -1324,11 +1332,11 @@ fun SettingsScreen(
     if (showClearAppCacheConfirmation) {
         FlatActionDialog(
             onDismissRequest = { showClearAppCacheConfirmation = false },
-            message = "将清理网络图片、在线音频播放和在线预览产生的缓存，不会删除下载内容、本地媒体或收藏数据。",
+            message = appString(R.string.ui_the_cache_generated_by_online_images_online_audio),
             actions = listOf(
-                FlatDialogAction("取消", onClick = { showClearAppCacheConfirmation = false }),
+                FlatDialogAction(appString(R.string.ui_cancel), onClick = { showClearAppCacheConfirmation = false }),
                 FlatDialogAction(
-                    text = "清理",
+                    text = appString(R.string.ui_clean_up),
                     tone = FlatDialogActionTone.Danger,
                     onClick = {
                         showClearAppCacheConfirmation = false
@@ -1339,14 +1347,14 @@ fun SettingsScreen(
         )
     }
     pendingDeleteSubtitleModelId?.let { modelId ->
-        val modelName = SubtitleTranscriptionModels.fromId(modelId)?.optionName ?: "字幕"
+        val modelName = SubtitleTranscriptionModels.fromId(modelId)?.optionName ?: appString(R.string.ui_subtitles)
         FlatActionDialog(
             onDismissRequest = { pendingDeleteSubtitleModelId = null },
-            message = "确定删除“$modelName”模型？约 29 MiB 的公共运行时会保留，之后下载任一模型时无需重复安装。",
+            message = appString(R.string.ui_are_you_sure_you_want_to_delete_the, modelName),
             actions = listOf(
-                FlatDialogAction("取消", onClick = { pendingDeleteSubtitleModelId = null }),
+                FlatDialogAction(appString(R.string.ui_cancel), onClick = { pendingDeleteSubtitleModelId = null }),
                 FlatDialogAction(
-                    text = "删除模型",
+                    text = appString(R.string.ui_delete_model),
                     tone = FlatDialogActionTone.Danger,
                     onClick = {
                         pendingDeleteSubtitleModelId = null
@@ -1364,19 +1372,19 @@ private fun NowPlayingLyricsSettingsSection(
     onSettingsChange: (NowPlayingLyricsSettings) -> Unit,
     onHorizontalControlInteractionChanged: (Boolean) -> Unit = {}
 ) {
-    Text("播放页歌词", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+    Text(androidx.compose.ui.res.stringResource(R.string.ui_play_page_lyrics), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
     SettingsToggleRow(
-        text = "多行完整显示",
+        text = appString(R.string.ui_display_multiple_lines_in_full),
         checked = settings.multilineEnabled,
         onCheckedChange = { onSettingsChange(settings.copy(multilineEnabled = it)) }
     )
     Text(
-        text = "竖屏经典布局使用固定字幕区，悬浮歌词按实际行数调整高度。超长字幕可上下滑动阅读；悬浮歌词可拖动字幕区域边缘调整位置，开启点击穿透后无法滑动。",
+        text = appString(R.string.ui_the_vertical_screen_classic_layout_uses_a_fixed),
         style = MaterialTheme.typography.bodySmall,
         color = AsmrTheme.colorScheme.textSecondary
     )
     SettingsSliderRow(
-        text = "高亮字体大小: ${settings.highlightFontSizeSp.toInt()}sp",
+        text = appString(R.string.ui_highlight_font_size_sp, settings.highlightFontSizeSp.toInt()),
         value = settings.highlightFontSizeSp,
         range = 18f..36f,
         stepSize = 1f,
@@ -1392,16 +1400,16 @@ internal fun SubtitleTranslationSettingsHeader(activeTipKey: String?, onToggleTi
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Text(
-            text = "字幕翻译",
+            text = appString(R.string.ui_subtitle_translation),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
             color = AsmrTheme.colorScheme.textPrimary
         )
         SettingsInfoTip(
             active = activeTipKey == "subtitle_translation",
-            title = "字幕翻译",
-            text = "批量翻译需要本地音频、已下载并选用的字幕模型，以及已保存的翻译 API 配置。" +
-                "在线音频请先下载。配置完成后，在本地库作品详情中点击“批量翻译”或“翻译选中”开始；保存 API Key 不会自动创建任务。",
+            title = appString(R.string.ui_subtitle_translation),
+            text = appString(R.string.ui_batch_translation_requires_local_audio_a_downloaded_and) +
+                appString(R.string.ui_download_online_audio_first_once_configured_tap_batch),
             onToggle = { onToggleTip("subtitle_translation") },
             showBackground = false
         )
@@ -1454,7 +1462,7 @@ internal fun DeepSeekTranslationSettingsSection(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "Token ${formatDeepSeekTokenTotal(accountState.totalTokens)} · 余额 ${formatDeepSeekBalances(accountState.balances)}",
+                    text = appString(R.string.ui_token_balance, formatDeepSeekTokenTotal(accountState.totalTokens), formatDeepSeekBalances(accountState.balances)),
                     style = MaterialTheme.typography.bodySmall,
                     textAlign = TextAlign.End,
                     color = if (accountState.balanceAvailable == false) {
@@ -1470,7 +1478,7 @@ internal fun DeepSeekTranslationSettingsSection(
                 )
                 Icon(
                     imageVector = Icons.Rounded.CheckCircle,
-                    contentDescription = "API Key 已配置",
+                    contentDescription = appString(R.string.ui_api_key_configured),
                     tint = Color(0xFF3E9B63),
                     modifier = Modifier
                         .size(20.dp)
@@ -1516,7 +1524,7 @@ internal fun DeepSeekTranslationSettingsSection(
             if (state.saving) {
                 EaraLogoLoadingIndicator(size = 18.dp)
             } else {
-                Text(if (state.configured) "替换" else "保存")
+                Text(if (state.configured) appString(R.string.ui_replace) else appString(R.string.ui_save))
             }
         }
     }
@@ -1540,7 +1548,7 @@ internal fun DeepSeekTranslationSettingsSection(
     }
 
     SettingsToggleRow(
-        text = "思考模式",
+        text = appString(R.string.ui_thinking_model),
         checked = settings.thinkingEnabled,
         onCheckedChange = onThinkingEnabledChanged
     )
@@ -1551,7 +1559,7 @@ internal fun DeepSeekTranslationSettingsSection(
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
-            text = "思考等级",
+            text = appString(R.string.ui_thinking_level),
             style = MaterialTheme.typography.bodyMedium,
             color = if (settings.thinkingEnabled) colorScheme.textPrimary else colorScheme.textTertiary
         )
@@ -1588,12 +1596,12 @@ internal fun DeepSeekTranslationSettingsSection(
     }
 
     SettingsToggleRow(
-        text = "最终润色",
+        text = appString(R.string.ui_final_touches),
         checked = settings.finalPolishEnabled,
         onCheckedChange = onFinalPolishEnabledChanged,
         infoKey = "final_polish",
-        infoTitle = "最终润色",
-        infoText = "翻译完成后，可在任务管理中左滑作品卡片，对现有中文字幕进行整体润色。此操作会额外消耗 Token。",
+        infoTitle = appString(R.string.ui_final_touches),
+        infoText = appString(R.string.ui_after_the_translation_is_completed_you_can_swipe),
         activeTipKey = activeTipKey,
         onToggleTip = onToggleTip
     )
@@ -1657,7 +1665,7 @@ internal fun SubtitleModelSettingsSection(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = if (state.activeModelId == candidate.id) {
-                                    "${candidate.optionName} · 当前"
+                                    appString(R.string.ui_current, candidate.optionName)
                                 } else {
                                     candidate.optionName
                                 },
@@ -1689,10 +1697,10 @@ internal fun SubtitleModelSettingsSection(
             )
             Text(
                 text = when {
-                    isActive && installed -> "当前使用"
-                    isActive -> "当前（未安装）"
-                    installed -> "已安装"
-                    else -> "未安装"
+                    isActive && installed -> appString(R.string.ui_currently_in_use)
+                    isActive -> appString(R.string.ui_current_not_installed)
+                    installed -> appString(R.string.ui_installed)
+                    else -> appString(R.string.ui_not_installed)
                 },
                 style = MaterialTheme.typography.labelMedium,
                 color = if (isActive) colors.primaryStrong else colors.textSecondary,
@@ -1722,7 +1730,7 @@ internal fun SubtitleModelSettingsSection(
         when (operation) {
             null -> Unit
             is SubtitleModelOperation.Queued -> {
-                Text("等待下载字幕组件", style = MaterialTheme.typography.bodySmall)
+                Text(androidx.compose.ui.res.stringResource(R.string.ui_waiting_to_download_subtitle_component), style = MaterialTheme.typography.bodySmall)
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
             is SubtitleModelOperation.Downloading -> {
@@ -1755,7 +1763,7 @@ internal fun SubtitleModelSettingsSection(
                 modifier = Modifier.fillMaxWidth(),
                 colors = settingsPrimaryTonalButtonColors()
             ) {
-                Text("取消下载")
+                Text(androidx.compose.ui.res.stringResource(R.string.ui_cancel_download))
             }
             installed && !isActive -> Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1768,13 +1776,13 @@ internal fun SubtitleModelSettingsSection(
                         .testTag("subtitle_model_select_${model.id}"),
                     colors = settingsPrimaryTonalButtonColors()
                 ) {
-                    Text("设为当前")
+                    Text(androidx.compose.ui.res.stringResource(R.string.ui_set_as_current))
                 }
                 FilledTonalButton(
                     onClick = { onDelete(model.id) },
                     colors = subtitleModelDeleteButtonColors()
                 ) {
-                    Icon(Icons.Rounded.Delete, contentDescription = "删除模型")
+                    Icon(Icons.Rounded.Delete, contentDescription = appString(R.string.ui_delete_model))
                 }
             }
             installed -> FilledTonalButton(
@@ -1784,7 +1792,7 @@ internal fun SubtitleModelSettingsSection(
             ) {
                 Icon(Icons.Rounded.Delete, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("删除模型")
+                Text(androidx.compose.ui.res.stringResource(R.string.ui_delete_model))
             }
             else -> FilledTonalButton(
                 onClick = { onDownload(model.id, selectedSource) },
@@ -1797,11 +1805,11 @@ internal fun SubtitleModelSettingsSection(
             ) {
                 Text(
                     when {
-                        !deviceSupported -> "设备不支持"
-                        availableSources.isEmpty() -> "来源不可用"
-                        anotherOperationRunning -> "其他模型正在下载"
-                        operation is SubtitleModelOperation.Failed -> "重新下载"
-                        else -> "下载模型"
+                        !deviceSupported -> appString(R.string.ui_the_device_does_not_support)
+                        availableSources.isEmpty() -> appString(R.string.ui_source_not_available)
+                        anotherOperationRunning -> appString(R.string.ui_other_models_are_being_downloaded)
+                        operation is SubtitleModelOperation.Failed -> appString(R.string.ui_download_again)
+                        else -> appString(R.string.ui_download_model)
                     }
                 )
             }
@@ -1853,17 +1861,17 @@ private fun AppCacheSettingsSection(
     }
 
     Text(
-        text = "当前占用：${formatCacheSize(state.usedSizeBytes)}",
+        text = appString(R.string.ui_current_occupation, formatCacheSize(state.usedSizeBytes)),
         style = MaterialTheme.typography.bodyMedium,
         fontWeight = FontWeight.SemiBold,
     )
     Text(
-        text = "空间由网络图片、在线音频播放和在线预览缓存共享。缓存满后会优先清理较早使用的资源。",
+        text = appString(R.string.ui_the_space_is_shared_by_network_pictures_online),
         style = MaterialTheme.typography.bodySmall,
         color = colorScheme.textSecondary,
     )
     SettingsSliderRow(
-        text = "缓存空间上限：${draftSizeMb.roundToInt()} MB",
+        text = appString(R.string.ui_cache_space_limit_mb, draftSizeMb.roundToInt()),
         value = draftSizeMb,
         range = AppCacheLimits.MinSizeMb.toFloat()..AppCacheLimits.MaxSizeMb.toFloat(),
         stepSize = AppCacheLimits.SizeStepMb.toFloat(),
@@ -1877,12 +1885,12 @@ private fun AppCacheSettingsSection(
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(
-            text = "最小 ${AppCacheLimits.MinSizeMb} MB",
+            text = appString(R.string.ui_minimum_mb, AppCacheLimits.MinSizeMb),
             style = MaterialTheme.typography.labelSmall,
             color = colorScheme.textSecondary,
         )
         Text(
-            text = "最大 ${AppCacheLimits.MaxSizeMb} MB",
+            text = appString(R.string.ui_maximum_mb, AppCacheLimits.MaxSizeMb),
             style = MaterialTheme.typography.labelSmall,
             color = colorScheme.textSecondary,
         )
@@ -1901,11 +1909,11 @@ private fun AppCacheSettingsSection(
         if (state.isClearing) {
             EaraLogoLoadingIndicator(size = 18.dp)
             Spacer(modifier = Modifier.width(10.dp))
-            Text("正在清理…")
+            Text(androidx.compose.ui.res.stringResource(R.string.ui_cleaning_up))
         } else {
             Icon(Icons.Rounded.Delete, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
-            Text("清理 APP 缓存")
+            Text(androidx.compose.ui.res.stringResource(R.string.ui_clear_app_cache))
         }
     }
 }
@@ -1930,9 +1938,9 @@ private fun LyricsPageSettingsSection(
     onSettingsChange: (LyricsPageSettings) -> Unit,
     onHorizontalControlInteractionChanged: (Boolean) -> Unit = {}
 ) {
-    Text("歌词页", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+    Text(androidx.compose.ui.res.stringResource(R.string.ui_lyrics_page), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
     SettingsSliderRow(
-        text = "字体大小: ${settings.fontSizeSp.toInt()}sp",
+        text = appString(R.string.ui_font_size_sp, settings.fontSizeSp.toInt()),
         value = settings.fontSizeSp,
         range = 18f..36f,
         stepSize = 1f,
@@ -1940,7 +1948,7 @@ private fun LyricsPageSettingsSection(
         onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
     )
     SettingsSliderRow(
-        text = "字体阴影: ${"%.1f".format(settings.strokeWidthSp)}sp",
+        text = appString(R.string.ui_font_shadow_sp, "%.1f".format(settings.strokeWidthSp)),
         value = settings.strokeWidthSp,
         range = 0f..3f,
         stepSize = 0.1f,
@@ -1948,7 +1956,7 @@ private fun LyricsPageSettingsSection(
         onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
     )
     SettingsSliderRow(
-        text = "行间距: ${"%.2f".format(settings.lineHeightMultiplier)}x",
+        text = appString(R.string.ui_line_spacing_x, "%.2f".format(settings.lineHeightMultiplier)),
         value = settings.lineHeightMultiplier,
         range = 0.1f..3.0f,
         stepSize = 0.1f,
@@ -1959,7 +1967,7 @@ private fun LyricsPageSettingsSection(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("显示区域", style = MaterialTheme.typography.bodyMedium)
+        Text(androidx.compose.ui.res.stringResource(R.string.ui_display_area), style = MaterialTheme.typography.bodyMedium)
         Spacer(modifier = Modifier.weight(1f))
         SingleChoiceSegmentedButtonRow {
             SegmentedButton(
@@ -1968,7 +1976,7 @@ private fun LyricsPageSettingsSection(
                 shape = SegmentedButtonDefaults.itemShape(index = 0, count = 4),
                 colors = segmentedButtonColors,
                 icon = {},
-                label = { Text("全屏") }
+                label = { Text(androidx.compose.ui.res.stringResource(R.string.ui_full_screen)) }
             )
             SegmentedButton(
                 selected = settings.displayAreaMode == 1,
@@ -1976,7 +1984,7 @@ private fun LyricsPageSettingsSection(
                 shape = SegmentedButtonDefaults.itemShape(index = 1, count = 4),
                 colors = segmentedButtonColors,
                 icon = {},
-                label = { Text("上1/4") }
+                label = { Text(androidx.compose.ui.res.stringResource(R.string.ui_upper_1_4)) }
             )
             SegmentedButton(
                 selected = settings.displayAreaMode == 2,
@@ -1984,7 +1992,7 @@ private fun LyricsPageSettingsSection(
                 shape = SegmentedButtonDefaults.itemShape(index = 2, count = 4),
                 colors = segmentedButtonColors,
                 icon = {},
-                label = { Text("中1/4") }
+                label = { Text(androidx.compose.ui.res.stringResource(R.string.ui_medium_1_4)) }
             )
             SegmentedButton(
                 selected = settings.displayAreaMode == 3,
@@ -1992,7 +2000,7 @@ private fun LyricsPageSettingsSection(
                 shape = SegmentedButtonDefaults.itemShape(index = 3, count = 4),
                 colors = segmentedButtonColors,
                 icon = {},
-                label = { Text("下1/4") }
+                label = { Text(androidx.compose.ui.res.stringResource(R.string.ui_next_1_4)) }
             )
         }
     }
@@ -2000,7 +2008,7 @@ private fun LyricsPageSettingsSection(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("对齐方式", style = MaterialTheme.typography.bodyMedium)
+        Text(androidx.compose.ui.res.stringResource(R.string.ui_alignment), style = MaterialTheme.typography.bodyMedium)
         Spacer(modifier = Modifier.weight(1f))
         SingleChoiceSegmentedButtonRow {
             SegmentedButton(
@@ -2063,7 +2071,7 @@ private fun SearchBlockedKeywordsSection(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "屏蔽关键词",
+                text = appString(R.string.ui_block_keywords),
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = colorScheme.textPrimary,
@@ -2075,7 +2083,7 @@ private fun SearchBlockedKeywordsSection(
             ) {
                 Icon(
                     imageVector = Icons.Rounded.Info,
-                    contentDescription = "搜索高级用法",
+                    contentDescription = appString(R.string.ui_search_advanced_usage),
                     tint = colorScheme.textSecondary,
                     modifier = Modifier.size(18.dp)
                 )
@@ -2100,13 +2108,13 @@ private fun SearchBlockedKeywordsSection(
                 shape = RoundedCornerShape(10.dp),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
             ) {
-                Text("添加")
+                Text(androidx.compose.ui.res.stringResource(R.string.ui_add_to))
             }
         }
 
         if (keywords.isEmpty()) {
             Text(
-                text = "暂无屏蔽关键词",
+                text = appString(R.string.ui_no_blocked_keywords_yet),
                 style = MaterialTheme.typography.bodySmall,
                 color = colorScheme.textSecondary
             )
@@ -2127,21 +2135,21 @@ private fun SearchBlockedKeywordsHelpDialog(
     onDismissRequest: () -> Unit
 ) {
     FlatActionDialog(
-        message = "搜索高级用法",
+        message = appString(R.string.ui_search_advanced_usage),
         onDismissRequest = onDismissRequest,
         actions = listOf(
             FlatDialogAction(
-                text = "知道了",
+                text = appString(R.string.ui_knew),
                 tone = FlatDialogActionTone.Primary,
                 onClick = onDismissRequest
             )
         )
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            SearchHelpText("和 搜索(空格分割)：「雨声 助眠」，表示同时包含指定关键词")
-            SearchHelpText("或 搜索(英文竖线分割)：「雨声|助眠」，表示包含一个或多个指定关键词均可")
-            SearchHelpText("排除 搜索(空格与减号)：「雨声 -助眠」，表示排除指定关键词")
-            SearchHelpText("完整 搜索(英文双引号包裹)：「\"【简体中文】 雨声\"」，表示将多个词当做完整词组搜索")
+            SearchHelpText(androidx.compose.ui.res.stringResource(R.string.ui_and_search_separated_by_spaces_rain_sound_helps))
+            SearchHelpText(androidx.compose.ui.res.stringResource(R.string.ui_or_search_separated_by_vertical_lines_in_english))
+            SearchHelpText(androidx.compose.ui.res.stringResource(R.string.ui_exclude_search_space_and_minus_sign_rain_sound))
+            SearchHelpText(androidx.compose.ui.res.stringResource(R.string.ui_complete_search_wrapped_in_english_double_quotes_simplified))
         }
     }
 }
@@ -2298,7 +2306,7 @@ private fun SearchBlockedKeywordInputField(
                     ) {
                         if (value.isEmpty()) {
                             Text(
-                                text = "屏蔽关键词，例如：同人",
+                                text = appString(R.string.ui_block_keywords_such_as_fanfic),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = colorScheme.textTertiary,
                                 maxLines = 1,
@@ -2335,7 +2343,7 @@ private fun SearchBlockedKeywordChip(
             trailingIcon = {
                 Icon(
                     imageVector = Icons.Rounded.Delete,
-                    contentDescription = "删除 $keyword",
+                    contentDescription = appString(R.string.ui_delete_b7bef2, keyword),
                     modifier = Modifier.size(16.dp)
                 )
             }
@@ -2424,7 +2432,7 @@ private fun SettingsSectionOption(
         Spacer(modifier = Modifier.width(10.dp))
         Icon(
             imageVector = Icons.Rounded.ChevronRight,
-            contentDescription = "进入${section.title}",
+            contentDescription = appString(R.string.ui_enter, section.title),
             tint = colorScheme.textSecondary,
             modifier = Modifier.size(22.dp),
         )
@@ -2450,7 +2458,7 @@ private fun SettingsDetailHeader(
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                contentDescription = "返回设置",
+                contentDescription = appString(R.string.ui_return_to_settings),
                 tint = colorScheme.primary,
             )
         }
@@ -2650,7 +2658,7 @@ private fun SettingsInfoTip(
             ) {
                 Icon(
                     imageVector = Icons.Rounded.Info,
-                    contentDescription = "${title}说明",
+                    contentDescription = appString(R.string.ui_description, title),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(14.dp)
                 )
@@ -2792,20 +2800,20 @@ private fun PreviewModeInfoTip(active: Boolean, onToggle: () -> Unit) {
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                text = "背景封面预览方式",
+                                text = appString(R.string.ui_background_cover_preview_method),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold
                             )
                             Text(
-                                text = "关闭：背景与封面保持居中静止",
+                                text = appString(R.string.ui_off_the_background_and_cover_remain_centered_and),
                                 style = MaterialTheme.typography.bodySmall
                             )
                             Text(
-                                text = "滑动：播放页封面与歌词页背景都使用双指拖动预览，且会临时屏蔽左侧菜单侧滑",
+                                text = appString(R.string.ui_sliding_both_the_play_page_cover_and_lyrics),
                                 style = MaterialTheme.typography.bodySmall
                             )
                             Text(
-                                text = "转动：通过转动手机预览封面其他区域",
+                                text = appString(R.string.ui_rotate_preview_other_areas_of_the_cover_by),
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }

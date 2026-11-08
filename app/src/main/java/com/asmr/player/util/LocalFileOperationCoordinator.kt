@@ -1,5 +1,8 @@
 package com.asmr.player.util
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CompletableDeferred
@@ -112,6 +115,6 @@ class LocalFileOperationCoordinator {
     companion object {
         // WorkManager、手动创建的字幕仓库与 Hilt 对象必须使用同一个实例。
         val shared = LocalFileOperationCoordinator()
-        const val BUSY_MESSAGE = "本地文件任务进行中，请稍后重试"
+        val BUSY_MESSAGE: String get() = appString(R.string.ui_a_local_file_task_is_running_try_again)
     }
 }

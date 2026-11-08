@@ -10,7 +10,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
-class AlbumDetailDirectorySupportTest {
+class AlbumDetailDirectorySupportTest : com.asmr.player.LocalizedRobolectricTest() {
 
     @Test
     fun combineLocalTreeCacheStamp_changesWhenDatabaseTracksArrive() {

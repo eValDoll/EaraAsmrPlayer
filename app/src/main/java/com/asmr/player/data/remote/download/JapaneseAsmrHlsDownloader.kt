@@ -1,6 +1,10 @@
 @file:androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 
+
 package com.asmr.player.data.remote.download
+
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
 
 import android.content.Context
 import android.os.Handler
@@ -48,7 +52,7 @@ internal suspend fun downloadJapaneseAsmrHls(
 ) = withContext(Dispatchers.IO) {
     require(output.extension.equals("m4a", ignoreCase = true)) { "在线播放音频需要保存为 M4A" }
     val partial = File(output.parentFile, output.name + ".hls.part")
-    if (partial.exists() && !partial.delete()) throw IOException("无法重建音频临时文件")
+    if (partial.exists() && !partial.delete()) throw IOException(appString(R.string.ui_unable_to_rebuild_the_temporary_audio_file))
     val networkBytes = AtomicLong()
     val transferListener = object : TransferListener {
         override fun onTransferInitializing(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = Unit
@@ -93,7 +97,7 @@ internal suspend fun downloadJapaneseAsmrHls(
                         completion.complete(exportResult)
                     }
                     override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) {
-                        completion.completeExceptionally(IOException("在线播放音频下载失败", exportException))
+                        completion.completeExceptionally(IOException(appString(R.string.ui_online_audio_download_failed), exportException))
                     }
                 }).build()
             val composition = Composition.Builder(EditedMediaItemSequence.Builder(item).build())
@@ -104,12 +108,12 @@ internal suspend fun downloadJapaneseAsmrHls(
                 withContext(Dispatchers.IO) { onProgress(partial.length(), networkBytes.getAndSet(0L)) }
             }
             val result = completion.await()
-            check(result.audioEncoderName == null) { "在线播放音频不应重新编码" }
-            check(result.audioConversionProcess == ExportResult.CONVERSION_PROCESS_TRANSMUXED) { "没有可用的在线播放音频" }
+            check(result.audioEncoderName == null) { appString(R.string.ui_online_audio_must_not_be_re_encoded) }
+            check(result.audioConversionProcess == ExportResult.CONVERSION_PROCESS_TRANSMUXED) { appString(R.string.ui_no_online_audio_available) }
         }
         ensureActive()
         onProgress(partial.length(), networkBytes.getAndSet(0L))
-        if (partial.length() <= 0L || !partial.renameTo(output)) throw IOException("无法保存在线播放音频")
+        if (partial.length() <= 0L || !partial.renameTo(output)) throw IOException(appString(R.string.ui_unable_to_save_online_audio))
     } finally {
         withContext(NonCancellable) {
             withContext(dispatcher) { transformer?.cancel() }

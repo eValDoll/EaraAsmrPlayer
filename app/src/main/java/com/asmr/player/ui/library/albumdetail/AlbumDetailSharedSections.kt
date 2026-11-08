@@ -1,5 +1,8 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 
 import com.asmr.player.translation.translatedPageText
 
@@ -52,17 +55,17 @@ internal fun DlsiteRecommendationsBlocks(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         DlsiteRecommendationsBlock(
-            title = "社团作品一览",
+            title = appString(R.string.ui_list_of_community_works),
             items = recommendations.circleWorks,
             onOpenAlbumByRj = onOpenAlbumByRj
         )
         DlsiteRecommendationsBlock(
-            title = "同声优作品",
+            title = appString(R.string.ui_works_with_the_same_voice_actor),
             items = recommendations.sameVoiceWorks,
             onOpenAlbumByRj = onOpenAlbumByRj
         )
         DlsiteRecommendationsBlock(
-            title = "购买了此作品的人也购买了这些作品",
+            title = appString(R.string.ui_people_who_bought_this_work_also_bought_these),
             items = recommendations.alsoBoughtWorks,
             onOpenAlbumByRj = onOpenAlbumByRj
         )

@@ -1,5 +1,8 @@
 package com.asmr.player.ui.hotlistening
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.ui.common.AlbumRowRasterCacheScope
 import com.asmr.player.ui.common.rememberLightweightVerticalOverscrollState
 
@@ -184,9 +187,9 @@ private fun HotListeningScreenContent(
         val exists = searchBlockedKeywords.any { it.equals(normalized, ignoreCase = true) }
         settingsViewModel.addSearchBlockedKeyword(normalized)
         if (exists) {
-            viewModel.messageManager.showInfo("屏蔽词已存在：$normalized")
+            viewModel.messageManager.showInfo(appString(R.string.ui_blocked_word_already_exists, normalized))
         } else {
-            viewModel.messageManager.showSuccess("已添加屏蔽词：$normalized")
+            viewModel.messageManager.showSuccess(appString(R.string.ui_blocked_word_added, normalized))
         }
     }
 
@@ -210,14 +213,14 @@ private fun HotListeningScreenContent(
             }
 
             is HotListeningUiState.Error -> EaraBrandedEmptyState(
-                sectionTitle = "热门收听",
-                headline = "数据加载失败",
+                sectionTitle = appString(R.string.ui_popular),
+                headline = appString(R.string.ui_data_loading_failed),
                 sectionIcon = Icons.Rounded.Whatshot,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(top = contentTopPadding, bottom = LocalBottomOverlayPadding.current + 24.dp),
                 footer = {
                     TextButton(onClick = { viewModel.refresh() }) {
-                        Text("重试")
+                        Text(androidx.compose.ui.res.stringResource(R.string.ui_retry))
                     }
                 }
             )
@@ -229,8 +232,8 @@ private fun HotListeningScreenContent(
 
                 if (state.entries.isEmpty() && state.blockedEntries.isEmpty()) {
                     EaraBrandedEmptyState(
-                        sectionTitle = "热门收听",
-                        headline = "暂无排行数据",
+                        sectionTitle = appString(R.string.ui_popular),
+                        headline = appString(R.string.ui_no_ranking_data_yet),
                         sectionIcon = Icons.Rounded.Whatshot,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(top = contentTopPadding, bottom = LocalBottomOverlayPadding.current + 24.dp)
@@ -494,7 +497,7 @@ private fun HotListeningScreenContent(
             onCreatePlaylist = playlistsViewModel::createPlaylist,
             onCreateGroup = albumGroupsViewModel::createGroup,
             onAddBlockedKeyword = ::addMetaBlockedKeyword,
-            onCopy = { copyMeta("内容", it) },
+            onCopy = { copyMeta(appString(R.string.ui_content), it) },
         )
     }
 }
@@ -578,7 +581,7 @@ private fun BlockedHotListeningFooter(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "$blockedCount 个作品被屏蔽",
+            text = appString(R.string.ui_items_are_blocked, blockedCount),
             style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
             color = colorScheme.textSecondary
         )
@@ -590,7 +593,7 @@ private fun BlockedHotListeningFooter(
                     .padding(end = 2.dp)
                     .size(18.dp)
             )
-            Text(if (expanded) "折叠" else "展开")
+            Text(if (expanded) appString(R.string.ui_fold) else appString(R.string.ui_expand))
         }
     }
 }

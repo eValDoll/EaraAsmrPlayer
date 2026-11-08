@@ -1,5 +1,8 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.util.sanitizeFolderName
 
 import com.asmr.player.util.isJapaneseAsmrResource
@@ -1299,8 +1302,8 @@ private fun buildLocalTreeIndexByScanningSources(
 
     val leaves = sources.flatMap { source ->
         val prefix = when (source.kind) {
-            LocalTreeSourceKind.Imported -> "导入内容"
-            LocalTreeSourceKind.Downloaded -> "下载内容"
+            LocalTreeSourceKind.Imported -> appString(R.string.ui_import_content)
+            LocalTreeSourceKind.Downloaded -> appString(R.string.ui_download_content)
         }
         buildLocalTreeIndexByScanning(
             context = context,
@@ -1674,26 +1677,26 @@ internal fun flattenAsmrOneTreeForUi(
 }
 
 internal fun fileTypeLabel(fileType: TreeFileType): String = when (fileType) {
-    TreeFileType.Audio -> "音频"
-    TreeFileType.Video -> "视频"
-    TreeFileType.Image -> "图片"
-    TreeFileType.Subtitle -> "字幕"
-    TreeFileType.Text -> "文本"
+    TreeFileType.Audio -> appString(R.string.ui_audio_461189)
+    TreeFileType.Video -> appString(R.string.ui_video)
+    TreeFileType.Image -> appString(R.string.ui_picture)
+    TreeFileType.Subtitle -> appString(R.string.ui_subtitles)
+    TreeFileType.Text -> appString(R.string.ui_text)
     TreeFileType.Pdf -> "PDF"
-    TreeFileType.Archive -> "压缩包"
-    TreeFileType.Document -> "文档"
-    TreeFileType.Spreadsheet -> "表格"
-    TreeFileType.Presentation -> "演示文稿"
-    TreeFileType.Code -> "代码"
-    TreeFileType.Ebook -> "电子书"
-    TreeFileType.Font -> "字体"
-    TreeFileType.AppPackage -> "安装包"
-    TreeFileType.Other -> "文件"
+    TreeFileType.Archive -> appString(R.string.ui_compressed_package)
+    TreeFileType.Document -> appString(R.string.ui_document)
+    TreeFileType.Spreadsheet -> appString(R.string.ui_sheet)
+    TreeFileType.Presentation -> appString(R.string.ui_presentation)
+    TreeFileType.Code -> appString(R.string.ui_code)
+    TreeFileType.Ebook -> appString(R.string.ui_e_book)
+    TreeFileType.Font -> appString(R.string.ui_font)
+    TreeFileType.AppPackage -> appString(R.string.ui_installation_package_4f4d1a)
+    TreeFileType.Other -> appString(R.string.ui_document_49deaf)
 }
 
 internal fun directoryFileTypeLabel(file: DirectoryFileItem): String {
     return if (file.fileType == TreeFileType.Audio) {
-        if (file.isOnline) "在线音频" else "本地音频"
+        if (file.isOnline) appString(R.string.ui_online_audio) else appString(R.string.ui_local_audio)
     } else {
         fileTypeLabel(file.fileType)
     }

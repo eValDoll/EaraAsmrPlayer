@@ -1,5 +1,8 @@
 package com.asmr.player.data.remote.download
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.room.withTransaction
 import com.asmr.player.data.local.db.AppDatabase
 import com.asmr.player.data.local.db.entities.AlbumEntity
@@ -99,7 +102,7 @@ class DownloadDirectoryCoordinator @Inject constructor(
     suspend fun resolveLegacyPaths(targetDir: String, taskRootDir: String): ResolvedDownloadPaths {
         val destination = destinationStore.current()
         if (destination is DownloadDestination.DocumentTree && !storage.hasPersistedWritePermission(destination.root)) {
-            error("下载目录权限已失效")
+            error(appString(R.string.ui_download_directory_permission_has_expired))
         }
 
         val defaultRoot = destinationStore.defaultDestination().root

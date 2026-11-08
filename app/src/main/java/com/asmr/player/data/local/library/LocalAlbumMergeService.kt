@@ -47,6 +47,7 @@ class LocalAlbumMergeService @Inject constructor(
                     matches.firstOrNull { it.manualCoverPath.isNotBlank() }?.manualCoverPath.orEmpty()
                 }
                 val merged = canonical.copy(
+                    tagDetailsJson = com.asmr.player.domain.model.AlbumTagCodec.encode(matches.fold(emptyList<com.asmr.player.domain.model.AlbumTag>()) { tags, album -> com.asmr.player.domain.model.mergeAlbumTags(tags, com.asmr.player.domain.model.AlbumTagCodec.decode(album.tagDetailsJson)) }),
                     title = canonical.title.ifBlank { fallbackTitle },
                     path = mergedLocalPath ?: mergedDownloadPath ?: canonical.path.ifBlank { fallbackPath },
                     localPath = mergedLocalPath,

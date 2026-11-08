@@ -1,5 +1,8 @@
 package com.asmr.player.util
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
@@ -14,15 +17,15 @@ internal data class LocalFileSnapshot(
 ) {
     companion object {
         fun read(context: Context, reference: String): LocalFileSnapshot {
-            check(reference.isNotBlank()) { "本地文件路径无效" }
+            check(reference.isNotBlank()) { appString(R.string.ui_invalid_local_file_path) }
             if (!reference.startsWith("content://")) {
                 val path = if (reference.startsWith("file://")) Uri.parse(reference).path else reference
                 val source = File(checkNotNull(path))
-                check(source.exists() && source.canRead()) { "本地文件已移动、删除或无法访问" }
+                check(source.exists() && source.canRead()) { appString(R.string.ui_the_local_file_was_moved_deleted_or_is) }
                 val stat = try {
                     Os.stat(path)
                 } catch (error: Exception) {
-                    throw IllegalStateException("本地文件已移动、删除或无法访问", error)
+                    throw IllegalStateException(appString(R.string.ui_the_local_file_was_moved_deleted_or_is), error)
                 }
                 return LocalFileSnapshot("${stat.st_dev}:${stat.st_ino}", stat.st_size, source.lastModified())
             }
@@ -33,7 +36,7 @@ internal data class LocalFileSnapshot(
                 DocumentsContract.Document.COLUMN_LAST_MODIFIED,
             )
             return context.contentResolver.query(Uri.parse(reference), columns, null, null, null)?.use { cursor ->
-                check(cursor.moveToFirst()) { "本地文件已移动或删除" }
+                check(cursor.moveToFirst()) { appString(R.string.ui_the_local_file_was_moved_or_deleted) }
                 fun string(column: String): String = cursor.getColumnIndex(column).let {
                     if (it >= 0 && !cursor.isNull(it)) cursor.getString(it).orEmpty() else ""
                 }
@@ -44,11 +47,11 @@ internal data class LocalFileSnapshot(
                     string(columns[0]) + ":" + string(columns[1]),
                     number(columns[2]), number(columns[3]),
                 )
-            } ?: error("无法读取本地文件状态")
+            } ?: error(appString(R.string.ui_unable_to_check_local_file))
         }
     }
 
     fun requireUnchanged(context: Context, reference: String) {
-        check(this == read(context, reference)) { "本地文件在任务期间已被修改，已停止写入" }
+        check(this == read(context, reference)) { appString(R.string.ui_the_local_file_changed_during_this_task_writing) }
     }
 }

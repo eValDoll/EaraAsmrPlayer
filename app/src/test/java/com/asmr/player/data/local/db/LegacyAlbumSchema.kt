@@ -3,30 +3,40 @@ package com.asmr.player.data.local.db
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 internal fun removeManualCoverColumnForLegacySchema(database: SupportSQLiteDatabase) {
-    val createSql = database.query("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'albums'").use {
+    removeTagMetadataColumnsForLegacySchema(database)
+    removeColumnForLegacySchema(database, "albums", "manualCoverPath")
+}
+
+internal fun removeTagMetadataColumnsForLegacySchema(database: SupportSQLiteDatabase) {
+    removeColumnForLegacySchema(database, "albums", "tagDetailsJson")
+    removeColumnForLegacySchema(database, "download_tasks", "albumTagDetailsJson")
+}
+
+private fun removeColumnForLegacySchema(database: SupportSQLiteDatabase, table: String, column: String) {
+    val createSql = database.query("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = '$table'").use {
         check(it.moveToFirst())
         it.getString(0)
     }
     val manualColumn = Regex(
-        """,\s*[`"]?manualCoverPath[`"]?\s+TEXT\s+NOT\s+NULL\s+DEFAULT\s+''""",
+        """,\s*[`"]?${column}[`"]?\s+TEXT\s+NOT\s+NULL\s+DEFAULT\s+'[^']*'""",
         RegexOption.IGNORE_CASE,
     )
     check(manualColumn.findAll(createSql).count() == 1)
     val legacyCreateSql = createSql.replace(manualColumn, "").replaceFirst(
-        Regex("""CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:`albums`|"albums"|albums)""", RegexOption.IGNORE_CASE),
-        "CREATE TABLE `legacy_albums`",
+        Regex("""CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:`${table}`|"${table}"|${table})""", RegexOption.IGNORE_CASE),
+        "CREATE TABLE `legacy_${table}`",
     )
-    val columns = database.query("PRAGMA table_info(albums)").use { cursor ->
+    val columns = database.query("PRAGMA table_info($table)").use { cursor ->
         buildList {
             val nameIndex = cursor.getColumnIndexOrThrow("name")
             while (cursor.moveToNext()) {
                 val name = cursor.getString(nameIndex)
-                if (name != "manualCoverPath") add("`${name.replace("`", "``")}`")
+                if (name != column) add("`${name.replace("`", "``")}`")
             }
         }.joinToString(", ")
     }
     val dependentSql = database.query(
-        "SELECT sql FROM sqlite_master WHERE tbl_name = 'albums' AND type IN ('index', 'trigger') AND sql IS NOT NULL"
+        "SELECT sql FROM sqlite_master WHERE tbl_name = '$table' AND type IN ('index', 'trigger') AND sql IS NOT NULL"
     ).use { cursor ->
         buildList { while (cursor.moveToNext()) add(cursor.getString(0)) }
     }
@@ -38,9 +48,9 @@ internal fun removeManualCoverColumnForLegacySchema(database: SupportSQLiteDatab
         database.beginTransaction()
         try {
             database.execSQL(legacyCreateSql)
-            database.execSQL("INSERT INTO legacy_albums ($columns) SELECT $columns FROM albums")
-            database.execSQL("DROP TABLE albums")
-            database.execSQL("ALTER TABLE legacy_albums RENAME TO albums")
+            database.execSQL("INSERT INTO legacy_${table} ($columns) SELECT $columns FROM $table")
+            database.execSQL("DROP TABLE $table")
+            database.execSQL("ALTER TABLE legacy_${table} RENAME TO $table")
             dependentSql.forEach(database::execSQL)
             database.setTransactionSuccessful()
         } finally {

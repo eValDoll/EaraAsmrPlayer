@@ -1,5 +1,8 @@
 package com.asmr.player.playback
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.content.ComponentName
 import android.content.Context
 import android.os.Handler
@@ -128,7 +131,7 @@ class PlayerConnection @Inject constructor(
                     if (!meteredWarnedMediaIds.add(mediaId)) return@collect
 
                     lastMeteredWarnAtMs = now
-                    messageManager.showWarning("正在使用流量播放")
+                    messageManager.showWarning(appString(R.string.ui_playing_using_traffic))
                 }
         }
         scope.launch {
@@ -292,7 +295,7 @@ class PlayerConnection @Inject constructor(
                         lastErrorAtMs = now
                         val item = controller?.currentMediaItem
                         val uri = item?.localConfiguration?.uri?.toString().orEmpty()
-                        messageManager.showError("播放失败：${error.errorCodeName}")
+                        messageManager.showError(appString(R.string.ui_playback_failed, error.errorCodeName))
                         android.util.Log.e(
                             "PlayerConnection",
                             "Player error: ${error.errorCodeName} ${error.message} uri=$uri mediaId=${item?.mediaId}",

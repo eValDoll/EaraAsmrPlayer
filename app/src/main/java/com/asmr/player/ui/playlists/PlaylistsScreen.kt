@@ -1,5 +1,8 @@
 package com.asmr.player.ui.playlists
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.ui.common.LocalMainHeaderPadding
 
 import androidx.compose.foundation.MutatePriority
@@ -130,8 +133,8 @@ fun PlaylistsScreen(
             ) {
                 if (userPlaylists.isEmpty()) {
                     EaraBrandedEmptyState(
-                        sectionTitle = "我的列表",
-                        headline = "还没有创建列表",
+                        sectionTitle = appString(R.string.ui_playlists),
+                        headline = appString(R.string.ui_no_list_created_yet),
                         sectionIcon = Icons.AutoMirrored.Rounded.QueueMusic,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(top = LocalMainHeaderPadding.current, bottom = LocalBottomOverlayPadding.current + 88.dp)
@@ -234,7 +237,7 @@ private fun PlaylistRow(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "共 ${playlist.itemCount} 首",
+                    text = appString(R.string.ui_total_first, playlist.itemCount),
                     style = MaterialTheme.typography.bodySmall,
                     color = colorScheme.textTertiary
                 )
@@ -269,11 +272,11 @@ private fun PlaylistRow(
     if (showDeleteConfirm) {
         FlatActionDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            message = "确定要删除列表“${playlist.name}”吗？此操作不可撤销。",
+            message = appString(R.string.ui_are_you_sure_you_want_to_delete_list, playlist.name),
             actions = listOf(
-                FlatDialogAction("取消", onClick = { showDeleteConfirm = false }),
+                FlatDialogAction(appString(R.string.ui_cancel), onClick = { showDeleteConfirm = false }),
                 FlatDialogAction(
-                    text = "删除",
+                    text = appString(R.string.ui_delete),
                     tone = FlatDialogActionTone.Danger,
                     onClick = {
                         showDeleteConfirm = false
@@ -305,11 +308,11 @@ private fun CreatePlaylistDialog(
 
     FlatTextFieldDialog(
         onDismissRequest = onDismiss,
-        message = "请输入新列表名称。",
+        message = appString(R.string.ui_please_enter_a_new_list_name),
         value = name,
         onValueChange = { name = it },
-        placeholder = "请输入列表名称",
-        confirmText = "创建",
+        placeholder = appString(R.string.ui_please_enter_a_list_name),
+        confirmText = appString(R.string.ui_create),
         confirmEnabled = name.trim().isNotBlank(),
         onConfirm = { onCreate(name.trim()) },
     )
@@ -325,11 +328,11 @@ private fun RenamePlaylistDialog(
 
     FlatTextFieldDialog(
         onDismissRequest = onDismiss,
-        message = "请输入新的列表名称。",
+        message = appString(R.string.ui_please_enter_a_new_list_name_761c9f),
         value = name,
         onValueChange = { name = it },
-        placeholder = "请输入列表名称",
-        confirmText = "确定",
+        placeholder = appString(R.string.ui_please_enter_a_list_name),
+        confirmText = appString(R.string.ui_ok),
         confirmEnabled = name.trim().isNotBlank() && name.trim() != initialName.trim(),
         onConfirm = { onRename(name.trim()) },
     )

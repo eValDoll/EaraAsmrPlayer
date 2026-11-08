@@ -1,5 +1,8 @@
 package com.asmr.player.subtitle
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.util.LocalFileScopes
 import com.asmr.player.util.withSubtitleFileAccess
 import com.asmr.player.util.LocalFileSnapshot
@@ -65,7 +68,7 @@ internal class GeneratedSubtitleFileExporter(
             ?: return@withContext GeneratedSubtitleExportResult.UnsupportedTrackLocation
         val source = LocalFileSnapshot.read(context, track.path)
         val subtitles = database.trackDao().getSubtitlesForTrack(trackId).sortedWith(SUBTITLE_ORDER)
-        check(subtitles.isNotEmpty()) { "没有可导出的字幕" }
+        check(subtitles.isNotEmpty()) { appString(R.string.ui_no_subtitles_available_for_export) }
         val existing = storage.findFile(target.directory, target.fileName)
         expectedOutput?.let { requireOutputUnchanged(it) }
         if (existing != null && !overwriteExisting) {
@@ -81,7 +84,7 @@ internal class GeneratedSubtitleFileExporter(
             output.write(renderChineseLrc(subtitles).toByteArray(Charsets.UTF_8))
         }
         source.requireUnchanged(context, track.path)
-        check(storage.exists(reference)) { "字幕文件已移动或删除" }
+        check(storage.exists(reference)) { appString(R.string.ui_the_subtitle_file_was_moved_or_deleted) }
         GeneratedSubtitleExportResult.Exported(reference)
     }
 
@@ -94,7 +97,7 @@ internal class GeneratedSubtitleFileExporter(
 
     suspend fun requireOutputUnchanged(snapshot: GeneratedSubtitleOutputSnapshot) = withContext(Dispatchers.IO) {
         val current = storage.findFile(snapshot.directory, snapshot.fileName)
-        check(current == snapshot.reference) { "字幕文件在任务期间已被修改，已停止写入" }
+        check(current == snapshot.reference) { appString(R.string.ui_the_subtitle_file_changed_during_this_task_writing) }
         snapshot.reference?.let { snapshot.version?.requireUnchanged(context, it) }
     }
 

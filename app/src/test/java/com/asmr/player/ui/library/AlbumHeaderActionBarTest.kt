@@ -31,7 +31,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [28], qualifiers = "w1280dp-h800dp-land-mdpi")
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [28], qualifiers = "w1280dp-h800dp-land-mdpi")
 class AlbumHeaderActionBarTest {
     private val compose = createAndroidComposeRule<ComponentActivity>()
 

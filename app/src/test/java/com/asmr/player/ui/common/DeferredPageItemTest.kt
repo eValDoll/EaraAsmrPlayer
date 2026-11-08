@@ -1,6 +1,5 @@
 package com.asmr.player.ui.common
 
-import android.app.Application
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
@@ -15,7 +14,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [28])
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [28])
 class DeferredPageItemTest {
     @get:Rule
     val compose = createEaraComposeRule()

@@ -1,5 +1,8 @@
 package com.asmr.player.ui.search
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.ui.common.AlbumRowRasterCacheScope
 
 import com.asmr.player.ui.common.LocalPageAnimationsActive
@@ -344,7 +347,7 @@ fun SearchScreen(
     submittedSearchHasSubtitle: Boolean = false,
     submittedSearchAllAges: Boolean = false,
     submittedSearchCollectedSortName: String = SearchCollectedSortOption.ReleaseNew.name,
-    submittedSearchLocale: String = "ja_JP",
+    submittedSearchLocale: String = "",
     submittedSearchSignal: Long = 0L,
     scrollToTopSignal: Long = 0L,
     onHorizontalPagerScrollLockChanged: (Boolean) -> Unit = {},
@@ -394,12 +397,15 @@ private fun SearchScreenContent(
     submittedSearchHasSubtitle: Boolean = false,
     submittedSearchAllAges: Boolean = false,
     submittedSearchCollectedSortName: String = SearchCollectedSortOption.ReleaseNew.name,
-    submittedSearchLocale: String = "ja_JP",
+    submittedSearchLocale: String = "",
     submittedSearchSignal: Long = 0L,
     scrollToTopSignal: Long = 0L,
     onHorizontalPagerScrollLockChanged: (Boolean) -> Unit = {},
     viewModel: SearchViewModel = hiltViewModel()
 ) {
+    LaunchedEffect(isActive, LocalConfiguration.current) {
+        if (isActive) viewModel.refreshApplicationLocale()
+    }
     var keyword by rememberSaveable { mutableStateOf("") }
     var purchasedOnly by rememberSaveable { mutableStateOf(false) }
     var presaleOnly by rememberSaveable { mutableStateOf(false) }
@@ -409,7 +415,7 @@ private fun SearchScreenContent(
     var hasSubtitle by rememberSaveable { mutableStateOf(false) }
     var allAges by rememberSaveable { mutableStateOf(false) }
     var selectedCollectedSortName by rememberSaveable { mutableStateOf(SearchCollectedSortOption.ReleaseNew.name) }
-    var selectedLocale by rememberSaveable { mutableStateOf("ja_JP") }
+    var selectedLocale by rememberSaveable { mutableStateOf("") }
     var selectedOrderName by rememberSaveable { mutableStateOf(SearchSortOption.Trend.name) }
     val selectedOrder = remember(selectedOrderName) {
         SearchSortOption.values().firstOrNull { it.name == selectedOrderName } ?: SearchSortOption.Trend
@@ -430,8 +436,10 @@ private fun SearchScreenContent(
     val uiState by viewModel.uiState.collectAsStateWhileActive(isDataActive)
     val hotKeywordTerms by viewModel.hotKeywordTerms.collectAsStateWhileActive(isDataActive)
     val showHotKeywordFallback by viewModel.showHotKeywordFallback.collectAsStateWhileActive(isDataActive)
+    val localizedKeywords = rememberLocalizedSearchKeywords(hotKeywordTerms)
     val hotKeywordCarouselItem = rememberSearchHotKeywordCarouselItem(
         terms = hotKeywordTerms,
+        labels = localizedKeywords,
         showFallback = showHotKeywordFallback,
         isActive = isActive,
     )
@@ -513,7 +521,7 @@ private fun SearchScreenContent(
             hasSubtitle = state.hasSubtitle
             allAges = state.allAges
             selectedCollectedSortName = state.collectedSort.name
-            selectedLocale = state.locale ?: "ja_JP"
+            selectedLocale = state.locale.orEmpty()
             selectedOrderName = state.order.name
             optionsSyncedFromState = true
         }
@@ -570,7 +578,7 @@ private fun SearchScreenContent(
 
     fun searchMetaKeyword(value: String) {
         if (searchSubmitLocked) {
-            viewModel.messageManager.showInfo("搜索处理中，请稍后再试")
+            viewModel.messageManager.showInfo(appString(R.string.ui_the_search_is_being_processed_please_try_again))
             return
         }
         val normalized = value.trim()
@@ -1069,9 +1077,9 @@ private fun SearchScreenContent(
                             } else {
                                 SearchPullActionDirection.Down
                             },
-                            idleText = "下拉刷新",
-                            armedText = "松手刷新",
-                            activeText = "正在刷新",
+                            idleText = appString(R.string.ui_pull_down_to_refresh),
+                            armedText = appString(R.string.ui_release_to_refresh),
+                            activeText = appString(R.string.ui_refreshing),
                             height = pullRefreshHintHeight,
                             modifier = Modifier
                                 .align(Alignment.TopCenter)
@@ -1107,8 +1115,8 @@ private fun SearchScreenContent(
                         is SearchUiState.Success -> {
                             if (state.results.isEmpty()) {
                                 EaraBrandedEmptyState(
-                                    sectionTitle = "在线搜索",
-                                    headline = if (state.keyword.isBlank()) "还没有搜索结果" else "没有找到匹配结果",
+                                    sectionTitle = appString(R.string.ui_search),
+                                    headline = if (state.keyword.isBlank()) appString(R.string.ui_no_search_results_yet) else appString(R.string.ui_no_matching_results_found),
                                     sectionIcon = Icons.Rounded.Search,
                                     modifier = Modifier.fillMaxSize(),
                                     contentPadding = PaddingValues(
@@ -1310,8 +1318,8 @@ private fun SearchScreenContent(
                         }
 
                         is SearchUiState.Error -> EaraBrandedEmptyState(
-                            sectionTitle = "在线搜索",
-                            headline = "网络连接出了点问题",
+                            sectionTitle = appString(R.string.ui_search),
+                            headline = appString(R.string.ui_there_s_something_wrong_with_the_network_connection),
                             sectionIcon = Icons.Rounded.WifiOff,
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(
@@ -1326,7 +1334,7 @@ private fun SearchScreenContent(
                                         contentColor = colorScheme.onPrimaryContainer
                                     )
                                 ) {
-                                    Text("重试")
+                                    Text(androidx.compose.ui.res.stringResource(R.string.ui_retry))
                                 }
                             }
                         )
@@ -1364,9 +1372,9 @@ private fun SearchScreenContent(
                                 } else {
                                     SearchPullActionDirection.Up
                                 },
-                                idleText = "上拉下一页",
-                                armedText = "松手翻页",
-                                activeText = "正在翻页"
+                                idleText = appString(R.string.ui_pull_up_next_page),
+                                armedText = appString(R.string.ui_let_go_and_turn_the_page),
+                                activeText = appString(R.string.ui_turning_pages)
                             )
                         }
                     }
@@ -1375,7 +1383,7 @@ private fun SearchScreenContent(
 
                 SearchChrome(
                     modifier = Modifier.align(Alignment.TopCenter).padding(top = LocalMainHeaderPadding.current),
-                    keyword = keyword,
+                    keyword = localizedKeywords[keyword] ?: keyword,
                     onKeywordChange = { keyword = it },
                     placeholder = hotKeywordCarouselItem.placeholder,
                     searchFieldReadOnly = true,
@@ -1468,13 +1476,13 @@ private fun SearchScreenContent(
                     val exists = searchBlockedKeywords.any { it.equals(normalized, ignoreCase = true) }
                     settingsViewModel.addSearchBlockedKeyword(normalized)
                     if (exists) {
-                        viewModel.messageManager.showInfo("屏蔽词已存在：$normalized")
+                        viewModel.messageManager.showInfo(appString(R.string.ui_blocked_word_already_exists, normalized))
                     } else {
-                        viewModel.messageManager.showSuccess("已添加屏蔽词：$normalized")
+                        viewModel.messageManager.showSuccess(appString(R.string.ui_blocked_word_added, normalized))
                     }
                 }
             },
-            onCopy = { copyMeta("内容", it) },
+            onCopy = { copyMeta(appString(R.string.ui_content), it) },
         )
     }
 }
@@ -1733,10 +1741,10 @@ internal fun SearchToolbar(
                             .height(32.dp)
                             .semantics {
                                 stateDescription = when {
-                                    !supportsWorkFilters -> "当前范围不支持作品筛选"
-                                    activeWorkFilterCount == 0 -> "未启用作品筛选"
-                                    activeWorkFilterCount == 1 -> "已启用 1 项作品筛选"
-                                    else -> "已启用 2 项作品筛选"
+                                    !supportsWorkFilters -> appString(R.string.ui_the_current_scope_does_not_support_work_filtering)
+                                    activeWorkFilterCount == 0 -> appString(R.string.ui_item_filtering_is_not_enabled)
+                                    activeWorkFilterCount == 1 -> appString(R.string.ui_1_item_filter_enabled)
+                                    else -> appString(R.string.ui_2_item_filters_enabled)
                                 }
                             }
                             .testTag(SEARCH_SCOPE_BUTTON_TAG),
@@ -1825,10 +1833,10 @@ internal fun SearchToolbar(
                         }
 
                         if (supportsWorkFilters) {
-                            SearchMenuSectionLabel("作品筛选")
+                            SearchMenuSectionLabel(appString(R.string.ui_work_screening))
                             if (selectedFilter.supportsSubtitleFilter) {
                                 SearchCheckableMenuItem(
-                                    label = "有字幕",
+                                    label = appString(R.string.ui_with_subtitles),
                                     icon = Icons.Rounded.Subtitles,
                                     selected = hasSubtitle,
                                     testTag = SEARCH_HAS_SUBTITLE_OPTION_TAG,
@@ -1839,7 +1847,7 @@ internal fun SearchToolbar(
                                 SearchMenuDivider()
                             }
                             SearchCheckableMenuItem(
-                                label = "全年龄",
+                                label = appString(R.string.ui_all_ages),
                                 icon = Icons.Rounded.FamilyRestroom,
                                 selected = allAges,
                                 testTag = SEARCH_ALL_AGES_OPTION_TAG,
@@ -1942,7 +1950,7 @@ internal fun SearchToolbar(
                                         )
                                     }
 
-                                    SearchMenuSectionLabel("作品语言")
+                                    SearchMenuSectionLabel(appString(R.string.ui_language_of_work))
                                     SearchLocaleOptions.forEachIndexed { index, (locale, label) ->
                                         if (index > 0) {
                                             SearchMenuDivider()
@@ -2003,10 +2011,12 @@ internal fun SearchToolbar(
     }
 }
 
-private val SearchLocaleOptions = listOf(
-    "ja_JP" to "日语",
-    "zh_CN" to "简中",
-    "zh_TW" to "繁中"
+private val SearchLocaleOptions: List<Pair<String, String>> get() = listOf(
+    "" to appString(R.string.ui_app_language),
+    "en_US" to "English",
+    "ja_JP" to appString(R.string.ui_japanese),
+    "zh_CN" to appString(R.string.ui_simplified_chinese),
+    "zh_TW" to appString(R.string.ui_traditional_chinese)
 )
 
 @Composable
@@ -2066,7 +2076,7 @@ private fun SearchCheckableMenuItem(
         modifier = Modifier
             .semantics {
                 this.selected = selected
-                stateDescription = if (selected) "已筛选" else "未筛选"
+                stateDescription = if (selected) appString(R.string.ui_filtered) else appString(R.string.ui_unfiltered)
             }
             .testTag(testTag)
     )
@@ -2146,14 +2156,14 @@ internal fun SearchPaginationHeader(
                             onClick = onFirstPage,
                             enabled = canGoFirst && !controlsLocked,
                             imageVector = Icons.Rounded.SkipPrevious,
-                            contentDescription = "回到第一页",
+                            contentDescription = appString(R.string.ui_return_to_first_page),
                             modifier = Modifier.testTag(SEARCH_FIRST_PAGE_BUTTON_TAG)
                         )
                         SearchPaginationIconButton(
                             onClick = onPrev,
                             enabled = canGoPrev && !controlsLocked,
                             imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = "上一页",
+                            contentDescription = appString(R.string.ui_previous_page),
                             modifier = Modifier.testTag(SEARCH_PREV_BUTTON_TAG)
                         )
                     }
@@ -2164,7 +2174,7 @@ internal fun SearchPaginationHeader(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "第 ${page.coerceAtLeast(1)} 页",
+                        text = appString(R.string.ui_page, page.coerceAtLeast(1)),
                         style = MaterialTheme.typography.bodySmall,
                         color = if (isDark) colorScheme.textPrimary else Color.Black
                     )
@@ -2178,7 +2188,7 @@ internal fun SearchPaginationHeader(
                         onClick = onNext,
                         enabled = canGoNext && !controlsLocked,
                         imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
-                        contentDescription = "下一页",
+                        contentDescription = appString(R.string.ui_next_page),
                         modifier = Modifier.testTag(SEARCH_NEXT_BUTTON_TAG)
                     )
                 }

@@ -1,5 +1,8 @@
 package com.asmr.player.data.remote.download
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
@@ -27,7 +30,7 @@ sealed interface DownloadDestination {
 
     data class Default(
         override val root: String,
-        override val label: String = "默认目录（应用专用）",
+        override val label: String = appString(R.string.ui_default_directory_application_specific),
         override val displayPath: String = root,
     ) : DownloadDestination
 
@@ -60,7 +63,7 @@ class DownloadDestinationStore @Inject constructor(
                 root = treeUri,
                 label = preferences[SettingsKeys.DOWNLOAD_DIRECTORY_LABEL]
                     .orEmpty()
-                    .ifBlank { "自定义目录" },
+                    .ifBlank { appString(R.string.ui_custom_directory) },
                 displayPath = documentTreeDisplayPath(context, treeUri),
             )
         }
@@ -113,16 +116,16 @@ class DownloadStorageGateway @Inject constructor(
                 val index = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
                 if (index >= 0) cursor.getString(index).orEmpty() else ""
             }.orEmpty()
-        }.getOrDefault("").ifBlank { uri.lastPathSegment.orEmpty().ifBlank { "自定义目录" } }
+        }.getOrDefault("").ifBlank { uri.lastPathSegment.orEmpty().ifBlank { appString(R.string.ui_custom_directory) } }
     }
 
     suspend fun resolveDirectory(root: String, relativePath: String): String = withContext(Dispatchers.IO) {
         val segments = relativePath.replace('\\', '/').split('/').filter { it.isNotBlank() }
-        require(segments.none { it == "." || it == ".." }) { "下载相对路径无效" }
+        require(segments.none { it == "." || it == ".." }) { appString(R.string.ui_download_relative_path_is_invalid) }
         if (!isDocumentReference(root)) {
             var current = File(root)
             segments.forEach { segment -> current = File(current, segment) }
-            check(current.exists() || current.mkdirs()) { "无法创建下载目录" }
+            check(current.exists() || current.mkdirs()) { appString(R.string.ui_unable_to_create_download_directory) }
             return@withContext current.absolutePath
         }
 
@@ -135,13 +138,13 @@ class DownloadStorageGateway @Inject constructor(
                     DocumentsContract.Document.MIME_TYPE_DIR,
                     segment,
                 )?.toString()
-                ?: error("无法创建下载目录")
+                ?: error(appString(R.string.ui_unable_to_create_download_directory))
         }
         current
     }
 
     suspend fun findFile(directory: String, name: String): String? = withContext(Dispatchers.IO) {
-        require(name.isNotBlank() && '/' !in name && '\\' !in name) { "下载文件名无效" }
+        require(name.isNotBlank() && '/' !in name && '\\' !in name) { appString(R.string.ui_download_file_name_is_invalid) }
         if (!isDocumentReference(directory)) {
             return@withContext File(directory, name).takeIf { it.isFile }?.absolutePath
         }
@@ -149,7 +152,7 @@ class DownloadStorageGateway @Inject constructor(
     }
 
     suspend fun ensureFile(directory: String, name: String, mimeType: String): String = withContext(Dispatchers.IO) {
-        require(name.isNotBlank() && '/' !in name && '\\' !in name) { "下载文件名无效" }
+        require(name.isNotBlank() && '/' !in name && '\\' !in name) { appString(R.string.ui_download_file_name_is_invalid) }
         if (!isDocumentReference(directory)) {
             val file = File(directory, name)
             file.parentFile?.mkdirs()
@@ -161,7 +164,7 @@ class DownloadStorageGateway @Inject constructor(
             Uri.parse(directory),
             mimeType,
             name,
-        ) ?: error("无法在下载目录创建文件")
+        ) ?: error(appString(R.string.ui_unable_to_create_file_in_download_directory))
         val exactDocument = if (displayName(created) == name) {
             created
         } else {
@@ -171,7 +174,7 @@ class DownloadStorageGateway @Inject constructor(
         }
         if (displayName(exactDocument) != name) {
             runCatching { DocumentsContract.deleteDocument(resolver, exactDocument) }
-            error("文档提供器修改了下载文件名")
+            error(appString(R.string.ui_the_document_provider_changed_the_download_file_name))
         }
         exactDocument.toString()
     }
@@ -210,7 +213,7 @@ class DownloadStorageGateway @Inject constructor(
 
     fun openInput(reference: String): InputStream {
         return if (isDocumentReference(reference)) {
-            resolver.openInputStream(Uri.parse(reference)) ?: error("无法读取下载文件")
+            resolver.openInputStream(Uri.parse(reference)) ?: error(appString(R.string.ui_unable_to_read_downloaded_file))
         } else {
             File(reference).inputStream()
         }
@@ -218,7 +221,7 @@ class DownloadStorageGateway @Inject constructor(
 
     fun openOutput(reference: String): OutputStream {
         return if (isDocumentReference(reference)) {
-            resolver.openOutputStream(Uri.parse(reference), "wt") ?: error("无法写入下载文件")
+            resolver.openOutputStream(Uri.parse(reference), "wt") ?: error(appString(R.string.ui_unable_to_write_download_file))
         } else {
             File(reference).outputStream()
         }

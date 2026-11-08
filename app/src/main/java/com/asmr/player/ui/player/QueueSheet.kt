@@ -1,5 +1,8 @@
 package com.asmr.player.ui.player
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.ui.common.AudioMetadataLine
 import com.asmr.player.ui.common.audioSource
 import com.asmr.player.ui.common.rememberAudioMetadata
@@ -75,7 +78,7 @@ fun QueueSheetContent(
 
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
-            text = "当前播放队列",
+            text = appString(R.string.ui_current_play_queue),
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
             color = colorScheme.textSecondary
@@ -144,7 +147,7 @@ fun QueueSheetContent(
                         IconButton(onClick = { viewModel.removeFromQueue(index) }) {
                             Icon(
                                 imageVector = Icons.Rounded.Close,
-                                contentDescription = "移除",
+                                contentDescription = appString(R.string.ui_remove),
                                 tint = colorScheme.textSecondary,
                                 modifier = Modifier.size(20.dp)
                             )

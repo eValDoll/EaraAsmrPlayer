@@ -1,5 +1,8 @@
 package com.asmr.player.data.remote.download
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.remote.crawler.isJapaneseAsmrAudioName
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -13,11 +16,11 @@ import org.jsoup.Jsoup
 import java.io.IOException
 import kotlin.coroutines.resumeWithException
 
-internal class JapaneseAsmrSourceFileMissingException : IOException("源文件已丢失")
+internal class JapaneseAsmrSourceFileMissingException : IOException(appString(R.string.ui_source_file_missing))
 
 private fun requireJapaneseAsmrSourceResponse(code: Int) {
     if (code == 404 || code == 410) throw JapaneseAsmrSourceFileMissingException()
-    if (code !in 200..299) throw IOException("音频下载站点请求失败 ($code)")
+    if (code !in 200..299) throw IOException(appString(R.string.ui_audio_download_site_request_failed, code))
 }
 
 internal fun isBuzzheavierUrl(url: String): Boolean {
@@ -27,7 +30,7 @@ internal fun isBuzzheavierUrl(url: String): Boolean {
 
 /** Resolve at transfer time so expiring file links are refreshed on retries. */
 internal suspend fun resolveJapaneseAsmrDownload(client: OkHttpClient, url: String, name: String): String {
-    if (!isJapaneseAsmrAudioName(name)) throw IOException("不支持的音频格式")
+    if (!isJapaneseAsmrAudioName(name)) throw IOException(appString(R.string.ui_unsupported_audio_format))
     if (!isBuzzheavierUrl(url)) return url
     val request = Request.Builder().url(url).header("User-Agent", NetworkHeaders.USER_AGENT)
         .header(NetworkHeaders.HEADER_SILENT_IO_ERROR, NetworkHeaders.SILENT_IO_ERROR_ON).build()
@@ -38,7 +41,7 @@ internal suspend fun resolveJapaneseAsmrDownload(client: OkHttpClient, url: Stri
             return@withJapaneseAsmrResponse page.request.url to null
         }
         val pageUrl = page.request.url
-        if (!isBuzzheavierUrl(pageUrl.toString())) throw IOException("下载链接未返回音频")
+        if (!isBuzzheavierUrl(pageUrl.toString())) throw IOException(appString(R.string.ui_the_download_link_did_not_return_audio))
         val document = Jsoup.parse(page.body?.string().orEmpty(), pageUrl.toString())
         val endpoint = document.selectFirst("[hx-get]")?.absUrl("hx-get")
             ?.takeIf(::isBuzzheavierUrl)
@@ -52,7 +55,7 @@ internal suspend fun resolveJapaneseAsmrDownload(client: OkHttpClient, url: Stri
         .header("Referer", pageUrl.toString()).header("HX-Request", "true").build()) { response ->
         requireJapaneseAsmrSourceResponse(response.code)
         val parsed = response.header("HX-Redirect").orEmpty().toHttpUrlOrNull()
-        if (parsed?.scheme != "https") throw IOException("未找到音频下载链接")
+        if (parsed?.scheme != "https") throw IOException(appString(R.string.ui_no_audio_download_link_found))
         parsed.toString()
     }
 }

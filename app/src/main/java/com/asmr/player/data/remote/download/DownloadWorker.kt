@@ -1,5 +1,8 @@
 package com.asmr.player.data.remote.download
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.util.ChapterMediaReference
 
 import com.asmr.player.util.LocalFileOperation
@@ -260,11 +263,11 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                 (knownTotal > 0L && existingBytes == knownTotal)
             suspend fun downloadHls() {
                 val fallback = checkNotNull(chapter)
-                check(fallback.useHlsDownload) { "在线音源下载尚未确认" }
+                check(fallback.useHlsDownload) { appString(R.string.ui_online_audio_download_has_not_been_confirmed) }
                 var progressAt = System.currentTimeMillis()
                 downloadJapaneseAsmrHls(applicationContext, baseClient, fallback, file) { bytes, networkBytes ->
                     kotlinx.coroutines.currentCoroutineContext().ensureActive()
-                    if (isStopped) throw kotlinx.coroutines.CancellationException("下载已停止")
+                    if (isStopped) throw kotlinx.coroutines.CancellationException(appString(R.string.ui_download_stopped))
                     downloaded = bytes
                     pendingTrafficBytes += networkBytes
                     flushTrafficStats()
@@ -273,7 +276,7 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                     progressAt = now
                     if (dao.updateRunningItemProgress(
                             workId, WorkInfo.State.RUNNING.name, bytes, -1L, speed, now,
-                        ) == 0) throw kotlinx.coroutines.CancellationException("下载已暂停或取消")
+                        ) == 0) throw kotlinx.coroutines.CancellationException(appString(R.string.ui_download_paused_or_canceled))
                 }
                 downloaded = file.length()
                 total = downloaded
@@ -282,12 +285,12 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
             if (!transferAlreadyComplete && chapter?.useHlsDownload == true) {
                 downloadHls()
             } else if (!transferAlreadyComplete) {
-                if (chapter != null && chapter.downloadUrl.isNullOrBlank()) throw IOException("在线音源下载尚未确认")
+                if (chapter != null && chapter.downloadUrl.isNullOrBlank()) throw IOException(appString(R.string.ui_online_audio_download_has_not_been_confirmed))
                 if (isJapaneseAsmr) requestBuilder.url(resolveJapaneseAsmrDownload(baseClient, nativeUrl, fileName))
                 client.newCall(requestBuilder.build()).execute().use { response ->
                     if (!response.isSuccessful) {
                         Log.w(TAG, "download failed code=${response.code} url=${response.request.url}")
-                        if (isJapaneseAsmr) throw IOException("音频下载请求失败 (${response.code})")
+                        if (isJapaneseAsmr) throw IOException(appString(R.string.ui_audio_download_failed, response.code))
                         return failCurrentDownload(totalBytes = existingBytes.coerceAtLeast(0L))
                     }
                     val body = response.body ?: return failCurrentDownload(totalBytes = existingBytes.coerceAtLeast(0L))
@@ -296,14 +299,14 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                         val dispositionName = response.header("Content-Disposition").orEmpty()
                         if (contentType.contains("text/") || contentType.contains("html") ||
                             Regex("(?i)\\.(exe|scr|lnk|py|bat|cmd)(?:[\"';\\s]|$)").containsMatchIn(dispositionName)) {
-                            throw IOException("下载链接未返回音频")
+                            throw IOException(appString(R.string.ui_the_download_link_did_not_return_audio))
                         }
                         val header = if (response.code == 206 && existingBytes > 0) {
                             transferFile.inputStream().use { it.readAudioHeader() }
                         } else {
                             body.source().peek().inputStream().use { it.readAudioHeader() }
                         }
-                        if (!isJapaneseAsmrAudioHeader(fileName, header)) throw IOException("下载链接未返回音频")
+                        if (!isJapaneseAsmrAudioHeader(fileName, header)) throw IOException(appString(R.string.ui_the_download_link_did_not_return_audio))
                     }
                     val supportsRange = response.code == 206 && existingBytes > 0L
                     if (!supportsRange && existingBytes > 0L) {
@@ -323,13 +326,13 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                     kotlinx.coroutines.currentCoroutineContext().ensureActive()
                     if (dao.updateRunningItemProgress(
                             workId, WorkInfo.State.RUNNING.name, downloaded, total, 0L, now0
-                        ) == 0) throw kotlinx.coroutines.CancellationException("下载已暂停或取消")
+                        ) == 0) throw kotlinx.coroutines.CancellationException(appString(R.string.ui_download_paused_or_canceled))
 
                     body.byteStream().use { input ->
                         FileOutputStream(transferFile, existingBytes > 0L).use { output ->
                             while (true) {
                                 kotlinx.coroutines.currentCoroutineContext().ensureActive()
-                                if (isStopped) throw kotlinx.coroutines.CancellationException("下载已停止")
+                                if (isStopped) throw kotlinx.coroutines.CancellationException(appString(R.string.ui_download_stopped))
                                 val read = input.read(buffer)
                                 if (read <= 0) break
                                 output.write(buffer, 0, read)
@@ -360,13 +363,13 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
             }
             kotlinx.coroutines.currentCoroutineContext().ensureActive()
             if (!transformAlreadyApplied) {
-                check(transferFile.isFile && transferFile.length() == downloaded) { "下载文件已被外部修改" }
-                check(total < 0L || downloaded == total) { "下载文件不完整" }
+                check(transferFile.isFile && transferFile.length() == downloaded) { appString(R.string.ui_the_downloaded_file_was_changed_by_another_app) }
+                check(total < 0L || downloaded == total) { appString(R.string.ui_the_downloaded_file_is_incomplete) }
             } else {
-                check(file.isFile) { "下载文件已移动或删除" }
+                check(file.isFile) { appString(R.string.ui_the_downloaded_file_was_moved_or_deleted) }
             }
             if (dao.getItemByWorkId(workId)?.state !in setOf(WorkInfo.State.RUNNING.name, WorkInfo.State.ENQUEUED.name)) {
-                throw kotlinx.coroutines.CancellationException("下载已暂停或取消")
+                throw kotlinx.coroutines.CancellationException(appString(R.string.ui_download_paused_or_canceled))
             }
             if (hasDlsitePlayImageTransform && !transformAlreadyApplied) {
                 descrambleDlsitePlayImageFile(
@@ -402,9 +405,9 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
             } else {
                 file.absolutePath
             }
-            check(storage.exists(publishedReference)) { "下载文件已移动或删除" }
+            check(storage.exists(publishedReference)) { appString(R.string.ui_the_downloaded_file_was_moved_or_deleted) }
             if (!hasDlsitePlayImageTransform) {
-                check(storage.size(publishedReference) == downloaded) { "下载文件已被外部修改" }
+                check(storage.size(publishedReference) == downloaded) { appString(R.string.ui_the_downloaded_file_was_changed_by_another_app) }
             }
             kotlinx.coroutines.currentCoroutineContext().ensureActive()
             val now = System.currentTimeMillis()

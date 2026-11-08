@@ -1,9 +1,10 @@
 package com.asmr.player.util
 
-const val ASMR_ONE_SITE_FAILURE_MESSAGE =
-    "ASMR One 请求失败，请前往“设置 → 服务状态与代理”尝试切换镜像站点后重试"
-const val ASMR_ONE_SITE_TEST_FAILURE_MESSAGE =
-    "当前站点连接失败，请尝试切换其他站点"
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
+val ASMR_ONE_SITE_FAILURE_MESSAGE: String get() = appString(R.string.ui_asmr_one_request_failed_please_go_to_settings)
+val ASMR_ONE_SITE_TEST_FAILURE_MESSAGE: String get() = appString(R.string.ui_the_current_site_connection_failed_please_try_switching)
 
 object AppErrorMessageFormatter {
     private val whitespaceRegex = Regex("""\s+""")
@@ -29,11 +30,11 @@ object AppErrorMessageFormatter {
         Regex("""\b[A-Za-z]+Exception\b"""),
         Regex("""\b[A-Z]{2,}(?:_[A-Z0-9]+)+\b"""),
         Regex("""\b(error\s*code|errorCode|status\s*code|code)\b""", RegexOption.IGNORE_CASE),
-        Regex("""\b(sockettimeout|timeout|timed out|ioexception|illegalstate|unknownhost|ssl|eof|cancelled|canceled|failed)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\b(sockettimeout|timeout|timed out|ioexception|illegalstate|unknownhost|ssl|eof|cancelled|canceled)\b""", RegexOption.IGNORE_CASE),
         Regex("""\b(?:RJ|BJ|VJ)\d{6,}\b""", RegexOption.IGNORE_CASE)
     )
 
-    fun sanitize(rawMessage: String, fallback: String = "操作失败，请稍后重试"): String {
+    fun sanitize(rawMessage: String, fallback: String = appString(R.string.ui_operation_failed_please_try_again_later)): String {
         val normalized = rawMessage
             .replace(whitespaceRegex, " ")
             .replace(workNoSampleRegex, "")
@@ -62,10 +63,10 @@ object AppErrorMessageFormatter {
                 message == ASMR_ONE_SITE_TEST_FAILURE_MESSAGE -> message
             userFacingSubtitleErrorPrefixes.any(message::startsWith) -> message
             message.startsWith("请输入有效 RJ 号") || message.startsWith("请输入有效的作品编号") ->
-                "请输入有效的作品编号"
+                appString(R.string.ui_please_enter_a_valid_work_number)
             message.startsWith("仅支持本地库专辑手动绑定 RJ") ||
                 message.startsWith("仅支持本地库专辑手动绑定作品编号") ->
-                "仅支持本地库专辑手动绑定作品编号"
+                appString(R.string.ui_only_supports_manual_binding_of_work_numbers_to)
             else -> null
         }
     }
@@ -74,29 +75,29 @@ object AppErrorMessageFormatter {
         val lower = message.lowercase()
         return when {
             "401" in lower || "认证" in message || "登录" in message && ("失败" in message || "过期" in message) ->
-                "登录状态已失效，请重新登录后重试"
-            "403" in lower || "访问被拒绝" in message -> "当前访问受限，请稍后再试"
-            "404" in lower || "not found" in lower -> "未找到相关内容，请检查后重试"
-            "429" in lower -> "请求过于频繁，请稍后再试"
-            "500" in lower || "502" in lower || "503" in lower || "504" in lower -> "服务器开小差了，请稍后重试"
-            "timeout" in lower || "timed out" in lower -> "请求超时，请稍后重试"
+                appString(R.string.ui_login_status_has_expired_please_log_in_again)
+            "403" in lower || "访问被拒绝" in message -> appString(R.string.ui_access_is_currently_restricted_please_try_again_later)
+            "404" in lower || "not found" in lower -> appString(R.string.ui_no_relevant_content_found_please_check_and_try)
+            "429" in lower -> appString(R.string.ui_the_request_is_too_frequent_please_try_again)
+            "500" in lower || "502" in lower || "503" in lower || "504" in lower -> appString(R.string.ui_the_server_is_out_of_service_please_try)
+            "timeout" in lower || "timed out" in lower -> appString(R.string.ui_request_timed_out_please_try_again_later)
             "unknownhost" in lower || "network" in lower || "ioexception" in lower || "网络" in message ->
-                "网络连接失败，请检查网络后重试"
+                appString(R.string.ui_network_connection_failed_please_check_the_network_and)
             else -> null
         }
     }
 
     private fun inferCategory(message: String): String? {
         return when {
-            "播放" in message -> "播放失败，请稍后重试"
-            "试听" in message -> "试听刷新失败，请稍后重试"
-            "在线资源" in message -> "在线资源加载失败，请稍后重试"
-            "DLsite Play" in message -> "DLsite Play 加载失败，请稍后重试"
-            "封面" in message -> "设置封面失败，请检查后重试"
-            "扫描" in message -> "扫描失败，请检查目录权限后重试"
-            "刷新" in message -> "刷新失败，请稍后重试"
-            "云同步" in message || "同步" in message -> "同步失败，请稍后重试"
-            "删除" in message -> "删除失败，请稍后重试"
+            "播放" in message -> appString(R.string.ui_playback_failed_please_try_again_later)
+            "试听" in message -> appString(R.string.ui_audition_refresh_failed_please_try_again_later)
+            "在线资源" in message -> appString(R.string.ui_online_resource_loading_failed_please_try_again_later)
+            "DLsite Play" in message -> appString(R.string.ui_dlsite_play_failed_to_load_please_try_again)
+            "封面" in message -> appString(R.string.ui_failed_to_set_cover_please_check_and_try)
+            "扫描" in message -> appString(R.string.ui_scan_failed_please_check_directory_permissions_and_try)
+            "刷新" in message -> appString(R.string.ui_refresh_failed_please_try_again_later)
+            "云同步" in message || "同步" in message -> appString(R.string.ui_synchronization_failed_please_try_again_later)
+            "删除" in message -> appString(R.string.ui_deletion_failed_please_try_again_later)
             else -> null
         }
     }
@@ -110,26 +111,29 @@ object AppErrorMessageFormatter {
     private fun friendlyPrefixMessage(prefix: String): String? {
         val normalizedPrefix = prefix.replace("异常", "失败")
         return when {
-            "播放" in normalizedPrefix -> "播放失败，请稍后重试"
-            "试听刷新" in normalizedPrefix -> "试听刷新失败，请稍后重试"
-            "在线资源加载" in normalizedPrefix -> "在线资源加载失败，请稍后重试"
-            "DLsite Play 加载" in normalizedPrefix -> "DLsite Play 加载失败，请稍后重试"
-            "设置封面" in normalizedPrefix -> "设置封面失败，请检查后重试"
-            "扫描" in normalizedPrefix -> "扫描失败，请检查目录权限后重试"
-            "目录刷新" in normalizedPrefix || "刷新" in normalizedPrefix -> "刷新失败，请稍后重试"
-            "重扫" in normalizedPrefix -> "重扫失败，请检查目录后重试"
-            "云同步" in normalizedPrefix || "同步" in normalizedPrefix -> "同步失败，请稍后重试"
-            "删除" in normalizedPrefix -> "删除失败，请稍后重试"
+            "播放" in normalizedPrefix -> appString(R.string.ui_playback_failed_please_try_again_later)
+            "试听刷新" in normalizedPrefix -> appString(R.string.ui_audition_refresh_failed_please_try_again_later)
+            "在线资源加载" in normalizedPrefix -> appString(R.string.ui_online_resource_loading_failed_please_try_again_later)
+            "DLsite Play 加载" in normalizedPrefix -> appString(R.string.ui_dlsite_play_failed_to_load_please_try_again)
+            "设置封面" in normalizedPrefix -> appString(R.string.ui_failed_to_set_cover_please_check_and_try)
+            "扫描" in normalizedPrefix -> appString(R.string.ui_scan_failed_please_check_directory_permissions_and_try)
+            "目录刷新" in normalizedPrefix || "刷新" in normalizedPrefix -> appString(R.string.ui_refresh_failed_please_try_again_later)
+            "重扫" in normalizedPrefix -> appString(R.string.ui_rescan_failed_please_check_the_directory_and_try)
+            "云同步" in normalizedPrefix || "同步" in normalizedPrefix -> appString(R.string.ui_synchronization_failed_please_try_again_later)
+            "删除" in normalizedPrefix -> appString(R.string.ui_deletion_failed_please_try_again_later)
             normalizedPrefix.endsWith("失败") -> "$normalizedPrefix，请稍后重试"
             else -> null
         }
     }
 
     private fun hasTechnicalDetails(message: String): Boolean {
-        return technicalDetailRegexes.any { it.containsMatchIn(message) } || !containsOnlyReadableChinese(message)
+        return technicalDetailRegexes.any { it.containsMatchIn(message) } || !containsReadableMessage(message)
     }
 
-    private fun containsOnlyReadableChinese(message: String): Boolean {
+    private fun containsReadableMessage(message: String): Boolean {
+        if (message.split(whitespaceRegex).size >= 3 && message.all {
+                it.isLetterOrDigit() || it.isWhitespace() || it in ".,!?;:'’\"()-/"
+            }) return true
         val stripped = message
             .replace(Regex("""[，。！？；：“”‘’（）()、/\\\-+*#@]"""), "")
             .replace(Regex("""\d+"""), "")

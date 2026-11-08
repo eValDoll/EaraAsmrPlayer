@@ -1,5 +1,8 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.util.Log
 import android.webkit.CookieManager
 import androidx.compose.foundation.BorderStroke
@@ -89,7 +92,7 @@ internal data class CloudSyncSelectionDialogState(
 ) {
     val progressLabel: String?
         get() = if ((currentPosition ?: 0) > 0 && (totalCount ?: 0) > 0) {
-            "待确认 ${currentPosition} / ${totalCount}"
+            appString(R.string.ui_pending_confirmation, currentPosition, totalCount)
         } else {
             null
         }
@@ -162,7 +165,7 @@ internal fun CloudSyncSelectionDialog(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
-                            text = "云同步候选：${state.candidates.size} 个疑似结果(点击对应作品以确认同步)",
+                            text = appString(R.string.ui_cloud_synchronization_candidates_suspected_results_click_the_correspon, state.candidates.size),
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontWeight = FontWeight.SemiBold,
                                 lineHeight = 16.sp
@@ -172,7 +175,7 @@ internal fun CloudSyncSelectionDialog(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = state.albumTitle.ifBlank { "当前专辑" },
+                            text = state.albumTitle.ifBlank { appString(R.string.ui_current_album) },
                             style = MaterialTheme.typography.titleSmall.copy(
                                 fontWeight = FontWeight.SemiBold,
                                 lineHeight = 20.sp
@@ -233,7 +236,7 @@ internal fun CloudSyncSelectionDialog(
                                     contentColor = colorScheme.textSecondary
                                 )
                             ) {
-                                Text("忽略全部")
+                                Text(androidx.compose.ui.res.stringResource(R.string.ui_ignore_all))
                             }
                         }
                     }
@@ -261,7 +264,7 @@ internal fun CloudSyncSelectionDialog(
                                 contentColor = colorScheme.primary
                             )
                         ) {
-                            Text(if (onIgnoreAll != null) "取消当前" else "取消")
+                            Text(if (onIgnoreAll != null) appString(R.string.ui_cancel_current) else appString(R.string.ui_cancel))
                         }
                     }
                 }

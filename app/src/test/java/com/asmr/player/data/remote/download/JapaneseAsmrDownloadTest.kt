@@ -10,7 +10,7 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 
-class JapaneseAsmrDownloadTest {
+class JapaneseAsmrDownloadTest : com.asmr.player.LocalizedRobolectricTest() {
     @Test fun onlySupportedAudioFilesAndAudioPayloadsAreAccepted() {
         listOf("mp3", "m4a", "flac", "opus").forEach { assertTrue(isJapaneseAsmrAudioName("track.$it")) }
         listOf("exe", "scr", "lnk", "py", "bat", "cmd", "zip").forEach { assertFalse(isJapaneseAsmrAudioName("track.$it")) }

@@ -1,5 +1,8 @@
 package com.asmr.player.ui.player
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.content.Context
 
 import androidx.lifecycle.ViewModel
@@ -77,7 +80,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private const val ONLINE_MANUAL_LYRICS_MESSAGE = "在线音频如需替换歌词，请先下载音频到本地"
+private val ONLINE_MANUAL_LYRICS_MESSAGE: String get() = appString(R.string.ui_if_you_need_to_replace_lyrics_with_online)
 private const val LISTEN_TOGETHER_POLL_INTERVAL_MS = 60_000L
 private const val LISTEN_TOGETHER_MIN_POLL_INTERVAL_MS = 5_000L
 
@@ -195,7 +198,7 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.setSleepTimerLastDurationMin(minutes)
             settingsRepository.setSleepTimerEndAtMs(endAtMs)
-            messageManager.showSuccess("设置成功，预计${endAtText}暂停播放")
+            messageManager.showSuccess(appString(R.string.ui_setup_successful_is_expected_to_pause_playback, endAtText))
         }
     }
 
@@ -325,10 +328,10 @@ class PlayerViewModel @Inject constructor(
             val favId = playlistRepository.getOrCreateFavoritesPlaylistId()
             if (isFavorite.value) {
                 playlistRepository.removeItemFromPlaylist(favId, mediaId)
-                messageManager.showInfo("已取消收藏")
+                messageManager.showInfo(appString(R.string.ui_canceled_favorites))
             } else {
                 playlistRepository.addItemToPlaylist(favId, item)
-                messageManager.showSuccess("已添加到我的收藏")
+                messageManager.showSuccess(appString(R.string.ui_added_to_my_favorites))
             }
         }
     }
@@ -342,7 +345,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun showOnlineTagManageUnsupported() {
-        messageManager.showInfo("在线音频暂不支持标签管理")
+        messageManager.showInfo(appString(R.string.ui_online_audio_does_not_currently_support_tag_management))
     }
 
     fun showOnlineManualLyricsUnsupported() {
@@ -363,16 +366,16 @@ class PlayerViewModel @Inject constructor(
                 manualLyricsSourceRepository.upsert(target, trimmed)
                 playerConnection.requestLyricsReload()
             }.onSuccess {
-                messageManager.showSuccess("歌词已添加")
+                messageManager.showSuccess(appString(R.string.ui_lyrics_added))
                 onSuccess()
             }.onFailure {
-                messageManager.showError("歌词添加失败")
+                messageManager.showError(appString(R.string.ui_failed_to_add_lyrics))
             }
         }
     }
 
     fun showUnsupportedLyricsFileMessage() {
-        messageManager.showInfo("仅支持 LRC、SRT、VTT 歌词文件")
+        messageManager.showInfo(appString(R.string.ui_only_supports_lrc_srt_vtt_lyric_files))
     }
 
     fun addTrackToQueue(album: Album, track: Track): Boolean {
@@ -389,11 +392,11 @@ class PlayerViewModel @Inject constructor(
     private fun showQueueAddSummary(summary: com.asmr.player.playback.QueueAddSummary) {
         when {
             summary.addedCount > 0 && summary.skippedCount > 0 ->
-                messageManager.showSuccess("已加入队列 ${summary.addedCount} 项，跳过 ${summary.skippedCount} 项")
+                messageManager.showSuccess(appString(R.string.ui_queued_items_skipped_items, summary.addedCount, summary.skippedCount))
             summary.addedCount > 0 ->
-                messageManager.showSuccess("已加入播放队列 ${summary.addedCount} 项")
+                messageManager.showSuccess(appString(R.string.ui_items_have_been_added_to_the_play_queue, summary.addedCount))
             summary.totalCount > 0 ->
-                messageManager.showInfo("所选项目已在播放队列中")
+                messageManager.showInfo(appString(R.string.ui_the_selected_item_is_already_in_the_play))
             else -> Unit
         }
     }
@@ -434,10 +437,10 @@ class PlayerViewModel @Inject constructor(
         val enabled = slicePlaybackController.sliceModeEnabled.value
         if (!enabled) {
             slicePlaybackController.setSliceModeEnabled(true)
-            messageManager.showInfo("仅播放切片已开启")
+            messageManager.showInfo(appString(R.string.ui_play_only_slices_is_on))
         } else {
             slicePlaybackController.setSliceModeEnabled(false)
-            messageManager.showInfo("仅播放切片已关闭")
+            messageManager.showInfo(appString(R.string.ui_play_only_slices_is_off))
         }
     }
 
@@ -460,9 +463,9 @@ class PlayerViewModel @Inject constructor(
                         selectedSliceId.value = null
                         editDrag.value = SliceEditDrag.None
                     }
-                    messageManager.showInfo("已删除切片")
+                    messageManager.showInfo(appString(R.string.ui_slice_deleted))
                 }
-                .onFailure { messageManager.showError("删除切片失败") }
+                .onFailure { messageManager.showError(appString(R.string.ui_failed_to_delete_slice)) }
         }
     }
 
@@ -474,9 +477,9 @@ class PlayerViewModel @Inject constructor(
                     selectedSliceId.value = null
                     editDrag.value = SliceEditDrag.None
                     tempStartMs.value = null
-                    messageManager.showInfo("已清空切片")
+                    messageManager.showInfo(appString(R.string.ui_slice_cleared))
                 }
-                .onFailure { messageManager.showError("清空切片失败") }
+                .onFailure { messageManager.showError(appString(R.string.ui_failed_to_clear_slices)) }
         }
     }
 
@@ -485,16 +488,16 @@ class PlayerViewModel @Inject constructor(
         val start = startMs.coerceIn(0L, safeDuration.takeIf { it > 0 } ?: Long.MAX_VALUE)
         val end = endMs.coerceIn(0L, safeDuration.takeIf { it > 0 } ?: Long.MAX_VALUE)
         if (end <= start) {
-            messageManager.showInfo("结束时间不能早于开始时间")
+            messageManager.showInfo(appString(R.string.ui_end_time_cannot_be_earlier_than_start_time))
             return
         }
         viewModelScope.launch {
             runCatching { trackSliceRepository.updateSliceRange(sliceId, start, end) }
                 .onFailure { e ->
                     if (e is SliceOverlapException) {
-                        messageManager.showInfo("切片与已有切片重叠")
+                        messageManager.showInfo(appString(R.string.ui_the_slice_overlaps_an_existing_slice))
                     } else {
-                        messageManager.showError("更新切片失败")
+                        messageManager.showError(appString(R.string.ui_failed_to_update_slice))
                     }
                 }
         }
@@ -502,11 +505,11 @@ class PlayerViewModel @Inject constructor(
 
     fun onCutPressed(durationMs: Long) {
         val mediaId = sliceUiState.value.trackMediaId ?: run {
-            messageManager.showInfo("暂无可播放曲目")
+            messageManager.showInfo(appString(R.string.ui_there_are_currently_no_tracks_to_play))
             return
         }
         if (durationMs <= 0L) {
-            messageManager.showInfo("无法获取时长")
+            messageManager.showInfo(appString(R.string.ui_unable_to_get_duration))
             return
         }
         val pos = playback.value.positionMs.coerceAtLeast(0L)
@@ -517,24 +520,24 @@ class PlayerViewModel @Inject constructor(
             val hit = existing.any { s -> clamped >= s.startMs && clamped < s.endMs }
             if (hit) {
                 _sliceUiEvents.tryEmit(SliceUiEvent.CutInvalidRange)
-                messageManager.showInfo("起点落在已有切片内")
+                messageManager.showInfo(appString(R.string.ui_the_starting_point_falls_within_an_existing_slice))
                 return
             }
             tempStartMs.value = clamped
             _sliceUiEvents.tryEmit(SliceUiEvent.CutStartMarked)
-            messageManager.showInfo("已标记起点")
+            messageManager.showInfo(appString(R.string.ui_starting_point_marked))
             return
         }
         val end = pos.coerceIn(0L, durationMs)
         if (end <= start) {
             _sliceUiEvents.tryEmit(SliceUiEvent.CutInvalidRange)
-            messageManager.showInfo("结束时间不能早于开始时间")
+            messageManager.showInfo(appString(R.string.ui_end_time_cannot_be_earlier_than_start_time))
             return
         }
         val overlap = existing.any { s -> start < s.endMs && end > s.startMs }
         if (overlap) {
             _sliceUiEvents.tryEmit(SliceUiEvent.CutInvalidRange)
-            messageManager.showInfo("切片与已有切片重叠")
+            messageManager.showInfo(appString(R.string.ui_the_slice_overlaps_an_existing_slice))
             return
         }
         viewModelScope.launch {
@@ -543,13 +546,13 @@ class PlayerViewModel @Inject constructor(
             }.onSuccess {
                 tempStartMs.value = null
                 _sliceUiEvents.tryEmit(SliceUiEvent.CutSliceCreated)
-                messageManager.showSuccess("已创建切片")
+                messageManager.showSuccess(appString(R.string.ui_slice_created))
             }.onFailure {
                 if (it is SliceOverlapException) {
                     _sliceUiEvents.tryEmit(SliceUiEvent.CutInvalidRange)
-                    messageManager.showInfo("切片与已有切片重叠")
+                    messageManager.showInfo(appString(R.string.ui_the_slice_overlaps_an_existing_slice))
                 } else {
-                    messageManager.showError("创建切片失败")
+                    messageManager.showError(appString(R.string.ui_failed_to_create_slice))
                 }
             }
         }
@@ -592,20 +595,20 @@ class PlayerViewModel @Inject constructor(
             1 -> {
                 playerConnection.setRepeatMode(Player.REPEAT_MODE_ONE)
                 playerConnection.setShuffleEnabled(false)
-                "单曲循环"
+                appString(R.string.ui_single_loop)
             }
             2 -> {
                 playerConnection.setRepeatMode(Player.REPEAT_MODE_ALL)
                 playerConnection.setShuffleEnabled(true)
-                "随机播放"
+                appString(R.string.ui_shuffle)
             }
             else -> {
                 playerConnection.setRepeatMode(Player.REPEAT_MODE_ALL)
                 playerConnection.setShuffleEnabled(false)
-                "列表循环"
+                appString(R.string.ui_list_loop)
             }
         }
-        messageManager.showInfo("播放模式：$modeText")
+        messageManager.showInfo(appString(R.string.ui_play_mode_2a61bc, modeText))
         viewModelScope.launch { settingsRepository.setPlayMode(nextMode) }
     }
 
@@ -639,7 +642,7 @@ class PlayerViewModel @Inject constructor(
                 )
             }
             if (allTracks.isEmpty()) {
-                messageManager.showError("未找到可播放的音轨")
+                messageManager.showError(appString(R.string.ui_no_playable_audio_track_found))
                 return@launch
             }
             val resumeId = resumeMediaId?.trim().orEmpty().ifBlank { null }
@@ -700,7 +703,7 @@ class PlayerViewModel @Inject constructor(
     fun playTracks(album: Album, tracks: List<Track>, startTrack: Track, startPositionMs: Long) {
         beginPlaybackRequest()
         if (playerConnection.getControllerOrNull() == null) {
-            messageManager.showError("播放器未连接")
+            messageManager.showError(appString(R.string.ui_player_not_connected))
             return
         }
         val items = tracks.map { MediaItemFactory.fromTrack(album, it) }
@@ -716,7 +719,7 @@ class PlayerViewModel @Inject constructor(
     ): Boolean {
         val requestVersion = beginPlaybackRequest()
         if (playerConnection.getControllerOrNull() == null) {
-            messageManager.showError("播放器未连接")
+            messageManager.showError(appString(R.string.ui_player_not_connected))
             return false
         }
         val (items, index) = withContext(Dispatchers.Default) {
@@ -726,7 +729,7 @@ class PlayerViewModel @Inject constructor(
         }
         if (requestVersion != playbackRequestVersion) return false
         if (playerConnection.getControllerOrNull() == null) {
-            messageManager.showError("播放器未连接")
+            messageManager.showError(appString(R.string.ui_player_not_connected))
             return false
         }
         playerConnection.setQueue(
@@ -782,7 +785,7 @@ class PlayerViewModel @Inject constructor(
 
     fun playMediaItems(items: List<MediaItem>, startIndex: Int) {
         if (playerConnection.getControllerOrNull() == null) {
-            messageManager.showError("播放器未连接")
+            messageManager.showError(appString(R.string.ui_player_not_connected))
             return
         }
         if (items.isEmpty()) return
@@ -802,7 +805,7 @@ class PlayerViewModel @Inject constructor(
     ) {
         val controller = playerConnection.getControllerOrNull()
         if (controller == null) {
-            messageManager.showError("播放器未连接")
+            messageManager.showError(appString(R.string.ui_player_not_connected))
             return
         }
         val current = controller.currentMediaItem
@@ -831,7 +834,7 @@ class PlayerViewModel @Inject constructor(
         startPositionMs: Long,
     ) {
         if (playerConnection.getControllerOrNull() == null) {
-            messageManager.showError("播放器未连接")
+            messageManager.showError(appString(R.string.ui_player_not_connected))
             return
         }
         val requestVersion = beginPlaybackRequest()
@@ -849,7 +852,7 @@ class PlayerViewModel @Inject constructor(
             }
             if (requestVersion != playbackRequestVersion || mediaItems.isEmpty()) return@launch
             if (playerConnection.getControllerOrNull() == null) {
-                messageManager.showError("播放器未连接")
+                messageManager.showError(appString(R.string.ui_player_not_connected))
                 return@launch
             }
             playerConnection.setQueue(mediaItems, startIndex, startPositionMs.coerceAtLeast(0L), playWhenReady = true)

@@ -1,5 +1,8 @@
 package com.asmr.player.ui.settings
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -72,7 +75,7 @@ internal fun TranslationApiSettingsSection(
     val effortOptions = remember { CustomReasoningEffort.entries.associate { it.name to it.wireValue } }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SettingsDropdownSelector(
-            label = "翻译服务", value = provider.name, options = options,
+            label = appString(R.string.ui_translation_service), value = provider.name, options = options,
             onSelect = {
                 provider = TranslationProvider.valueOf(it)
                 apiKey = ""
@@ -86,7 +89,7 @@ internal fun TranslationApiSettingsSection(
             deepSeekContent()
         } else {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("API 配置", modifier = Modifier.weight(1f), color = colors.textPrimary,
+                Text(androidx.compose.ui.res.stringResource(R.string.ui_api_settings), modifier = Modifier.weight(1f), color = colors.textPrimary,
                     style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 if (state.settings.customKeyConfigured) {
                     Text("Token ${formatDeepSeekTokenTotal(customTotalTokens)}", color = colors.textSecondary,
@@ -95,13 +98,13 @@ internal fun TranslationApiSettingsSection(
                 }
             }
             TranslationSettingsTextField(
-                label = "API 地址", value = baseUrl, onValueChange = { baseUrl = it },
+                label = appString(R.string.ui_api_url), value = baseUrl, onValueChange = { baseUrl = it },
                 placeholder = "https://api.example.com/v1", enabled = enabled,
                 keyboardType = KeyboardType.Uri, tag = "custom_api_url"
             )
             TranslationSettingsTextField(
                 label = "API Key", value = apiKey, onValueChange = { apiKey = it },
-                placeholder = if (state.settings.customKeyConfigured) "已配置" else "sk-…",
+                placeholder = if (state.settings.customKeyConfigured) appString(R.string.ui_configured) else "sk-…",
                 enabled = enabled, keyboardType = KeyboardType.Password,
                 visualTransformation = PasswordVisualTransformation(), tag = "custom_api_key"
             )
@@ -115,22 +118,22 @@ internal fun TranslationApiSettingsSection(
                 )
             }
             HorizontalDivider(color = colors.primaryStrong.copy(alpha = 0.12f))
-            Text("生成设置", color = colors.textPrimary, style = MaterialTheme.typography.titleSmall,
+            Text(androidx.compose.ui.res.stringResource(R.string.ui_generation_settings), color = colors.textPrimary, style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold)
             TranslationSettingsTextField(
-                label = "最大输出 Token", value = maxOutputTokens, onValueChange = { maxOutputTokens = it },
+                label = appString(R.string.ui_maximum_output_tokens), value = maxOutputTokens, onValueChange = { maxOutputTokens = it },
                 enabled = enabled, keyboardType = KeyboardType.Number,
                 isError = parsedMaxOutputTokens == null, tag = "custom_api_max_output_tokens",
-                errorMessage = "请输入正整数"
+                errorMessage = appString(R.string.ui_enter_a_positive_integer)
             )
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 SettingsDropdownSelector(
-                    label = "思考模式", value = thinkingMode.name, options = thinkingOptions,
+                    label = appString(R.string.ui_thinking_model), value = thinkingMode.name, options = thinkingOptions,
                     onSelect = { thinkingMode = CustomThinkingMode.valueOf(it) },
                     modifier = Modifier.weight(1f), enabled = enabled, tagPrefix = "custom_api_thinking"
                 )
                 SettingsDropdownSelector(
-                    label = "思考强度", value = reasoningEffort.name, options = effortOptions,
+                    label = appString(R.string.ui_reasoning_effort), value = reasoningEffort.name, options = effortOptions,
                     onSelect = { reasoningEffort = CustomReasoningEffort.valueOf(it) },
                     modifier = Modifier.weight(1f), enabled = enabled && thinkingMode == CustomThinkingMode.ENABLED,
                     tagPrefix = "custom_api_effort"
@@ -153,7 +156,7 @@ internal fun TranslationApiSettingsSection(
                 modifier = Modifier.fillMaxWidth().height(48.dp).testTag("custom_api_save")
             ) {
                 if (state.saving) EaraLogoLoadingIndicator(size = 18.dp)
-                else Text("保存", style = MaterialTheme.typography.labelLarge)
+                else Text(androidx.compose.ui.res.stringResource(R.string.ui_save), style = MaterialTheme.typography.labelLarge)
             }
         }
     }
@@ -171,7 +174,7 @@ internal fun TranslationSettingsTextField(
     keyboardType: KeyboardType = KeyboardType.Text,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     isError: Boolean = false,
-    errorMessage: String = "输入无效",
+    errorMessage: String = appString(R.string.ui_invalid_input),
     showLabel: Boolean = true,
 ) {
     val colors = AsmrTheme.colorScheme
@@ -255,14 +258,14 @@ internal fun TranslationSettingsModelField(
     }
     val options = remember(models, model, allowManual) {
         buildMap {
-            if (model !in models) put(model, model.ifBlank { "选择模型" })
+            if (model !in models) put(model, model.ifBlank { appString(R.string.ui_select_model) })
             models.forEach { put(it, it) }
-            if (allowManual) put(ManualModelOption, "手动输入")
+            if (allowManual) put(ManualModelOption, appString(R.string.ui_enter_manually))
         }
     }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("模型", color = colors.textSecondary, style = MaterialTheme.typography.labelMedium,
+            Text(androidx.compose.ui.res.stringResource(R.string.ui_model_98fd0c), color = colors.textSecondary, style = MaterialTheme.typography.labelMedium,
                 modifier = Modifier.weight(1f))
             IconButton(
                 onClick = { scope.launch { load() } }, enabled = enabled && canLoad && !loading,
@@ -273,17 +276,17 @@ internal fun TranslationSettingsModelField(
                 modifier = Modifier.size(32.dp).testTag("${tagPrefix}_models_refresh")
             ) {
                 if (loading) EaraLogoLoadingIndicator(size = 18.dp)
-                else Icon(Icons.Rounded.Refresh, contentDescription = "拉取模型", modifier = Modifier.size(20.dp))
+                else Icon(Icons.Rounded.Refresh, contentDescription = appString(R.string.ui_fetch_models), modifier = Modifier.size(20.dp))
             }
         }
         if (allowManual && (models.isEmpty() || manual)) {
             TranslationSettingsTextField(
-                label = "模型", value = model, onValueChange = onModelChanged,
-                placeholder = "模型名称", enabled = enabled, tag = "${tagPrefix}_model", showLabel = false
+                label = appString(R.string.ui_model_98fd0c), value = model, onValueChange = onModelChanged,
+                placeholder = appString(R.string.ui_model_name), enabled = enabled, tag = "${tagPrefix}_model", showLabel = false
             )
         } else {
             SettingsDropdownSelector(
-                label = "模型", value = model, options = options,
+                label = appString(R.string.ui_model_98fd0c), value = model, options = options,
                 onSelect = { if (it == ManualModelOption) manual = true else onModelChanged(it) },
                 modifier = Modifier.fillMaxWidth(), enabled = enabled,
                 tagPrefix = "${tagPrefix}_model", showLabel = false,

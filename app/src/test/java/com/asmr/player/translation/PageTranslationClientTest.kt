@@ -12,7 +12,7 @@ import okhttp3.mockwebserver.SocketPolicy
 import org.junit.Assert.*
 import org.junit.Test
 
-class PageTranslationClientTest {
+class PageTranslationClientTest : com.asmr.player.LocalizedRobolectricTest() {
     @Test fun preservesBatchBoundariesAndMultilineText() {
         assertEquals(listOf("你好。\n晚安。", "社团"), parsePageTranslationBatch("""["你好。\n晚安。","社团"]""", 2))
         assertEquals(listOf("你好", "晚安"), parsePageTranslationBatch("""[["你好","ja"],["晚安","ja"]]""", 2))

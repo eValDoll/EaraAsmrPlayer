@@ -1,6 +1,5 @@
 package com.asmr.player.subtitle
 
-import android.app.Application
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -22,8 +21,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [34], manifest = Config.NONE)
-class SubtitleTranslationLimitsTest {
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [34], manifest = Config.NONE)
+class SubtitleTranslationLimitsTest : com.asmr.player.LocalizedRobolectricTest() {
     private val gson = Gson()
     private val sources = (0 until 3).map { source(it) }
 

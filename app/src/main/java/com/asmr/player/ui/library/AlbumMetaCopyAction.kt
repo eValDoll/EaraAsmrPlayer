@@ -1,5 +1,8 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -18,7 +21,7 @@ internal fun rememberAlbumMetaCopyAction(
                 Unit
             } else {
                 clipboard.setText(AnnotatedString(normalizedValue))
-                messageManager.showSuccess("$label 已复制")
+                messageManager.showSuccess(appString(R.string.ui_copied, label))
             }
         }
     }

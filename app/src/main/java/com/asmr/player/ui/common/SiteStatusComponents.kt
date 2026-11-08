@@ -1,5 +1,8 @@
 package com.asmr.player.ui.common
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -72,9 +75,9 @@ internal fun siteLatencyDisplay(status: SiteStatus): SiteLatencyDisplay {
     }
     val label = when (status.type) {
         SiteStatusType.Ok -> latency?.let { "$it ms" } ?: "— ms"
-        SiteStatusType.Fail -> "失败"
-        SiteStatusType.Testing -> "测试中"
-        SiteStatusType.Unknown -> "未测试"
+        SiteStatusType.Fail -> appString(R.string.ui_fail)
+        SiteStatusType.Testing -> appString(R.string.ui_under_test)
+        SiteStatusType.Unknown -> appString(R.string.ui_not_tested)
     }
     return SiteLatencyDisplay(label = label, activeBars = activeBars)
 }
@@ -140,7 +143,7 @@ internal fun AsmrOneSiteSelector(
             )
             Icon(
                 imageVector = Icons.Rounded.ArrowDropDown,
-                contentDescription = "选择站点",
+                contentDescription = appString(R.string.ui_select_site),
                 modifier = Modifier.size(18.dp),
                 tint = if (lightweight) colorScheme.textSecondary else colorScheme.primaryStrong
             )
@@ -261,7 +264,7 @@ internal fun SiteStatusTestRow(
                 ),
                 shape = RoundedCornerShape(10.dp)
             ) {
-                Text(text = "测试", style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                Text(text = appString(R.string.ui_test), style = MaterialTheme.typography.labelSmall, maxLines = 1)
             }
         }
     }
@@ -337,9 +340,9 @@ private fun SignalBars(
             .height(14.dp)
             .semantics {
                 contentDescription = if (activeBars == 0) {
-                    "无可用信号"
+                    appString(R.string.ui_no_signal_available)
                 } else {
-                    "信号强度 $activeBars 格"
+                    appString(R.string.ui_signal_strength_bars, activeBars)
                 }
             },
         horizontalArrangement = Arrangement.spacedBy(2.dp),

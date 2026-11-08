@@ -23,6 +23,7 @@ data class DownloadTaskEntity(
     val albumCircle: String = "",
     val albumCv: String = "",
     val albumTagsCsv: String = "",
+    @androidx.room.ColumnInfo(defaultValue = "'[]'") val albumTagDetailsJson: String = "[]",
     val albumCoverUrl: String = "",
     val albumDescription: String = "",
     val albumWorkId: String = "",

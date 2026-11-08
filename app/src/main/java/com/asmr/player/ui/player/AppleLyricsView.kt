@@ -1,5 +1,8 @@
 package com.asmr.player.ui.player
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -791,7 +794,7 @@ private fun LyricsPlaybackTimeline(
     val containerColor = colors.activeContainer.copy(alpha = if (enabled) 0.96f else 0.54f)
     val contentColor = colors.activeText.copy(alpha = if (enabled) 0.94f else 0.46f)
     val targetText = targetPositionMs?.let { Formatting.formatTrackTime(it) } ?: "--:--"
-    val description = targetPositionMs?.let { "跳转到 ${Formatting.formatTrackTime(it)} 播放" } ?: "跳转播放"
+    val description = targetPositionMs?.let { appString(R.string.ui_jump_to_play, Formatting.formatTrackTime(it)) } ?: appString(R.string.ui_jump_to_play_220241)
     val density = LocalDensity.current
 
     Row(

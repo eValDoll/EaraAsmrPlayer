@@ -1,5 +1,7 @@
 package com.asmr.player.ui.search
 
+import com.asmr.player.i18n.appString
+
 import androidx.annotation.DrawableRes
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CalendarMonth
@@ -16,40 +18,43 @@ sealed class SearchFilterIcon {
 }
 
 enum class SearchFilterOption(
-    val label: String,
+    private val labelProvider: () -> String,
     val icon: SearchFilterIcon,
     val mode: SearchFilterMode
 ) {
     Collected(
-        label = "asmr.one",
+        labelProvider = { "asmr.one" },
         icon = SearchFilterIcon.Drawable(R.drawable.ic_search_collected_library),
         mode = SearchFilterMode.CollectedOnly
     ),
     JapaneseAsmr(
-        label = "jp-asmr",
+        labelProvider = { "jp-asmr" },
         icon = SearchFilterIcon.Drawable(R.drawable.ic_search_collected_library),
         mode = SearchFilterMode.CollectedOnly
     ),
     ChineseTranslated(
-        label = "中文作品",
+        labelProvider = { appString(R.string.ui_chinese_works) },
         icon = SearchFilterIcon.Drawable(R.drawable.ic_search_chinese_book),
         mode = SearchFilterMode.ChineseTranslated
     ),
     Standard(
-        label = "全部作品",
+        labelProvider = { appString(R.string.ui_all_works) },
         icon = SearchFilterIcon.Vector(Icons.Rounded.Search),
         mode = SearchFilterMode.Standard
     ),
     Presale(
-        label = "预售",
+        labelProvider = { appString(R.string.ui_pre_sale) },
         icon = SearchFilterIcon.Vector(Icons.Rounded.CalendarMonth),
         mode = SearchFilterMode.PresaleOnly
     ),
     PurchasedOnly(
-        label = "已购",
+        labelProvider = { appString(R.string.ui_purchased) },
         icon = SearchFilterIcon.Vector(Icons.Rounded.ShoppingBag),
         mode = SearchFilterMode.PurchasedOnly
     );
+
+    val label: String get() = labelProvider()
+
 
     val isPurchasedOnly: Boolean
         get() = mode == SearchFilterMode.PurchasedOnly

@@ -1,0 +1,1320 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">Eara</string>
+    <string name="ui_lrcs_have_been_exported_for_legacy_subtitles">"已为旧版字幕补导出 %1$s 个 LRC，"</string>
+    <string name="ui_another_were_not_exported_because_the_directory_was">"另有 %1$s 个因目录不可写未导出"</string>
+    <string name="ui_and_keep_existing_files_with_the_same_name">"，并保留 %1$s 个已有同名文件"</string>
+    <string name="ui_lrc_files_have_been_exported_to_generate_subtitles">"已为旧版生成字幕补导出 %1$s 个 LRC 文件"</string>
+    <string name="ui_existing_lrcs_with_the_same_name_were_detected">"检测到 %1$s 个已有同名 LRC，补导出时未覆盖"</string>
+    <string name="ui_invalid_work_number" formatted="false">"无效的作品编号"</string>
+    <string name="ui_fallback" formatted="false">"备用"</string>
+    <string name="ui_account_cannot_be_empty" formatted="false">"账号不能为空"</string>
+    <string name="ui_password_cannot_be_empty" formatted="false">"密码不能为空"</string>
+    <string name="ui_failed_to_open_login_page">"打开登录页失败（%1$s）"</string>
+    <string name="ui_login_form_not_found_and_login_status_not" formatted="false">"未找到登录表单且未检测到登录状态"</string>
+    <string name="ui_login_failed_please_check_your_account_password" formatted="false">"登录失败，请检查账号密码"</string>
+    <string name="ui_login_cookie_not_obtained" formatted="false">"未获取到登录 Cookie"</string>
+    <string name="ui_the_work_number_changed_try_syncing_again" formatted="false">"作品编号已变更，请重试云同步"</string>
+    <string name="ui_please_log_in_to_dlsite_first_requires_cookies" formatted="false">"请先登录 DLsite（需要 play.dlsite.com 的 Cookie）"</string>
+    <string name="ui_authentication_of_the_purchased_library_failed_401_please" formatted="false">"已购库鉴权失败（401），请重新登录 DLsite"</string>
+    <string name="ui_failed_to_obtain_purchased_list">"获取已购列表失败（%1$s）"</string>
+    <string name="ui_dlsite_play_failed_to_obtain_signature">"DLsite Play 获取签名失败（%1$s）"</string>
+    <string name="ui_dlsite_play_obtains_signature_and_returns_empty" formatted="false">"DLsite Play 获取签名返回为空"</string>
+    <string name="ui_dlsite_play_obtains_signature_and_returns_missing_url" formatted="false">"DLsite Play 获取签名返回缺少 url/params"</string>
+    <string name="ui_dlsite_play_failed_to_obtain_the_directory_tree">"DLsite Play 获取目录树失败（%1$s）"</string>
+    <string name="ui_dlsite_play_gets_the_directory_tree_to_be" formatted="false">"DLsite Play 获取目录树为空"</string>
+    <string name="ui_no_dns_servers_available" formatted="false">"没有可用的 DNS 服务器"</string>
+    <string name="ui_dns_resolution_failed">"DNS 解析失败：%1$s"</string>
+    <string name="ui_too_many_cname_jumps" formatted="false">"CNAME 跳转次数过多"</string>
+    <string name="ui_dns_tcp_response_length_is_invalid" formatted="false">"DNS TCP 响应长度无效"</string>
+    <string name="ui_domain_name_format_is_invalid" formatted="false">"域名格式无效"</string>
+    <string name="ui_domain_name_label_format_is_invalid" formatted="false">"域名标签格式无效"</string>
+    <string name="ui_dns_server_returned_error_code">"DNS 服务器返回错误码 %1$s"</string>
+    <string name="ui_dns_response_id_mismatch" formatted="false">"DNS 响应 ID 不匹配"</string>
+    <string name="ui_received_something_other_than_a_dns_response" formatted="false">"收到的不是 DNS 响应"</string>
+    <string name="ui_dns_name_compression_pointer_exception" formatted="false">"DNS 名称压缩指针异常"</string>
+    <string name="ui_dns_name_tag_length_is_invalid" formatted="false">"DNS 名称标签长度无效"</string>
+    <string name="ui_dns_response_format_is_invalid" formatted="false">"DNS 响应格式无效"</string>
+    <string name="ui_default_directory_application_specific" formatted="false">"默认目录（应用专用）"</string>
+    <string name="ui_custom_directory" formatted="false">"自定义目录"</string>
+    <string name="ui_download_relative_path_is_invalid" formatted="false">"下载相对路径无效"</string>
+    <string name="ui_unable_to_create_download_directory" formatted="false">"无法创建下载目录"</string>
+    <string name="ui_download_file_name_is_invalid" formatted="false">"下载文件名无效"</string>
+    <string name="ui_unable_to_create_file_in_download_directory" formatted="false">"无法在下载目录创建文件"</string>
+    <string name="ui_the_document_provider_changed_the_download_file_name" formatted="false">"文档提供器修改了下载文件名"</string>
+    <string name="ui_unable_to_read_downloaded_file" formatted="false">"无法读取下载文件"</string>
+    <string name="ui_unable_to_write_download_file" formatted="false">"无法写入下载文件"</string>
+    <string name="ui_download_directory_permission_has_expired" formatted="false">"下载目录权限已失效"</string>
+    <string name="ui_checking_source_files" formatted="false">"正在检查源文件"</string>
+    <string name="ui_joining_download_queue_item">"正在加入下载队列（%1$s项）"</string>
+    <string name="ui_the_download_directory_is_unavailable_please_select_again" formatted="false">"下载目录不可用，请重新选择或重置为默认目录"</string>
+    <string name="ui_the_selected_files_are_already_in_the_download" formatted="false">"所选文件已在下载任务中"</string>
+    <string name="ui_source_file_check_timed_out_try_again" formatted="false">"源文件检查超时，请重试"</string>
+    <string name="ui_unable_to_check_the_source_file_try_again" formatted="false">"无法确认源文件状态，请稍后重试"</string>
+    <string name="ui_unable_to_create_download_try_again" formatted="false">"创建下载任务失败，请重试"</string>
+    <string name="ui_online_audio_download_has_not_been_confirmed" formatted="false">"在线音源下载尚未确认"</string>
+    <string name="ui_download_stopped" formatted="false">"下载已停止"</string>
+    <string name="ui_download_paused_or_canceled" formatted="false">"下载已暂停或取消"</string>
+    <string name="ui_audio_download_failed">"音频下载请求失败 (%1$s)"</string>
+    <string name="ui_the_download_link_did_not_return_audio" formatted="false">"下载链接未返回音频"</string>
+    <string name="ui_the_downloaded_file_was_changed_by_another_app" formatted="false">"下载文件已被外部修改"</string>
+    <string name="ui_the_downloaded_file_is_incomplete" formatted="false">"下载文件不完整"</string>
+    <string name="ui_the_downloaded_file_was_moved_or_deleted" formatted="false">"下载文件已移动或删除"</string>
+    <string name="ui_source_file_check_failed">"源文件状态检查失败 (%1$s)"</string>
+    <string name="ui_source_file_check_failed_375aad" formatted="false">"源文件状态检查失败"</string>
+    <string name="ui_the_source_file_check_did_not_return_audio" formatted="false">"源文件状态检查未返回音频"</string>
+    <string name="ui_source_file_missing" formatted="false">"源文件已丢失"</string>
+    <string name="ui_audio_download_site_request_failed">"音频下载站点请求失败 (%1$s)"</string>
+    <string name="ui_unsupported_audio_format" formatted="false">"不支持的音频格式"</string>
+    <string name="ui_no_audio_download_link_found" formatted="false">"未找到音频下载链接"</string>
+    <string name="ui_unable_to_rebuild_the_temporary_audio_file" formatted="false">"无法重建音频临时文件"</string>
+    <string name="ui_online_audio_download_failed" formatted="false">"在线播放音频下载失败"</string>
+    <string name="ui_online_audio_must_not_be_re_encoded" formatted="false">"在线播放音频不应重新编码"</string>
+    <string name="ui_no_online_audio_available" formatted="false">"没有可用的在线播放音频"</string>
+    <string name="ui_unable_to_save_online_audio" formatted="false">"无法保存在线播放音频"</string>
+    <string name="ui_github_request_failed">"GitHub 请求失败：%1$s %2$s"</string>
+    <string name="ui_release_does_not_contain_apk_resources" formatted="false">"Release 未包含 APK 资源"</string>
+    <string name="ui_bathroom_echo" formatted="false">"浴室回声"</string>
+    <string name="ui_tile_short_echo" formatted="false">"瓷砖短回声"</string>
+    <string name="ui_muffled_sound_in_bed" formatted="false">"被窝闷声"</string>
+    <string name="ui_muffled_sound_wrapping_feeling" formatted="false">"闷声包裹感"</string>
+    <string name="ui_phone_tone" formatted="false">"电话音"</string>
+    <string name="ui_narrowband_call_feeling" formatted="false">"窄带通话感"</string>
+    <string name="ui_the_certification_has_expired_please_log_in_again" formatted="false">"认证已过期，请重新登录"</string>
+    <string name="ui_access_denied" formatted="false">"访问被拒绝"</string>
+    <string name="ui_the_server_is_out_of_service_please_try" formatted="false">"服务器开小差了，请稍后重试"</string>
+    <string name="ui_network_connection_failed_please_check_the_network" formatted="false">"网络连接失败，请检查网络"</string>
+    <string name="ui_included" formatted="false">"收录"</string>
+    <string name="ui_by_plays" formatted="false">"按播放次数"</string>
+    <string name="ui_press_listening_time" formatted="false">"按收听时长"</string>
+    <string name="ui_in_the_clipboard_was_detected_quickly_jump_to">"检测到剪贴板中的 %1$s，是否快速跳转至该作品的专辑详情？"</string>
+    <string name="ui_cancel" formatted="false">"取消"</string>
+    <string name="ui_jump_now" formatted="false">"立即跳转"</string>
+    <string name="ui_manually_enter_item_number" formatted="false">"手动输入作品编号"</string>
+    <string name="ui_opening_system_installer" formatted="false">"正在打开系统安装器"</string>
+    <string name="ui_please_allow_eara_to_continue_installing_apps_from" formatted="false">"请允许 Eara 安装未知来源应用后继续安装"</string>
+    <string name="ui_the_download_file_is_invalid_please_download_again" formatted="false">"下载文件无效，请重新下载"</string>
+    <string name="ui_press_return_again_to_exit_the_app" formatted="false">"再按一次返回退出应用"</string>
+    <string name="ui_library" formatted="false">"本地库"</string>
+    <string name="ui_filter" formatted="false">"筛选"</string>
+    <string name="ui_search" formatted="false">"在线搜索"</string>
+    <string name="ui_popular" formatted="false">"热门收听"</string>
+    <string name="ui_playlists" formatted="false">"我的列表"</string>
+    <string name="ui_favorites" formatted="false">"我的收藏"</string>
+    <string name="ui_groups" formatted="false">"我的分组"</string>
+    <string name="ui_settings" formatted="false">"设置"</string>
+    <string name="ui_tasks" formatted="false">"任务管理"</string>
+    <string name="ui_asmr_dashboard" formatted="false">"ASMR 看板"</string>
+    <string name="ui_dlsite_login" formatted="false">"DLsite 登录"</string>
+    <string name="ui_switch_view" formatted="false">"切换视图"</string>
+    <string name="ui_album_list" formatted="false">"专辑列表"</string>
+    <string name="ui_album_card" formatted="false">"专辑卡片"</string>
+    <string name="ui_audio_track_list" formatted="false">"音轨列表"</string>
+    <string name="ui_switch_to_list_view" formatted="false">"切换为列表视图"</string>
+    <string name="ui_switch_to_card_view" formatted="false">"切换为卡片视图"</string>
+    <string name="ui_pause_all" formatted="false">"全部暂停"</string>
+    <string name="ui_continue_all" formatted="false">"全部继续"</string>
+    <string name="ui_please_enter_the_dlsite_work_number_support_rj" formatted="false">"请输入 DLsite 作品编号，支持 RJ、BJ、VJ；保存后将自动执行云同步。"</string>
+    <string name="ui_work_number_such_as_bj02370869" formatted="false">"作品编号（如 BJ02370869）"</string>
+    <string name="ui_synchronous" formatted="false">"同步"</string>
+    <string name="ui_new_version_found">"发现新版本：%1$s"</string>
+    <string name="ui_update_now" formatted="false">"立即更新"</string>
+    <string name="ui_start_downloading_updates" formatted="false">"开始下载更新…"</string>
+    <string name="ui_don_t_remind_again" formatted="false">"不再提醒"</string>
+    <string name="ui_automatically_checking_for_updates_on_startup_is_turned" formatted="false">"已关闭启动时自动检查更新"</string>
+    <string name="ui_details" formatted="false">"详情"</string>
+    <string name="ui_unable_to_open_github_releases_page" formatted="false">"无法打开 GitHub 发布页"</string>
+    <string name="ui_current_version">"当前版本：%1$s"</string>
+    <string name="ui_installation_package">"安装包：%1$s"</string>
+    <string name="ui_playing_using_traffic" formatted="false">"正在使用流量播放"</string>
+    <string name="ui_playback_failed">"播放失败：%1$s"</string>
+    <string name="ui_now_playing" formatted="false">"正在播放"</string>
+    <string name="ui_playing_in_the_background" formatted="false">"后台播放中"</string>
+    <string name="ui_previous_track" formatted="false">"上一首"</string>
+    <string name="ui_pause" formatted="false">"暂停"</string>
+    <string name="ui_play" formatted="false">"播放"</string>
+    <string name="ui_next_track" formatted="false">"下一首"</string>
+    <string name="ui_playback_controls" formatted="false">"播放控制"</string>
+    <string name="ui_used_for_background_playback_control_and_lock_screen" formatted="false">"用于后台播放控制与锁屏媒体面板"</string>
+    <string name="ui_no_lyrics_yet" formatted="false">"暂无歌词"</string>
+    <string name="ui_balance_inquiry_canceled" formatted="false">"余额查询已取消"</string>
+    <string name="ui_no_subtitles_available_for_export" formatted="false">"没有可导出的字幕"</string>
+    <string name="ui_the_subtitle_file_was_moved_or_deleted" formatted="false">"字幕文件已移动或删除"</string>
+    <string name="ui_the_subtitle_file_changed_during_this_task_writing" formatted="false">"字幕文件在任务期间已被修改，已停止写入"</string>
+    <string name="ui_the_target_subtitle_index_cannot_be_repeated" formatted="false">"目标字幕索引不能重复"</string>
+    <string name="ui_missing_captions_subtitles_array" formatted="false">"缺少 captions 字幕数组"</string>
+    <string name="ui_the_source_indices_of_the_subtitle_group_cannot" formatted="false">"字幕组的 source_indices 不能为空"</string>
+    <string name="ui_imported_subtitles_must_be_submitted_one_by_one" formatted="false">"导入字幕必须逐条提交，不能合并 source_indices"</string>
+    <string name="ui_subtitle_group_contains_non_target_index">"字幕组包含非目标 index：%1$s"</string>
+    <string name="ui_the_source_indices_of_the_subtitle_group_must" formatted="false">"字幕组的 source_indices 必须按源字幕顺序连续递增"</string>
+    <string name="ui_the_corrected_japanese_cannot_be_empty" formatted="false">"修正后的日文不能为空"</string>
+    <string name="ui_translation_text_cannot_be_empty" formatted="false">"翻译文本不能为空"</string>
+    <string name="ui_this_tool_call_must_start_from_the_first" formatted="false">"本次工具调用必须从首个未确认索引开始，按顺序提交连续前缀"</string>
+    <string name="ui_there_are_no_decodable_audio_tracks_in_the" formatted="false">"文件中没有可解码的音轨"</string>
+    <string name="ui_audio_encoding_not_recognized" formatted="false">"无法识别音频编码"</string>
+    <string name="ui_audio_channel_lengths_are_inconsistent" formatted="false">"音频声道长度不一致"</string>
+    <string name="ui_unable_to_obtain_audio_decoding_input_buffer" formatted="false">"无法取得音频解码输入缓冲区"</string>
+    <string name="ui_unable_to_obtain_audio_decoding_output_buffer" formatted="false">"无法取得音频解码输出缓冲区"</string>
+    <string name="ui_number_of_audio_channels_changes_during_decoding" formatted="false">"音频声道数在解码期间发生变化"</string>
+    <string name="ui_audio_channel_resampling_out_of_sync" formatted="false">"音频声道重采样不同步"</string>
+    <string name="ui_audio_channel_tail_is_out_of_sync" formatted="false">"音频声道尾部不同步"</string>
+    <string name="ui_unsupported_pcm_encoding">"不支持的 PCM 编码：%1$s"</string>
+    <string name="ui_japanese_subtitle_model_released" formatted="false">"日语字幕模型已释放"</string>
+    <string name="ui_the_speech_segmentation_model_has_been_released" formatted="false">"语音切分模型已释放"</string>
+    <string name="ui_japanese_subtitle_model_file_missing">"日语字幕模型文件缺失：%1$s"</string>
+    <string name="ui_unable_to_create_subtitle_runtime_download_directory" formatted="false">"无法创建字幕运行时下载目录"</string>
+    <string name="ui_unable_to_clean_subtitle_runtime_archive" formatted="false">"无法清理字幕运行时压缩包"</string>
+    <string name="ui_please_download_the_japanese_subtitle_component_in_settings" formatted="false">"请先在设置中下载日语字幕组件"</string>
+    <string name="ui_the_subtitle_runtime_directory_is_invalid" formatted="false">"字幕运行时目录无效"</string>
+    <string name="ui_unable_to_create_subtitles_runtime_directory" formatted="false">"无法创建字幕运行时目录"</string>
+    <string name="ui_unable_to_clean_old_subtitles_runtime_temp_directory" formatted="false">"无法清理旧的字幕运行时临时目录"</string>
+    <string name="ui_unable_to_create_subtitle_runtime_temporary_directory" formatted="false">"无法创建字幕运行时临时目录"</string>
+    <string name="ui_the_installation_result_is_invalid_when_subtitles_are" formatted="false">"字幕运行时安装结果无效"</string>
+    <string name="ui_unable_to_replace_old_subtitle_runtime" formatted="false">"无法替换旧的字幕运行时"</string>
+    <string name="ui_unable_to_save_subtitle_runtime" formatted="false">"无法保存字幕运行时"</string>
+    <string name="ui_subtitles_are_missing_or_still_writable_during_runtime" formatted="false">"字幕运行时缺失或仍可写"</string>
+    <string name="ui_the_subtitle_runtime_compressed_package_contains_redundant_directories" formatted="false">"字幕运行时压缩包包含多余目录"</string>
+    <string name="ui_the_subtitle_runtime_archive_contains_unknown_files">"字幕运行时压缩包包含未知文件：%1$s"</string>
+    <string name="ui_subtitle_runtime_archive_contains_duplicate_files">"字幕运行时压缩包包含重复文件：%1$s"</string>
+    <string name="ui_invalid_file_path_when_running_subtitles" formatted="false">"字幕运行时文件路径无效"</string>
+    <string name="ui_the_subtitle_runtime_compressed_package_is_missing_necessary" formatted="false">"字幕运行时压缩包缺少必要文件"</string>
+    <string name="ui_file_size_exception_when_running_subtitles">"字幕运行时文件大小异常：%1$s"</string>
+    <string name="ui_incomplete_subtitle_runtime_file">"字幕运行时文件不完整：%1$s"</string>
+    <string name="ui_file_verification_failed_when_running_subtitles">"字幕运行时文件校验失败：%1$s"</string>
+    <string name="ui_unable_to_make_subtitle_runtime_file_read_only">"无法将字幕运行时文件设为只读：%1$s"</string>
+    <string name="ui_file_size_verification_failed">"文件大小校验失败：%1$s"</string>
+    <string name="ui_file_verification_failed">"文件校验失败：%1$s"</string>
+    <string name="ui_the_current_device_does_not_support_the_subtitle">"当前设备不支持 %1$s 字幕运行时"</string>
+    <string name="ui_unable_to_clean_up_invalid_temporary_download_files" formatted="false">"无法清理无效的临时下载文件"</string>
+    <string name="ui_download_failed">"下载失败：%1$s %2$s"</string>
+    <string name="ui_download_source_returned_invalid_breakpoint_data" formatted="false">"下载源返回了无效的断点数据"</string>
+    <string name="ui_download_failed_empty_response_body" formatted="false">"下载失败：空响应体"</string>
+    <string name="ui_abnormal_download_file_size" formatted="false">"下载文件大小异常"</string>
+    <string name="ui_incomplete_download_bytes">"下载不完整（%1$s/%2$s 字节）"</string>
+    <string name="ui_requires_arm64_v8a_64_bit_arm_device" formatted="false">"需要 arm64-v8a 64 位 ARM 设备"</string>
+    <string name="ui_the_current_device_is_marked_by_the_system" formatted="false">"当前设备被系统标记为低内存设备"</string>
+    <string name="ui_not_enough_memory_6gb" formatted="false">"内存不足 6GB"</string>
+    <string name="ui_less_than_cpu_cores">"CPU 核心少于 %1$s 个"</string>
+    <string name="ui_current_device_memory_cores_cpu">"当前设备：%1$s 内存，%2$s 核 CPU"</string>
+    <string name="ui_current_devices_support_local_subtitle_generation">"当前设备支持本地字幕生成。%1$s"</string>
+    <string name="ui_the_current_device_does_not_support_local_subtitle">"当前设备不支持本地字幕生成：%1$s。%2$s"</string>
+    <string name="ui_unknown" formatted="false">"未知"</string>
+    <string name="ui_local_transcription_failed_out_of_memory_oom_while" formatted="false">"本地转录失败：运行模型时内存不足（OOM）。已保留已完成的转录进度；"</string>
+    <string name="ui_please_close_the_applications_that_occupy_memory_and" formatted="false">"请关闭占用内存的应用后重试，若仍失败则当前设备可能无法稳定运行此模型。"</string>
+    <string name="ui_local_transcription_failed_the_subtitle_running_environment_is" formatted="false">"本地转录失败：字幕运行环境与当前设备不兼容。已保留已完成的转录进度；"</string>
+    <string name="ui_this_function_only_supports_arm64_v8a_devices_please" formatted="false">"本功能仅支持 arm64-v8a 设备，请确认系统兼容性，或在设置中重新下载字幕组件后重试。"</string>
+    <string name="ui_local_transcription_failed_the_subtitle_model_or_running" formatted="false">"本地转录失败：字幕模型或运行组件缺失、损坏。已保留已完成的转录进度；"</string>
+    <string name="ui_please_go_to_settings_to_delete_and_re" formatted="false">"请前往设置删除并重新下载字幕模型后重试。"</string>
+    <string name="ui_local_transcription_failed_audio_reading_or_decoding_failed" formatted="false">"本地转录失败：音频读取或解码失败。已保留已完成的转录进度；"</string>
+    <string name="ui_please_confirm_that_the_file_is_complete_and" formatted="false">"请确认文件完整且音频格式受当前系统支持后重试。"</string>
+    <string name="ui_the_local_transcription_did_not_recognize_the_japanese" formatted="false">"本地转录未识别到可生成字幕的日语语音，请确认音频包含清晰的日语语音后重试。"</string>
+    <string name="ui_the_subtitles_have_been_modified_during_transcription_the" formatted="false">"字幕在转录期间已被修改，任务已停止写入，未覆盖用户版本。"</string>
+    <string name="ui_local_transcription_failed_the_model_is_running_abnormally" formatted="false">"本地转录失败：模型运行异常。已保留已完成的转录进度；"</string>
+    <string name="ui_please_try_again_if_it_continues_to_fail" formatted="false">"请重试，若持续失败请在设置中重新下载字幕模型。"</string>
+    <string name="ui_subtitle_translation_failed_out_of_memory_while_processing" formatted="false">"字幕翻译失败：处理模型响应时内存不足。请关闭占用内存的应用后重试。"</string>
+    <string name="ui_subtitle_translation_failed_api_key_missing_configure_it" formatted="false">"字幕翻译失败：API Key 未配置或已被移除，请前往设置重新配置后重试。"</string>
+    <string name="ui_subtitle_translation_failed_an_unexpected_runtime_error_occurred" formatted="false">"字幕翻译失败：发生未预期的运行错误。请重试；若持续失败，请更新应用后再试。"</string>
+    <string name="ui_request_timed_out_check_your_network_or_proxy">"%1$s 网络请求超时，请检查网络或代理设置后重试。"</string>
+    <string name="ui_unable_to_connect_to_check_your_network_or">"无法连接 %1$s，请检查网络或代理设置后重试。"</string>
+    <string name="ui_unable_to_connect_securely_to_check_your_system">"无法与 %1$s 建立安全连接，请检查系统时间、证书或代理设置后重试。"</string>
+    <string name="ui_request_failed_check_your_network_or_proxy_settings">"%1$s 网络请求失败，请检查网络或代理设置后重试。"</string>
+    <string name="ui_rejected_the_translation_request_http">"%1$s 拒绝了翻译请求（HTTP %2$s）"</string>
+    <string name="ui_check_the_api_url_model_and_api_compatibility" formatted="false">"请检查 API 地址、模型及接口兼容性。"</string>
+    <string name="ui_please_update_the_app_or_try_again_later" formatted="false">"请更新应用或稍后重试。"</string>
+    <string name="ui_the_api_key_is_invalid_or_expired_update">"%1$s API Key 无效或已失效，请前往设置重新配置后重试。"</string>
+    <string name="ui_insufficient_account_balance_add_funds_and_try_again">"%1$s 账户余额不足，请充值后重试。"</string>
+    <string name="ui_denied_access_check_your_api_key_and_its">"%1$s 拒绝访问，请检查 API Key 权限或有效状态后重试。"</string>
+    <string name="ui_the_url_or_model_is_unavailable_check_your">"%1$s 地址或模型不可用，请检查翻译配置后重试。"</string>
+    <string name="ui_the_translation_model_is_unavailable_update_the_app">"%1$s 翻译模型不可用，请更新应用后重试。"</string>
+    <string name="ui_request_timed_out_check_your_network_and_try">"%1$s 请求超时，请检查网络后重试。"</string>
+    <string name="ui_cannot_process_the_translation_request_right_now_try">"%1$s 暂时无法处理翻译请求，请稍后重试。"</string>
+    <string name="ui_too_many_requests_try_again_later">"%1$s 请求过于频繁，请稍后重试。"</string>
+    <string name="ui_is_temporarily_unavailable_http_try_again_later">"%1$s 服务暂时不可用（HTTP %2$s），请稍后重试。"</string>
+    <string name="ui_translation_request_failed_http">"%1$s 翻译请求失败（HTTP %2$s）"</string>
+    <string name="ui_please_try_again_later" formatted="false">"请稍后重试。"</string>
+    <string name="ui_prepare_to_download_subtitle_components" formatted="false">"准备下载字幕组件"</string>
+    <string name="ui_model_verification_failed_please_download_again">"模型校验失败：%1$s，请重新下载"</string>
+    <string name="ui_unable_to_replace_old_model_files" formatted="false">"无法替换旧模型文件"</string>
+    <string name="ui_unable_to_save_japanese_subtitle_model" formatted="false">"无法保存日语字幕模型"</string>
+    <string name="ui_subtitle_component_download_failed" formatted="false">"字幕组件下载失败"</string>
+    <string name="ui_not_enough_storage_space_at_least_additional_free" formatted="false">"存储空间不足，至少需要额外可用空间"</string>
+    <string name="ui_japanese_subtitle_component_download" formatted="false">"日语字幕组件下载"</string>
+    <string name="ui_japanese_subtitle_component" formatted="false">"日语字幕组件"</string>
+    <string name="ui_downloading_subtitle_runtime" formatted="false">"正在下载字幕运行时"</string>
+    <string name="ui_verifying_and_installing_subtitle_runtime" formatted="false">"正在校验并安装字幕运行时"</string>
+    <string name="ui_downloading_japanese_subtitle_model" formatted="false">"正在下载日语字幕模型"</string>
+    <string name="ui_verifying_japanese_subtitle_model" formatted="false">"正在校验日语字幕模型"</string>
+    <string name="ui_please_download_the_japanese_subtitle_model_first" formatted="false">"请先下载该日语字幕模型"</string>
+    <string name="ui_unknown_subtitle_model" formatted="false">"未知的字幕模型"</string>
+    <string name="ui_the_download_address_is_not_configured_when_subtitles" formatted="false">"字幕运行时下载地址未配置"</string>
+    <string name="ui_unable_to_delete_japanese_subtitle_model" formatted="false">"无法删除日语字幕模型"</string>
+    <string name="ui_model_download_failed" formatted="false">"模型下载失败"</string>
+    <string name="ui_unable_to_create_model_directory" formatted="false">"无法创建模型目录"</string>
+    <string name="ui_download_and_select_a_subtitle_model_in_settings" formatted="false">"请先在设置 → 翻译配置中下载并选用字幕模型"</string>
+    <string name="ui_can_t_find_the_corresponding_work_and_can" formatted="false">"找不到对应的作品，无法润色"</string>
+    <string name="ui_no_audio_to_transcribe" formatted="false">"没有可转录的音频"</string>
+    <string name="ui_the_audio_track_to_which_the_subtitles_belongs" formatted="false">"字幕所属音轨无效"</string>
+    <string name="ui_the_current_audio_track_has_no_translatable_local" formatted="false">"当前音轨没有可翻译的本地字幕"</string>
+    <string name="ui_pending_local_audio_not_found" formatted="false">"找不到待处理的本地音频"</string>
+    <string name="ui_local_audio" formatted="false">"本地音频"</string>
+    <string name="ui_audio_items">"%1$s 项音频"</string>
+    <string name="ui_unknown_work_number" formatted="false">"未知作品编号"</string>
+    <string name="ui_batch_tasks" formatted="false">"批量任务"</string>
+    <string name="ui_the_current_subtitle_task_cannot_be_continued" formatted="false">"当前字幕任务不能继续"</string>
+    <string name="ui_the_subtitles_of_have_been_modified_the_current">"%1$s 的字幕已被修改，已保留当前版本，未恢复任务快照"</string>
+    <string name="ui_the_last_run_of_the_application_was_interrupted" formatted="false">"应用上次运行异常中断，请手动继续"</string>
+    <string name="ui_this_work_is_being_polished_as_a_whole" formatted="false">"该作品正在整体润色，请稍候"</string>
+    <string name="ui_please_wait_until_the_transcription_and_translation_tasks" formatted="false">"请等待该作品的转录和翻译任务全部完成后再整体润色"</string>
+    <string name="ui_this_work_is_being_polished_as_a_whole_65005b" formatted="false">"该作品正在整体润色，请等待润色完成后再重试翻译"</string>
+    <string name="ui_the_app_has_been_cleared_from_the_background" formatted="false">"应用已从后台清除，字幕任务已中断"</string>
+    <string name="ui_the_system_foreground_service_time_limit_has_expired" formatted="false">"系统前台服务时限已到，字幕任务已安全中断"</string>
+    <string name="ui_subtitle_task_deleted" formatted="false">"字幕任务已删除"</string>
+    <string name="ui_subtitle_transcription_paused_or_canceled" formatted="false">"字幕转录已暂停或取消"</string>
+    <string name="ui_japanese_voice_that_can_generate_subtitles_is_not" formatted="false">"未识别到可生成字幕的日语语音"</string>
+    <string name="ui_subtitles_have_been_modified_during_transcription_and_the" formatted="false">"字幕在转录期间已被修改，未覆盖用户版本"</string>
+    <string name="ui_subtitle_translation_source_has_been_lost" formatted="false">"字幕翻译源已丢失"</string>
+    <string name="ui_subtitles_have_been_generated_but_the_current_audio" formatted="false">"字幕已生成，但当前音频位置不支持导出 LRC 文件"</string>
+    <string name="ui_subtitles_were_generated_but_writing_to_the_audio">"字幕已生成，但写入音频目录失败：%1$s"</string>
+    <string name="ui_unknown_error" formatted="false">"未知错误"</string>
+    <string name="ui_please_turn_on_final_touch_in_settings_before" formatted="false">"请先在设置中开启“最终润色”后再执行润色"</string>
+    <string name="ui_there_are_currently_no_polished_subtitles_for_this" formatted="false">"该作品暂无可润色的字幕"</string>
+    <string name="ui_the_subtitles_for_this_work_have_been_polished" formatted="false">"已开始润色该作品字幕，完成后会自动更新"</string>
+    <string name="ui_subtitle_translation_paused_or_canceled" formatted="false">"字幕翻译已暂停或取消"</string>
+    <string name="ui_the_track_was_removed_or_moved" formatted="false">"音轨已移除或位置已变化"</string>
+    <string name="ui_subtitles_have_been_modified_during_the_task_and" formatted="false">"字幕在任务期间已被修改，已停止写入"</string>
+    <string name="ui_subtitle_translation_retries_exhausted" formatted="false">"字幕翻译重试已耗尽"</string>
+    <string name="ui_subtitle_task_failed_please_try_again" formatted="false">"字幕任务失败，请重试。"</string>
+    <string name="ui_subtitle_mission_control_request" formatted="false">"字幕任务控制请求"</string>
+    <string name="ui_transcription">"转录：%1$s %2$s%%"</string>
+    <string name="ui_translating">"翻译中 %1$s/%2$s"</string>
+    <string name="ui_waiting_for_slot">"等待槽位 %1$s"</string>
+    <string name="ui_waiting_for_network">"等待网络 %1$s"</string>
+    <string name="ui_checking_subtitle_queue" formatted="false">"正在检查字幕队列"</string>
+    <string name="ui_subtitle_task" formatted="false">"字幕任务"</string>
+    <string name="ui_open" formatted="false">"打开"</string>
+    <string name="ui_pause_all_ee002e" formatted="false">"暂停全部"</string>
+    <string name="ui_cancel_all" formatted="false">"取消全部"</string>
+    <string name="ui_subtitle_version_conflict" formatted="false">"字幕版本冲突"</string>
+    <string name="ui_high_precision" formatted="false">"高精度"</string>
+    <string name="ui_lightweight_and_fast" formatted="false">"轻量快速"</string>
+    <string name="ui_configure_your_api_key_in_settings_first">"请先在设置中配置 %1$s API Key"</string>
+    <string name="ui_full_subtitles_cannot_be_empty" formatted="false">"完整字幕不能为空"</string>
+    <string name="ui_subtitle_source_index_cannot_be_repeated" formatted="false">"字幕源索引不能重复"</string>
+    <string name="ui_tool_call_returned_by_subtitle_translation_model_is" formatted="false">"字幕翻译模型返回的工具调用缺少 id"</string>
+    <string name="ui_invalid_subtitle_parameter" formatted="false">"字幕参数无效"</string>
+    <string name="ui_transcript_search_is_not_available" formatted="false">"台本检索不可用"</string>
+    <string name="ui_the_script_reading_parameter_is_invalid" formatted="false">"台本读取参数无效"</string>
+    <string name="ui_unknown_tool">"未知工具：%1$s"</string>
+    <string name="ui_translation_stopped_after_repeated_attempts_without_new_subtitles" formatted="false">"字幕翻译连续多轮没有写入字幕，已停止，请手动重试"</string>
+    <string name="ui_work_title_cannot_be_empty" formatted="false">"作品标题不能为空"</string>
+    <string name="ui_track_list_cannot_be_empty" formatted="false">"音轨列表不能为空"</string>
+    <string name="ui_audio_track_id_cannot_be_repeated" formatted="false">"音轨 id 不能重复"</string>
+    <string name="ui_the_work_display_name_translation_output_reaches_the" formatted="false">"作品显示名翻译输出达到长度限制"</string>
+    <string name="ui_title_display_name_translation_model_returned_empty_content" formatted="false">"作品显示名翻译模型返回了空内容"</string>
+    <string name="ui_the_polish_track_list_cannot_be_empty" formatted="false">"润色音轨列表不能为空"</string>
+    <string name="ui_the_primary_key_for_polished_subtitles_cannot_be" formatted="false">"润色字幕主键不能重复"</string>
+    <string name="ui_tool_call_returned_by_polish_model_is_missing" formatted="false">"润色模型返回的工具调用缺少 id"</string>
+    <string name="ui_invalid_polish_parameter" formatted="false">"润色参数无效"</string>
+    <string name="ui_polishing_stopped_after_repeated_attempts_without_new_subtitles" formatted="false">"字幕润色连续多轮没有处理新字幕，已停止，请手动重试"</string>
+    <string name="ui_unknown_format_error" formatted="false">"未知格式错误"</string>
+    <string name="ui_subtitle_translation_model_returns_format_error">"字幕翻译模型返回格式错误：%1$s"</string>
+    <string name="ui_subtitle_translation_request_canceled" formatted="false">"字幕翻译请求已取消"</string>
+    <string name="ui_work_title_is_missing" formatted="false">"缺少 work_title"</string>
+    <string name="ui_missing_tracks_array" formatted="false">"缺少 tracks 数组"</string>
+    <string name="ui_audio_track_translation_item_is_not_an_object" formatted="false">"音轨翻译项不是对象"</string>
+    <string name="ui_audio_track_translation_item_is_missing_track_id" formatted="false">"音轨翻译项缺少 track_id"</string>
+    <string name="ui_audio_track_translation_item_is_missing_title" formatted="false">"音轨翻译项缺少 title"</string>
+    <string name="ui_track_title_cannot_be_empty_track_id">"音轨标题不能为空：track_id=%1$s"</string>
+    <string name="ui_duplicate_audio_track_translation_index_track_id">"音轨翻译索引重复：track_id=%1$s"</string>
+    <string name="ui_audio_track_translation_index_mismatch_is_missing">"音轨翻译索引不匹配：缺少 %1$s"</string>
+    <string name="ui_no_subtitles_to_polish" formatted="false">"没有可润色的字幕"</string>
+    <string name="ui_the_polish_tool_call_parameter_is_not_a" formatted="false">"润色工具调用参数不是有效 JSON 对象"</string>
+    <string name="ui_polished_items_are_not_objects" formatted="false">"润色条目不是对象"</string>
+    <string name="ui_polish_entry_is_missing_caption_id" formatted="false">"润色条目缺少 caption_id"</string>
+    <string name="ui_the_polish_entry_references_unknown_caption_id">"润色条目引用了未知 caption_id：%1$s"</string>
+    <string name="ui_polished_entry_is_missing_chinese" formatted="false">"润色条目缺少 chinese"</string>
+    <string name="ui_polish_chinese_cannot_be_empty" formatted="false">"润色 chinese 不能为空"</string>
+    <string name="ui_polish_entry_caption_id_cannot_be_repeated" formatted="false">"润色条目 caption_id 不能重复"</string>
+    <string name="ui_there_is_no_script_file_in_the_work" formatted="false">"作品目录没有台本文件"</string>
+    <string name="ui_the_script_reading_tool_parameter_is_not_a" formatted="false">"台本读取工具参数不是有效 JSON 对象"</string>
+    <string name="ui_the_script_reading_tool_is_missing_file_index" formatted="false">"台本读取工具缺少 file_index"</string>
+    <string name="ui_file_index_out_of_range">"file_index 超出范围：%1$s"</string>
+    <string name="ui_unknown_script_file_index">"未知台本文件索引：%1$s"</string>
+    <string name="ui_unable_to_read_script_file">"无法读取台本文件：%1$s"</string>
+    <string name="ui_unknown_reason" formatted="false">"未知原因"</string>
+    <string name="ui_all_subtitles_have_been_completed_no_need_to" formatted="false">"全部字幕已完成，无需继续写入"</string>
+    <string name="ui_the_subtitle_tool_call_parameters_were_truncated_and" formatted="false">"字幕工具调用参数被截断，未形成完整 JSON 对象"</string>
+    <string name="ui_the_subtitle_tool_call_parameter_is_not_a" formatted="false">"字幕工具调用参数不是有效 JSON 对象"</string>
+    <string name="ui_subtitle_group_is_not_an_object" formatted="false">"字幕组不是对象"</string>
+    <string name="ui_subtitle_group_is_missing_source_indices" formatted="false">"字幕组缺少 source_indices"</string>
+    <string name="ui_the_subtitle_group_is_missing_start_ms" formatted="false">"字幕组缺少 start_ms"</string>
+    <string name="ui_the_subtitle_group_is_missing_end_ms" formatted="false">"字幕组缺少 end_ms"</string>
+    <string name="ui_the_subtitle_group_is_missing_japanese" formatted="false">"字幕组缺少 japanese"</string>
+    <string name="ui_the_subtitle_group_is_missing_chinese" formatted="false">"字幕组缺少 chinese"</string>
+    <string name="ui_no_json_object_in_response_body" formatted="false">"响应正文中没有 JSON 对象"</string>
+    <string name="ui_unable_to_parse_json" formatted="false">"无法解析 JSON"</string>
+    <string name="ui_server_default" formatted="false">"跟随服务端"</string>
+    <string name="ui_close" formatted="false">"关闭"</string>
+    <string name="ui_on" formatted="false">"开启"</string>
+    <string name="ui_custom_openai_compatible" formatted="false">"自定义（OpenAI 兼容）"</string>
+    <string name="ui_maximum_output_tokens_must_be_a_positive_integer" formatted="false">"最大输出 Token 必须为正整数"</string>
+    <string name="ui_custom_translation_service" formatted="false">"自定义翻译服务"</string>
+    <string name="ui_the_api_key_contains_invalid_characters" formatted="false">"API Key 包含无效字符"</string>
+    <string name="ui_configure_a_custom_translation_model_in_settings_first" formatted="false">"请先在设置中配置自定义翻译模型"</string>
+    <string name="ui_enter_a_valid_http_or_https_api_url" formatted="false">"请输入有效的 HTTP 或 HTTPS API 地址"</string>
+    <string name="ui_enter_a_valid_api_url" formatted="false">"请输入有效的 API 地址"</string>
+    <string name="ui_the_api_url_cannot_include_credentials_query_parameters" formatted="false">"API 地址不能包含账号、密码、查询参数或片段"</string>
+    <string name="ui_configure_a_custom_translation_service_first" formatted="false">"请先配置自定义翻译服务"</string>
+    <string name="ui_unable_to_save_translation_service" formatted="false">"翻译服务保存失败"</string>
+    <string name="ui_select_a_deepseek_model" formatted="false">"请选择 DeepSeek 模型"</string>
+    <string name="ui_unable_to_save_deepseek_model" formatted="false">"DeepSeek 模型保存失败"</string>
+    <string name="ui_unable_to_save_translation_settings" formatted="false">"翻译配置保存失败"</string>
+    <string name="ui_enter_an_api_key_first" formatted="false">"请先输入 API Key"</string>
+    <string name="ui_model_list_authentication_failed_check_your_api_key" formatted="false">"模型列表认证失败，请检查 API Key"</string>
+    <string name="ui_this_service_does_not_provide_a_model_list" formatted="false">"此服务不支持模型列表，可手动输入模型"</string>
+    <string name="ui_unable_to_fetch_model_list">"模型列表拉取失败（%1$s）"</string>
+    <string name="ui_invalid_model_list_format" formatted="false">"模型列表格式无效"</string>
+    <string name="ui_this_service_returned_no_available_models" formatted="false">"此服务未返回可用模型"</string>
+    <string name="ui_google_has_detected_abnormal_traffic_on_the_current" formatted="false">"Google 检测到当前网络异常流量，请检查代理或稍后再试"</string>
+    <string name="ui_the_translation_service_is_temporarily_limited_please_try" formatted="false">"翻译服务暂时限流，请稍后重试"</string>
+    <string name="ui_translation_service_is_temporarily_unavailable">"翻译服务暂不可用（%1$s）"</string>
+    <string name="ui_the_translation_service_returned_invalid_content_please_try" formatted="false">"翻译服务返回了无效内容，请稍后重试"</string>
+    <string name="ui_page_translation_failed_please_check_the_network_and" formatted="false">"页面翻译失败，请检查网络后重试"</string>
+    <string name="ui_page_translation_failed_please_try_again_later" formatted="false">"页面翻译失败，请稍后重试"</string>
+    <string name="ui_show_original" formatted="false">"显示原文"</string>
+    <string name="ui_translate_page" formatted="false">"翻译页面"</string>
+    <string name="ui_translating_8ccb0c" formatted="false">"正在翻译"</string>
+    <string name="ui_original" formatted="false">"原文"</string>
+    <string name="ui_translation_failed" formatted="false">"翻译失败"</string>
+    <string name="ui_translation_enabled" formatted="false">"已开启翻译"</string>
+    <string name="ui_dlsite_account" formatted="false">"DLsite 账号"</string>
+    <string name="ui_used_for_purchased_search_authentication" formatted="false">"用于「已购」搜索鉴权"</string>
+    <string name="ui_manage" formatted="false">"管理"</string>
+    <string name="ui_log_in" formatted="false">"登录"</string>
+    <string name="ui_logged_in" formatted="false">"已登录"</string>
+    <string name="ui_not_logged_in" formatted="false">"未登录"</string>
+    <string name="ui_total_duration" formatted="false">"总时长"</string>
+    <string name="ui_audio_track" formatted="false">"音轨"</string>
+    <string name="ui_active_days" formatted="false">"活跃天数"</string>
+    <string name="ui_flow" formatted="false">"流量"</string>
+    <string name="ui_listening_popularity" formatted="false">"收听热度"</string>
+    <string name="ui_there_are_no_listening_records_yet_go_and" formatted="false">"还没有收听记录，去听点什么吧～"</string>
+    <string name="ui_years">"%1$s 年"</string>
+    <string name="ui_few" formatted="false">"少"</string>
+    <string name="ui_many" formatted="false">"多"</string>
+    <string name="ui_there_are_no_listening_records_for_this_day" formatted="false">"这一天没有收听记录"</string>
+    <string name="ui_unknown_works" formatted="false">"未知作品"</string>
+    <string name="ui_compared_to">"相比%1$s"</string>
+    <string name="ui_listen_today" formatted="false">"今日收听"</string>
+    <string name="ui_listen_this_week" formatted="false">"本周收听"</string>
+    <string name="ui_listen_this_month" formatted="false">"本月收听"</string>
+    <string name="ui_listen_this_year" formatted="false">"本年收听"</string>
+    <string name="ui_">"%1$s个"</string>
+    <string name="ui_days">"%1$s天"</string>
+    <string name="ui_months">"%1$s月"</string>
+    <string name="ui_day" formatted="false">"日"</string>
+    <string name="ui_week" formatted="false">"周"</string>
+    <string name="ui_moon" formatted="false">"月"</string>
+    <string name="ui_year" formatted="false">"年"</string>
+    <string name="ui_yesterday" formatted="false">"昨日"</string>
+    <string name="ui_last_week" formatted="false">"上周"</string>
+    <string name="ui_weeks_ago">"%1$s周前"</string>
+    <string name="ui_last_month" formatted="false">"上月"</string>
+    <string name="ui_months_ago">"%1$s个月前"</string>
+    <string name="ui_last_year" formatted="false">"去年"</string>
+    <string name="ui_years_ago">"%1$s年前"</string>
+    <string name="ui_month_day">"%1$s月%2$s日"</string>
+    <string name="ui_current_options" formatted="false">"当前选项"</string>
+    <string name="ui_optional" formatted="false">"可选项"</string>
+    <string name="ui_site_status_test" formatted="false">"站点状态测试"</string>
+    <string name="ui_preferred_source" formatted="false">"资源站点优先级"</string>
+    <string name="ui_prefer">"%1$s 优先"</string>
+    <string name="ui_the_current_volume_to_be_adjusted_to_has">"当前要调整到 %1$s%% 音量，已经超过 40%%，可能造成听力损伤。确认后，本次启动内不再重复提示。"</string>
+    <string name="ui_confirm" formatted="false">"确认"</string>
+    <string name="ui_online" formatted="false">"在线"</string>
+    <string name="ui_local" formatted="false">"本地"</string>
+    <string name="ui_back" formatted="false">"返回"</string>
+    <string name="ui_create" formatted="false">"创建"</string>
+    <string name="ui_custom" formatted="false">"自定义"</string>
+    <string name="ui_reset" formatted="false">"重置"</string>
+    <string name="ui_sound_effector" formatted="false">"音效器"</string>
+    <string name="ui_volume_threshold" formatted="false">"音量阈值"</string>
+    <string name="ui_model" formatted="false">"模式"</string>
+    <string name="ui_loudness_equalization_pulls_the_overall_loudness_towards_the" formatted="false">"响度均衡：把整体响度拉向目标值，适合不同音频之间的音量统一；阈值：把响度限制在一个区间，更像自动增益+压制。"</string>
+    <string name="ui_loudness_equalization" formatted="false">"响度均衡"</string>
+    <string name="ui_threshold" formatted="false">"阈值"</string>
+    <string name="ui_target_loudness" formatted="false">"目标响度"</string>
+    <string name="ui_gradually_pull_the_playback_loudness_towards_the_target" formatted="false">"把播放响度逐步拉向该目标值（变化更平滑，更适合不同音频之间的统一）。建议范围：-24 到 -14。"</string>
+    <string name="ui_minimum_threshold" formatted="false">"最小阈值"</string>
+    <string name="ui_when_the_volume_is_lower_than_this_value" formatted="false">"当音量低于该值时，会自动放大到接近该阈值。"</string>
+    <string name="ui_maximum_threshold" formatted="false">"最大阈值"</string>
+    <string name="ui_when_the_volume_is_higher_than_this_value" formatted="false">"当音量高于该值时，会自动压制到不超过该阈值。"</string>
+    <string name="ui_scene_effects" formatted="false">"场景效果"</string>
+    <string name="ui_scene_preset" formatted="false">"场景预设"</string>
+    <string name="ui_simulate_common_spaces_or_transmission_media_through_band" formatted="false">"通过带限、声场收窄和延迟反射来模拟常见空间或传输介质。推荐先选预设，再微调强度。"</string>
+    <string name="ui_default" formatted="false">"预设"</string>
+    <string name="ui_effect_intensity" formatted="false">"效果强度"</string>
+    <string name="ui_the_higher_the_intensity_the_more_obvious_the" formatted="false">"强度越高，场景特征越明显。像电话音、被窝闷声这类预设在高强度下会更有辨识度。"</string>
+    <string name="ui_variable_speed_and_pitch" formatted="false">"变速变调"</string>
+    <string name="ui_play_speed" formatted="false">"播放速度"</string>
+    <string name="ui_the_bigger_it_is_the_faster_it_plays" formatted="false">"越大播放越快（影响节奏与时长）。"</string>
+    <string name="ui_tone" formatted="false">"音调"</string>
+    <string name="ui_the_larger_the_pitch_the_higher_the_pitch" formatted="false">"越大音高越高、越小音高越低（不一定改变播放时长）。"</string>
+    <string name="ui_stereo" formatted="false">"立体声"</string>
+    <string name="ui_sound_source_distance" formatted="false">"声源距离"</string>
+    <string name="ui_the_sound_will_be_softer_and_slightly_attenuated" formatted="false">"距离越远，声音会更柔和并略有衰减。"</string>
+    <string name="ui_sound_source_direction" formatted="false">"声源方向"</string>
+    <string name="ui_0_is_centered_90_is_to_the_right" formatted="false">"0°为居中，90°偏右，270°偏左。"</string>
+    <string name="ui_sound_source_automatically_surrounds" formatted="false">"声源自动环绕"</string>
+    <string name="ui_when_turned_on_the_sound_and_image_will" formatted="false">"开启后，声像会按速度自动移动。"</string>
+    <string name="ui_orbital_speed" formatted="false">"环绕速度"</string>
+    <string name="ui_the_higher_the_speed_the_faster_the_sound" formatted="false">"速度越大，声像移动越快。"</string>
+    <string name="ui_left_and_right_balance" formatted="false">"左右平衡"</string>
+    <string name="ui_shift_the_overall_sound_to_the_left_or" formatted="false">"把整体声音偏向左或右声道。与“声源方向/自动环绕”互斥。"</string>
+    <string name="ui_left_bias">"左偏 %1$s%%"</string>
+    <string name="ui_rightward">"右偏 %1$s%%"</string>
+    <string name="ui_center" formatted="false">"居中"</string>
+    <string name="ui_channel_mode" formatted="false">"声道模式"</string>
+    <string name="ui_invert_swap_left_and_right_channels_clone_copy" formatted="false">"反转：交换左右声道；克隆：把一侧声道复制到另一侧。"</string>
+    <string name="ui_normal" formatted="false">"正常"</string>
+    <string name="ui_reverse" formatted="false">"反转"</string>
+    <string name="ui_clone_l_r" formatted="false">"克隆 L→R"</string>
+    <string name="ui_clone_r_l" formatted="false">"克隆 R→L"</string>
+    <string name="ui_equalizer" formatted="false">"均衡器"</string>
+    <string name="ui_default_c8d09c" formatted="false">"默认"</string>
+    <string name="ui_frequency_band_adjustment" formatted="false">"频段调节"</string>
+    <string name="ui_each_slider_corresponds_to_a_center_frequency_band" formatted="false">"每个滑条对应一个中心频段。向上提升、向下削减该频段的能量。"</string>
+    <string name="ui_save_as_custom_preset" formatted="false">"保存为自定义预设"</string>
+    <string name="ui_please_enter_a_custom_preset_name" formatted="false">"请输入自定义预设名称。"</string>
+    <string name="ui_default_name" formatted="false">"预设名称"</string>
+    <string name="ui_save" formatted="false">"保存"</string>
+    <string name="ui_saved_to_album" formatted="false">"已保存到相册"</string>
+    <string name="ui_failed_to_save_to_album" formatted="false">"保存到相册失败"</string>
+    <string name="ui_storage_permission_is_required_to_save_to_album" formatted="false">"需要存储权限才能保存到相册"</string>
+    <string name="ui_unable_to_open_path_is_empty" formatted="false">"无法打开：路径为空"</string>
+    <string name="ui_open_picture" formatted="false">"打开图片"</string>
+    <string name="ui_no_app_found_to_open" formatted="false">"未找到可打开的应用"</string>
+    <string name="ui_file_does_not_exist" formatted="false">"文件不存在"</string>
+    <string name="ui_the_image_cannot_be_opened" formatted="false">"无法打开该图片"</string>
+    <string name="ui_open_with_another_app" formatted="false">"使用其他应用打开"</string>
+    <string name="ui_save_to_album" formatted="false">"保存到相册"</string>
+    <string name="ui_image_loading_failed" formatted="false">"图片加载失败"</string>
+    <string name="ui_proxy_settings" formatted="false">"代理设置"</string>
+    <string name="ui_host_or_ip" formatted="false">"主机或 IP"</string>
+    <string name="ui_port" formatted="false">"端口"</string>
+    <string name="ui_account_password_authentication" formatted="false">"账户密码认证"</string>
+    <string name="ui_username" formatted="false">"用户名"</string>
+    <string name="ui_password_saved" formatted="false">"密码（已保存）"</string>
+    <string name="ui_password" formatted="false">"密码"</string>
+    <string name="ui_leave_blank_to_continue_using_encrypted_saved_passwords" formatted="false">"留空将继续使用已加密保存的密码"</string>
+    <string name="ui_the_password_will_be_encrypted_and_saved_locally" formatted="false">"密码会使用 Android Keystore 加密保存在本机"</string>
+    <string name="ui_apply_advanced_proxy" formatted="false">"应用高级代理"</string>
+    <string name="ui_current_agent">"当前代理：%1$s"</string>
+    <string name="ui_dns_service" formatted="false">"DNS 服务"</string>
+    <string name="ui_dns_server_ip" formatted="false">"DNS 服务器 IP"</string>
+    <string name="ui_apply_dns" formatted="false">"应用 DNS"</string>
+    <string name="ui_clear_settings_and_use_system_dns" formatted="false">"清除设置并使用系统 DNS"</string>
+    <string name="ui_current_dns">"当前 DNS：%1$s"</string>
+    <string name="ui_system_vpn" formatted="false">"系统/VPN"</string>
+    <string name="ui_account_password" formatted="false">"（账户密码）"</string>
+    <string name="ui_system_dns" formatted="false">"系统 DNS"</string>
+    <string name="ui_image_source_is_empty" formatted="false">"图片来源为空"</string>
+    <string name="ui_image_path_is_invalid" formatted="false">"图片路径无效"</string>
+    <string name="ui_unable_to_create_image_sharing_cache" formatted="false">"无法创建图片分享缓存"</string>
+    <string name="ui_unable_to_update_image_sharing_cache" formatted="false">"无法更新图片分享缓存"</string>
+    <string name="ui_image_download_failed_http">"图片下载失败：HTTP %1$s"</string>
+    <string name="ui_image_download_result_is_empty" formatted="false">"图片下载结果为空"</string>
+    <string name="ui_unable_to_read_image" formatted="false">"无法读取图片"</string>
+    <string name="ui_unable_to_create_album_file" formatted="false">"无法创建相册文件"</string>
+    <string name="ui_unable_to_write_to_album_file" formatted="false">"无法写入相册文件"</string>
+    <string name="ui_unable_to_create_album_directory" formatted="false">"无法创建相册目录"</string>
+    <string name="ui_copy" formatted="false">"复制"</string>
+    <string name="ui_paste" formatted="false">"粘贴"</string>
+    <string name="ui_cut" formatted="false">"剪切"</string>
+    <string name="ui_select_all" formatted="false">"全选"</string>
+    <string name="ui_fail" formatted="false">"失败"</string>
+    <string name="ui_under_test" formatted="false">"测试中"</string>
+    <string name="ui_not_tested" formatted="false">"未测试"</string>
+    <string name="ui_select_site" formatted="false">"选择站点"</string>
+    <string name="ui_test" formatted="false">"测试"</string>
+    <string name="ui_no_signal_available" formatted="false">"无可用信号"</string>
+    <string name="ui_signal_strength_bars">"信号强度 %1$s 格"</string>
+    <string name="ui_subtitles" formatted="false">"字幕"</string>
+    <string name="ui_log_out" formatted="false">"退出登录"</string>
+    <string name="ui_done" formatted="false">"完成"</string>
+    <string name="ui_current_credentials" formatted="false">"当前凭证"</string>
+    <string name="ui_account_number_email" formatted="false">"账号（邮箱）"</string>
+    <string name="ui_hide" formatted="false">"隐藏"</string>
+    <string name="ui_show" formatted="false">"显示"</string>
+    <string name="ui_expiration_time">"过期时间：%1$s"</string>
+    <string name="ui_logged_out" formatted="false">"已退出登录"</string>
+    <string name="ui_login_failed" formatted="false">"登录失败"</string>
+    <string name="ui_login_successful" formatted="false">"登录成功"</string>
+    <string name="ui_there_is_already_a_download_task_for_the" formatted="false">"相同作品已有下载任务正在处理"</string>
+    <string name="ui_precise_search_by_work_number" formatted="false">"作品编号精准搜索"</string>
+    <string name="ui_no_download_tasks_yet" formatted="false">"暂无下载任务"</string>
+    <string name="ui_task_not_found">"未找到任务：%1$s"</string>
+    <string name="ui_retry_failed_items" formatted="false">"重试失败项"</string>
+    <string name="ui_pause_download_task" formatted="false">"暂停下载任务"</string>
+    <string name="ui_continue_downloading_task" formatted="false">"继续下载任务"</string>
+    <string name="ui_delete_download_task" formatted="false">"删除下载任务"</string>
+    <string name="ui_download_directory">"下载目录：%1$s · %2$s"</string>
+    <string name="ui_the_files_in_the_directory_will_be_physically">"将物理删除“%1$s”目录下的文件，且不可恢复。"</string>
+    <string name="ui_file_will_be_physically_deleted_and_cannot_be">"将物理删除文件“%1$s”，且不可恢复。"</string>
+    <string name="ui_the_subtitle_will_be_deleted_and_will_no">"将删除字幕“%1$s”，播放时不会再显示该字幕。"</string>
+    <string name="ui_subtitles_under_will_be_deleted_and_will_not">"将删除“%1$s”下的 %2$s 个字幕，播放时不会再显示这些字幕。"</string>
+    <string name="ui_delete" formatted="false">"删除"</string>
+    <string name="ui_download_task" formatted="false">"下载任务"</string>
+    <string name="ui_translation_tasks" formatted="false">"翻译任务"</string>
+    <string name="ui_no_translation_tasks_yet" formatted="false">"暂无翻译任务"</string>
+    <string name="ui_continue_subtitle_task" formatted="false">"继续字幕任务"</string>
+    <string name="ui_pause_subtitle_task" formatted="false">"暂停字幕任务"</string>
+    <string name="ui_in_polishing" formatted="false">"润色中"</string>
+    <string name="ui_polish_the_subtitles_of_this_work" formatted="false">"润色该作品字幕"</string>
+    <string name="ui_cancel_subtitle_task" formatted="false">"取消字幕任务"</string>
+    <string name="ui_delete_all_subtitles_for_this_work" formatted="false">"删除该作品的全部字幕"</string>
+    <string name="ui_under_overall_polishing" formatted="false">"整体润色中"</string>
+    <string name="ui_subtitles_156375">"%1$s 个字幕"</string>
+    <string name="ui_no_subtitles_yet" formatted="false">"暂无字幕"</string>
+    <string name="ui_collapse_task_details" formatted="false">"收起任务详情"</string>
+    <string name="ui_expand_task_details" formatted="false">"展开任务详情"</string>
+    <string name="ui_work_cover" formatted="false">"作品封面"</string>
+    <string name="ui_lines_of_subtitles">"%1$s 行字幕"</string>
+    <string name="ui_retry_subtitle_task" formatted="false">"重试字幕任务"</string>
+    <string name="ui_cancel_translation" formatted="false">"取消翻译"</string>
+    <string name="ui_retranslate" formatted="false">"重新翻译"</string>
+    <string name="ui_remove_subtitles" formatted="false">"删除字幕"</string>
+    <string name="ui_rows">"%1$s/%2$s 行"</string>
+    <string name="ui_confirmed">"已确认 %1$s/%2$s"</string>
+    <string name="ui_queue_transcription" formatted="false">"排队转录"</string>
+    <string name="ui_transcribing" formatted="false">"转录中"</string>
+    <string name="ui_japanese_text_has_been_generated_waiting_for_translation" formatted="false">"日文已生成，等待翻译"</string>
+    <string name="ui_waiting_for_translation_slot" formatted="false">"等待翻译槽位"</string>
+    <string name="ui_waiting_for_network_9267a3" formatted="false">"等待网络"</string>
+    <string name="ui_ai_is_confirming_subtitles" formatted="false">"AI 正在确认字幕"</string>
+    <string name="ui_retry_waiting_4">"重试等待 %1$s/4%2$s"</string>
+    <string name="ui_paused" formatted="false">"暂停中"</string>
+    <string name="ui_suspended" formatted="false">"已暂停"</string>
+    <string name="ui_abnormal_interruption">"异常中断%1$s"</string>
+    <string name="ui_canceling" formatted="false">"取消中"</string>
+    <string name="ui_completed" formatted="false">"已完成"</string>
+    <string name="ui_canceled" formatted="false">"已取消"</string>
+    <string name="ui_exception" formatted="false">"异常中断"</string>
+    <string name="ui_processing" formatted="false">"处理中"</string>
+    <string name="ui_downloading" formatted="false">"下载中"</string>
+    <string name="ui_waiting" formatted="false">"等待中"</string>
+    <string name="ui_local_subtitles" formatted="false">"本地字幕"</string>
+    <string name="ui_task_deleted" formatted="false">"已删除任务"</string>
+    <string name="ui_deleted_file">"已删除文件：%1$s"</string>
+    <string name="ui_the_corresponding_subtitle_task_has_been_canceled_first" formatted="false">"已先取消对应字幕任务，清理完成后可删除字幕"</string>
+    <string name="ui_failed_to_delete_subtitles" formatted="false">"删除字幕失败"</string>
+    <string name="ui_subtitles_deleted">"已删除 %1$s 个字幕"</string>
+    <string name="ui_this_audio_already_has_a_subtitle_task_that" formatted="false">"该音频已有可继续的字幕任务"</string>
+    <string name="ui_joined_the_global_translation_queue" formatted="false">"已加入全局翻译队列"</string>
+    <string name="ui_unable_to_re_translate_subtitles" formatted="false">"无法重新翻译字幕"</string>
+    <string name="ui_can_t_find_the_corresponding_work_and_can_f77a32" formatted="false">"找不到对应作品，无法润色"</string>
+    <string name="ui_unable_to_retry_subtitle_task" formatted="false">"无法重试字幕任务"</string>
+    <string name="ui_this_group_has_no_content_yet" formatted="false">"这个分组还没有内容"</string>
+    <string name="ui_are_you_sure_you_want_to_remove_from">"确定从「%1$s」移除“%2$s”吗？"</string>
+    <string name="ui_unnamed" formatted="false">"未命名"</string>
+    <string name="ui_remove" formatted="false">"移除"</string>
+    <string name="ui_are_you_sure_you_want_to_remove_the">"确定从「%1$s」移除专辑“%2$s”吗？"</string>
+    <string name="ui_audio">"%1$s 音频"</string>
+    <string name="ui_album" formatted="false">"专辑"</string>
+    <string name="ui_move_to_top" formatted="false">"移至顶部"</string>
+    <string name="ui_move_to_end" formatted="false">"移至末尾"</string>
+    <string name="ui_remove_from_group" formatted="false">"从分组移除"</string>
+    <string name="ui_removed_from_group" formatted="false">"已从分组移除"</string>
+    <string name="ui_moved_to_top" formatted="false">"已移至顶部"</string>
+    <string name="ui_moved_to_end" formatted="false">"已移至末尾"</string>
+    <string name="ui_select_group" formatted="false">"选择分组"</string>
+    <string name="ui_new_group_name" formatted="false">"新建分组名称"</string>
+    <string name="ui_there_are_currently_no_optional_groups" formatted="false">"暂无可选分组"</string>
+    <string name="ui_total_albums_songs">"共 %1$s 张专辑 · %2$s 首"</string>
+    <string name="ui_no_group_has_been_created_yet" formatted="false">"还没有创建分组"</string>
+    <string name="ui_are_you_sure_you_want_to_delete_group">"确定要删除分组“%1$s”吗？此操作不可撤销。"</string>
+    <string name="ui_please_enter_a_new_group_name" formatted="false">"请输入新分组名称。"</string>
+    <string name="ui_group_name" formatted="false">"分组名称"</string>
+    <string name="ui_please_enter_a_new_group_name_d88c11" formatted="false">"请输入新的分组名称。"</string>
+    <string name="ui_ok" formatted="false">"确定"</string>
+    <string name="ui_group_created">"已创建分组：%1$s"</string>
+    <string name="ui_group_name_already_exists">"分组名称已存在：%1$s"</string>
+    <string name="ui_deleted_group">"已删除分组：%1$s"</string>
+    <string name="ui_renamed_to">"已重命名为：%1$s"</string>
+    <string name="ui_group_name_cannot_be_empty" formatted="false">"分组名称不能为空"</string>
+    <string name="ui_group_does_not_exist" formatted="false">"分组不存在"</string>
+    <string name="ui_failed_to_add_to_group_please_try_again" formatted="false">"添加到分组失败，请重试"</string>
+    <string name="ui_added_to_group">"已添加到分组：%1$s"</string>
+    <string name="ui_days_c3304d" formatted="false">"天"</string>
+    <string name="ui_ranking_period" formatted="false">"排行时间范围"</string>
+    <string name="ui_expanded" formatted="false">"已展开"</string>
+    <string name="ui_collapsed" formatted="false">"已折叠"</string>
+    <string name="ui_frequency" formatted="false">"次数"</string>
+    <string name="ui_duration" formatted="false">"时长"</string>
+    <string name="ui_blocked_word_already_exists">"屏蔽词已存在：%1$s"</string>
+    <string name="ui_blocked_word_added">"已添加屏蔽词：%1$s"</string>
+    <string name="ui_data_loading_failed" formatted="false">"数据加载失败"</string>
+    <string name="ui_retry" formatted="false">"重试"</string>
+    <string name="ui_no_ranking_data_yet" formatted="false">"暂无排行数据"</string>
+    <string name="ui_content" formatted="false">"内容"</string>
+    <string name="ui_items_are_blocked">"%1$s 个作品被屏蔽"</string>
+    <string name="ui_fold" formatted="false">"折叠"</string>
+    <string name="ui_expand" formatted="false">"展开"</string>
+    <string name="ui_backend_not_configured" formatted="false">"后端未配置"</string>
+    <string name="ui_request_failed" formatted="false">"请求失败"</string>
+    <string name="ui_loading_failed" formatted="false">"加载失败"</string>
+    <string name="ui_100_million" formatted="false">"亿"</string>
+    <string name="ui_ten_thousand" formatted="false">"万"</string>
+    <string name="ui_1_minute" formatted="false">"&lt;1分钟"</string>
+    <string name="ui_minutes">"%1$s分钟"</string>
+    <string name="ui_billion">"%1$s亿"</string>
+    <string name="ui_million">"%1$s万"</string>
+    <string name="ui_hours">"%1$s小时"</string>
+    <string name="ui_select_file_to_download" formatted="false">"选择要下载的文件"</string>
+    <string name="ui_start_downloading" formatted="false">"开始下载"</string>
+    <string name="ui_downloaded" formatted="false">"已下载"</string>
+    <string name="ui_no_files_available_for_download" formatted="false">"没有可下载文件"</string>
+    <string name="ui_select_file_to_save" formatted="false">"选择要保存的文件"</string>
+    <string name="ui_save_to_local_library" formatted="false">"保存到本地库"</string>
+    <string name="ui_saved" formatted="false">"已保存"</string>
+    <string name="ui_no_files_to_save" formatted="false">"没有可保存文件"</string>
+    <string name="ui_selected_optional">"已选 %1$s / 可选 %2$s"</string>
+    <string name="ui_select_none" formatted="false">"全不选"</string>
+    <string name="ui_open_file" formatted="false">"打开文件"</string>
+    <string name="ui_the_file_cannot_be_opened" formatted="false">"无法打开该文件"</string>
+    <string name="ui_previous_item" formatted="false">"上一项"</string>
+    <string name="ui_next_item" formatted="false">"下一项"</string>
+    <string name="ui_exit_full_screen" formatted="false">"退出全屏"</string>
+    <string name="ui_full_screen" formatted="false">"全屏"</string>
+    <string name="ui_loading" formatted="false">"加载中..."</string>
+    <string name="ui_content_is_empty" formatted="false">"内容为空"</string>
+    <string name="ui_online_files_do_not_currently_support_content_preview" formatted="false">"在线文件暂不支持内容预览，请使用外部应用打开"</string>
+    <string name="ui_read_failed" formatted="false">"读取失败"</string>
+    <string name="ui_pdf_files_do_not_currently_support_direct_preview" formatted="false">"PDF 文件暂不支持直接预览"</string>
+    <string name="ui_please_use_an_external_application_to_open" formatted="false">"请使用外部应用打开"</string>
+    <string name="ui_preview_of_this_file_type_is_not_currently" formatted="false">"暂不支持预览该文件类型"</string>
+    <string name="ui_root_directory" formatted="false">"根目录"</string>
+    <string name="ui_directory_operations" formatted="false">"目录操作"</string>
+    <string name="ui_delete_directory" formatted="false">"删除目录"</string>
+    <string name="ui_generate_and_translate_subtitles" formatted="false">"生成并翻译字幕"</string>
+    <string name="ui_favorites_d07cee" formatted="false">"收藏"</string>
+    <string name="ui_list" formatted="false">"列表"</string>
+    <string name="ui_queue" formatted="false">"队列"</string>
+    <string name="ui_there_are_no_files_in_the_current_directory" formatted="false">"当前目录暂无文件"</string>
+    <string name="ui_items_selected">"已选 %1$s 项"</string>
+    <string name="ui_media_items">"媒体 %1$s 项"</string>
+    <string name="ui_click_on_the_file_to_increase_or_decrease" formatted="false">"点击文件可增减选择"</string>
+    <string name="ui_long_press_to_perform_batch_operations" formatted="false">"长按可批量操作"</string>
+    <string name="ui_translate_selected" formatted="false">"翻译选中"</string>
+    <string name="ui_batch_translation" formatted="false">"批量翻译"</string>
+    <string name="ui_open_by_default" formatted="false">"默认打开"</string>
+    <string name="ui_selected" formatted="false">"已选择"</string>
+    <string name="ui_remove_custom_cover" formatted="false">"取消指定封面"</string>
+    <string name="ui_set_as_cover" formatted="false">"设为封面"</string>
+    <string name="ui_more_actions" formatted="false">"更多操作"</string>
+    <string name="ui_download" formatted="false">"下载"</string>
+    <string name="ui_add_to_play_queue" formatted="false">"添加到播放队列"</string>
+    <string name="ui_add_to_my_list" formatted="false">"添加到我的列表"</string>
+    <string name="ui_tag_management" formatted="false">"标签管理"</string>
+    <string name="ui_remove_from_album" formatted="false">"从专辑移除"</string>
+    <string name="ui_import_content" formatted="false">"导入内容"</string>
+    <string name="ui_download_content" formatted="false">"下载内容"</string>
+    <string name="ui_audio_461189" formatted="false">"音频"</string>
+    <string name="ui_video" formatted="false">"视频"</string>
+    <string name="ui_picture" formatted="false">"图片"</string>
+    <string name="ui_text" formatted="false">"文本"</string>
+    <string name="ui_compressed_package" formatted="false">"压缩包"</string>
+    <string name="ui_document" formatted="false">"文档"</string>
+    <string name="ui_sheet" formatted="false">"表格"</string>
+    <string name="ui_presentation" formatted="false">"演示文稿"</string>
+    <string name="ui_code" formatted="false">"代码"</string>
+    <string name="ui_e_book" formatted="false">"电子书"</string>
+    <string name="ui_font" formatted="false">"字体"</string>
+    <string name="ui_installation_package_4f4d1a" formatted="false">"安装包"</string>
+    <string name="ui_document_49deaf" formatted="false">"文件"</string>
+    <string name="ui_online_audio" formatted="false">"在线音频"</string>
+    <string name="ui_sample_image_not_loaded" formatted="false">"样图未加载"</string>
+    <string name="ui_a_total_of_photos_click_preview_in_the">"共 %1$s 张 · 点击右上角“预览”后加载到本地"</string>
+    <string name="ui_after_obtaining_the_sample_link_you_can_click" formatted="false">"获取到样图链接后，可点击右上角“预览”加载"</string>
+    <string name="ui_one_included" formatted="false">"ONE（已收录）"</string>
+    <string name="ui_source" formatted="false">"资源站点"</string>
+    <string name="ui_refresh" formatted="false">"刷新"</string>
+    <string name="ui_not_available_on_yet">"%1$s 暂未收录"</string>
+    <string name="ui_preview" formatted="false">"预览"</string>
+    <string name="ui_no_sample_picture_yet" formatted="false">"暂无样图"</string>
+    <string name="ui_listen_preview" formatted="false">"试听 / 试看"</string>
+    <string name="ui_no_audition_preview_yet" formatted="false">"暂无试听 / 试看"</string>
+    <string name="ui_you_need_to_log_in_to_dlsite_before" formatted="false">"需要先登录 DLsite 才能使用已购播放/下载"</string>
+    <string name="ui_go_to_login" formatted="false">"去登录"</string>
+    <string name="ui_purchased_content" formatted="false">"已购内容"</string>
+    <string name="ui_log_in_switch_account" formatted="false">"登录 / 切换账号"</string>
+    <string name="ui_missing_work_number_unable_to_load" formatted="false">"缺少作品编号，无法加载"</string>
+    <string name="ui_no_playback_resources_available_yet" formatted="false">"暂无可播放资源"</string>
+    <string name="ui_subtitles_already_exist_they_will_be_overwritten_and" formatted="false">"已有字幕，将覆盖后重新生成并翻译"</string>
+    <string name="ui_the_selected_audio_already_has_a_subtitle_task" formatted="false">"所选音频已有可继续的字幕任务"</string>
+    <string name="ui_already_added_to_subtitle_task_queue" formatted="false">"已加入字幕任务队列"</string>
+    <string name="ui_unable_to_start_generating_and_translating_subtitles" formatted="false">"无法开始生成并翻译字幕"</string>
+    <string name="ui_delete_directory_9295d5" formatted="false">"删除目录？"</string>
+    <string name="ui_delete_files" formatted="false">"删除文件？"</string>
+    <string name="ui_directory_and_its_entire_contents_will_be_permanently">"将永久删除目录“%1$s”及其全部内容，同时移除关联的本地库记录。此操作不可恢复。"</string>
+    <string name="ui_and_the_online_resources_it_contains_will_be">"将从本地库目录树移除“%1$s”及其包含的在线资源。"</string>
+    <string name="ui_file_will_be_permanently_deleted_this_operation_is">"将永久删除文件“%1$s”。此操作不可恢复。"</string>
+    <string name="ui_resource_will_be_removed_from_the_local_library">"将从本地库目录树移除资源“%1$s”。"</string>
+    <string name="ui_list_of_community_works" formatted="false">"社团作品一览"</string>
+    <string name="ui_works_with_the_same_voice_actor" formatted="false">"同声优作品"</string>
+    <string name="ui_people_who_bought_this_work_also_bought_these" formatted="false">"购买了此作品的人也购买了这些作品"</string>
+    <string name="ui_select_local_audio_to_translate_first" formatted="false">"请先选择要翻译的本地音频"</string>
+    <string name="ui_no_audio_to_translate_select_local_audio_files" formatted="false">"没有可翻译的音频，请选择本地音频文件"</string>
+    <string name="ui_batch_translation_requires_local_audio_download_it_first" formatted="false">"批量翻译仅支持本地音频，请先下载音频后重试"</string>
+    <string name="ui_batch_translation_does_not_support_the_selected_audio" formatted="false">"所选音频格式暂不支持批量翻译"</string>
+    <string name="ui_no_local_tracks_to_translate_rescan_your_library" formatted="false">"未找到可翻译的本地音轨，请重新扫描本地库后重试"</string>
+    <string name="ui_experience_video" formatted="false">"体验视频"</string>
+    <string name="ui_experience_audio" formatted="false">"体验音频"</string>
+    <string name="ui_failed_to_read_local_file_status_please_try" formatted="false">"读取本地文件状态失败，请稍后重试"</string>
+    <string name="ui_set_as_default_directory_to_open" formatted="false">"已设为默认打开目录"</string>
+    <string name="ui_not_downloaded_to_local" formatted="false">"未下载到本地"</string>
+    <string name="ui_title" formatted="false">"标题"</string>
+    <string name="ui_work_id" formatted="false">"作品编号"</string>
+    <string name="ui_circle" formatted="false">"社团"</string>
+    <string name="ui_similar_works" formatted="false">"相似作品"</string>
+    <string name="ui_similar_works_failed_to_load" formatted="false">"相似作品加载失败"</string>
+    <string name="ui_there_are_currently_no_similar_works_recommended" formatted="false">"暂时没有相似作品推荐"</string>
+    <string name="ui_recommended_similar_works" formatted="false">"相似作品推荐"</string>
+    <string name="ui_people_are_listening">"%1$s 人正在听"</string>
+    <string name="ui_voice_actor" formatted="false">"声优"</string>
+    <string name="ui_label" formatted="false">"标签"</string>
+    <string name="ui_lossless_download" formatted="false">"无损下载"</string>
+    <string name="ui_group" formatted="false">"分组"</string>
+    <string name="ui_open_webpage" formatted="false">"打开网页"</string>
+    <string name="ui_simplified_chinese" formatted="false">"简中"</string>
+    <string name="ui_traditional_chinese" formatted="false">"繁中"</string>
+    <string name="ui_japanese" formatted="false">"日语"</string>
+    <string name="ui_please_enter_a_valid_work_number" formatted="false">"请输入有效的作品编号"</string>
+    <string name="ui_only_supports_manual_binding_of_work_numbers_to" formatted="false">"仅支持本地库专辑手动绑定作品编号"</string>
+    <string name="ui_finish_or_cancel_the_local_file_task_before" formatted="false">"请先完成或取消本地文件任务，再同步"</string>
+    <string name="ui_is_already_in_your_library">"本地库已存在 %1$s"</string>
+    <string name="ui_album_does_not_exist" formatted="false">"专辑不存在"</string>
+    <string name="ui_has_been_bound_and_cloud_synchronization_completed">"已绑定 %1$s 并完成云同步"</string>
+    <string name="ui_sync_failed_album_information_not_found" formatted="false">"同步失败：未找到专辑信息"</string>
+    <string name="ui_synchronization_failed_please_try_again_later" formatted="false">"同步失败，请稍后重试"</string>
+    <string name="ui_custom_cover_removed" formatted="false">"已取消指定封面"</string>
+    <string name="ui_cover_set" formatted="false">"已设置封面"</string>
+    <string name="ui_failed_to_set_cover_please_check_and_try" formatted="false">"设置封面失败，请检查后重试"</string>
+    <string name="ui_unable_to_load_jp_asmr_tracks_try_again" formatted="false">"jp-asmr 目录加载失败，请重试"</string>
+    <string name="ui_audition_refresh_failed_please_try_again_later" formatted="false">"试听刷新失败，请稍后重试"</string>
+    <string name="ui_jp_asmr_tracks_have_not_been_synced_yet" formatted="false">"jp-asmr 目录尚未同步"</string>
+    <string name="ui_dlsite_play_failed_to_load_please_try_again" formatted="false">"DLsite Play 加载失败，请稍后重试"</string>
+    <string name="ui_the_work_has_been_deleted" formatted="false">"作品已被删除"</string>
+    <string name="ui_no_matching_audio_download_link_found" formatted="false">"未找到对应音频下载链接"</string>
+    <string name="ui_unable_to_determine_dlsite_play_title_number" formatted="false">"无法确定 DLsite Play 作品编号"</string>
+    <string name="ui_it_already_exists_locally_and_has_not_been" formatted="false">"本地已存在，未重复保存"</string>
+    <string name="ui_saved_to_local_library_item_skip_existing_item">"已保存到本地库（%1$s项），跳过已存在（%2$s项）"</string>
+    <string name="ui_saved_to_local_library_item">"已保存到本地库（%1$s项）"</string>
+    <string name="ui_change_to">"将「%1$s」："</string>
+    <string name="ui_copy_to_pasteboard" formatted="false">"复制到粘贴板"</string>
+    <string name="ui_search_as_keyword" formatted="false">"作为关键词进行搜索"</string>
+    <string name="ui_create_list_as_name" formatted="false">"作为名称创建列表"</string>
+    <string name="ui_create_group_as_name" formatted="false">"作为名称创建分组"</string>
+    <string name="ui_block_as_a_block_word" formatted="false">"作为屏蔽词屏蔽"</string>
+    <string name="ui_copied">"%1$s 已复制"</string>
+    <string name="ui_pending_confirmation">"待确认 %1$s / %2$s"</string>
+    <string name="ui_cloud_synchronization_candidates_suspected_results_click_the_correspon">"云同步候选：%1$s 个疑似结果(点击对应作品以确认同步)"</string>
+    <string name="ui_current_album" formatted="false">"当前专辑"</string>
+    <string name="ui_ignore_all" formatted="false">"忽略全部"</string>
+    <string name="ui_cancel_current" formatted="false">"取消当前"</string>
+    <string name="ui_the_source_file_is_missing_download_the_online" formatted="false">"源文件已丢失，是否下载在线音源？"</string>
+    <string name="ui_source_files_for_tracks_are_missing_download_their">"其中 %1$s 个音频的源文件已丢失，是否下载这些音频的在线音源？"</string>
+    <string name="ui_download_online_audio" formatted="false">"下载在线音源"</string>
+    <string name="ui_source_c63f79" formatted="false">"来源"</string>
+    <string name="ui_search_tags" formatted="false">"搜索标签"</string>
+    <string name="ui_no_matching_tags" formatted="false">"没有匹配的标签"</string>
+    <string name="ui_search_communities" formatted="false">"搜索社团"</string>
+    <string name="ui_no_matching_groups" formatted="false">"没有匹配的社团"</string>
+    <string name="ui_search_cv" formatted="false">"搜索 CV"</string>
+    <string name="ui_no_matching_cv" formatted="false">"没有匹配的 CV"</string>
+    <string name="ui_no_filter_presets_yet" formatted="false">"暂无筛选预设"</string>
+    <string name="ui_delete_preset" formatted="false">"删除预设"</string>
+    <string name="ui_please_enter_a_filter_preset_name" formatted="false">"请输入筛选预设名称。"</string>
+    <string name="ui_please_enter_the_default_name" formatted="false">"请输入预设名称"</string>
+    <string name="ui_filter_local_library" formatted="false">"筛选本地库"</string>
+    <string name="ui_not_applied" formatted="false">"未应用"</string>
+    <string name="ui_manage_tags" formatted="false">"管理标签"</string>
+    <string name="ui_turn_off_filtering" formatted="false">"关闭筛选"</string>
+    <string name="ui_no_limit" formatted="false">"不限"</string>
+    <string name="ui_local_only" formatted="false">"仅本地"</string>
+    <string name="ui_download_only" formatted="false">"仅下载"</string>
+    <string name="ui_local_download" formatted="false">"本地+下载"</string>
+    <string name="ui_save_draft" formatted="false">"保存草稿"</string>
+    <string name="ui_application" formatted="false">"应用"</string>
+    <string name="ui_selected_f34565">"已选 %1$s"</string>
+    <string name="ui_no_filter_selected" formatted="false">"未选择筛选条件"</string>
+    <string name="ui_tag">"标签 %1$s"</string>
+    <string name="ui_society">"社团 %1$s"</string>
+    <string name="ui_exclude_tag">"排除标签 %1$s"</string>
+    <string name="ui_scanning_local_library" formatted="false">"正在扫描本地库"</string>
+    <string name="ui_cloud_sync_in_progress" formatted="false">"正在云同步"</string>
+    <string name="ui_progress">"进度 %1$s/%2$s"</string>
+    <string name="ui_scanning">"正在扫描：%1$s"</string>
+    <string name="ui_local_library_results" formatted="false">"本地库结果"</string>
+    <string name="ui_no_matching_local_content" formatted="false">"没有匹配的本地内容"</string>
+    <string name="ui_the_local_album_has_not_been_scanned_yet" formatted="false">"还没有扫描到本地专辑"</string>
+    <string name="ui_reset_filter" formatted="false">"重置筛选"</string>
+    <string name="ui_add_to_group" formatted="false">"添加到分组"</string>
+    <string name="ui_local_sync" formatted="false">"本地同步"</string>
+    <string name="ui_cloud_sync" formatted="false">"云同步"</string>
+    <string name="ui_cancel_synchronization" formatted="false">"取消同步"</string>
+    <string name="ui_the_album_will_be_removed_from_the_local" formatted="false">"将从本地库中移除该专辑，并尝试删除本地文件。"</string>
+    <string name="ui_societies_cv_tags" formatted="false">"社团 / CV / 标签..."</string>
+    <string name="ui_recently_played" formatted="false">"最近播放"</string>
+    <string name="ui_recently_joined" formatted="false">"最近加入"</string>
+    <string name="ui_album_title" formatted="false">"专辑标题"</string>
+    <string name="ui_filtering_is_enabled" formatted="false">"筛选已启用"</string>
+    <string name="ui_filtering_is_not_enabled" formatted="false">"筛选未启用"</string>
+    <string name="ui_add_to_playlist" formatted="false">"添加到播放列表"</string>
+    <string name="ui_sync_failed" formatted="false">"同步失败"</string>
+    <string name="ui_finish_or_cancel_the_local_file_task_before_8d9564">"请先完成或取消本地文件任务，再%1$s"</string>
+    <string name="ui_batch_tasks_are_being_executed_please_cancel_first">"正在执行批量任务，请先取消后再%1$s"</string>
+    <string name="ui_the_album_is_executing">"该专辑正在执行%1$s"</string>
+    <string name="ui_there_are_no_tasks_to_cancel" formatted="false">"没有可取消的任务"</string>
+    <string name="ui_task_canceled" formatted="false">"已取消任务"</string>
+    <string name="ui_the_remaining_items_to_be_confirmed_in_this" formatted="false">"已忽略本轮剩余待确认项"</string>
+    <string name="ui_scan_directory_already_exists" formatted="false">"扫描目录已存在"</string>
+    <string name="ui_this_directory_is_already_included_in_an_existing" formatted="false">"该目录已被包含在现有扫描目录中"</string>
+    <string name="ui_this_directory_contains_an_existing_scan_directory_please" formatted="false">"该目录包含了现有的扫描目录，请先移除子目录"</string>
+    <string name="ui_scan_directory_added" formatted="false">"已添加扫描目录"</string>
+    <string name="ui_refresh_local" formatted="false">"刷新本地"</string>
+    <string name="ui_scan_completed" formatted="false">"扫描完成"</string>
+    <string name="ui_scan_canceled" formatted="false">"已取消扫描"</string>
+    <string name="ui_scan_failed">"扫描失败：%1$s"</string>
+    <string name="ui_scan_target_download_directory" formatted="false">"扫描目标下载目录"</string>
+    <string name="ui_target_download_directory_scan_completed" formatted="false">"目标下载目录扫描完成"</string>
+    <string name="ui_target_directory_scan_canceled" formatted="false">"已取消目标目录扫描"</string>
+    <string name="ui_target_directory_scan_failed">"目标目录扫描失败：%1$s"</string>
+    <string name="ui_refresh_directory" formatted="false">"刷新目录"</string>
+    <string name="ui_directory_refresh_completed" formatted="false">"目录刷新完成"</string>
+    <string name="ui_refresh_canceled" formatted="false">"已取消刷新"</string>
+    <string name="ui_refresh_failed">"刷新失败：%1$s"</string>
+    <string name="ui_fully_synchronized" formatted="false">"全量同步完成"</string>
+    <string name="ui_cloud_sync_canceled" formatted="false">"已取消云同步"</string>
+    <string name="ui_cloud_sync_failed">"云同步失败：%1$s"</string>
+    <string name="ui_cloud_synchronization_completed" formatted="false">"云同步完成"</string>
+    <string name="ui_the_main_process_has_been_completed_and_items">"主流程已完成，剩余%1$s项待确认"</string>
+    <string name="ui_metadata_synchronization_successful" formatted="false">"元数据同步成功"</string>
+    <string name="ui_synchronization_failed_search_results_are_not_unique" formatted="false">"同步失败：搜索结果不唯一"</string>
+    <string name="ui_synchronization_exception">"同步异常：%1$s"</string>
+    <string name="ui_the_directory_does_not_exist_and_has_been" formatted="false">"目录不存在，已从本地库移除"</string>
+    <string name="ui_rescan_completed" formatted="false">"重扫完成"</string>
+    <string name="ui_rescan_canceled" formatted="false">"已取消重扫"</string>
+    <string name="ui_rescan_failed" formatted="false">"重扫失败"</string>
+    <string name="ui_rescan_failed_d1fca6">"重扫失败：%1$s"</string>
+    <string name="ui_a_batch_task_is_being_executed_please_cancel" formatted="false">"正在执行批量任务，请先取消后再删除"</string>
+    <string name="ui_album_deleted" formatted="false">"已删除专辑"</string>
+    <string name="ui_delete_failed">"删除失败：%1$s"</string>
+    <string name="ui_delete_failed_invalid_directory_entry_path" formatted="false">"删除失败：目录项路径无效"</string>
+    <string name="ui_unable_to_delete_directory_please_check_storage_permissions" formatted="false">"无法删除目录，请检查存储权限"</string>
+    <string name="ui_unable_to_delete_file_please_check_storage_permissions" formatted="false">"无法删除文件，请检查存储权限"</string>
+    <string name="ui_directory_deleted" formatted="false">"已删除目录"</string>
+    <string name="ui_deleted_file_918f79" formatted="false">"已删除文件"</string>
+    <string name="ui_file_deleted_and_removed" formatted="false">"已删除文件并移除"</string>
+    <string name="ui_removed_from_album" formatted="false">"已从专辑移除"</string>
+    <string name="ui_directory_authorization_address_is_invalid" formatted="false">"目录授权地址无效"</string>
+    <string name="ui_unable_to_read_directory_authorization" formatted="false">"无法读取目录授权"</string>
+    <string name="ui_unable_to_access_directory_please_re_authorize_storage" formatted="false">"无法访问目录，请重新授权存储权限"</string>
+    <string name="ui_unable_to_read_download_folder" formatted="false">"无法读取下载目录"</string>
+    <string name="ui_scan_folder_unavailable" formatted="false">"扫描目录不可用"</string>
+    <string name="ui_files_changed_during_the_scan_scan_again" formatted="false">"扫描期间文件已变化，请重新扫描"</string>
+    <string name="ui_the_scan_folder_was_moved_deleted_or_is" formatted="false">"扫描目录已移动、删除或无法访问"</string>
+    <string name="ui_unable_to_read_scan_folder" formatted="false">"无法读取扫描目录"</string>
+    <string name="ui_scan_folder_permission_expired" formatted="false">"扫描目录权限已失效"</string>
+    <string name="ui_unable_to_check_scan_folder" formatted="false">"无法读取扫描目录状态"</string>
+    <string name="ui_already_tagged" formatted="false">"已有标签"</string>
+    <string name="ui_user_tag" formatted="false">"用户标签"</string>
+    <string name="ui_not_added" formatted="false">"未添加"</string>
+    <string name="ui_click_on_user_label_to_remove" formatted="false">"点击用户标签可移除"</string>
+    <string name="ui_search_existing_tags" formatted="false">"搜索已有标签"</string>
+    <string name="ui_add_custom_labels" formatted="false">"添加自定义标签"</string>
+    <string name="ui_custom_tag_management" formatted="false">"自定义标签管理"</string>
+    <string name="ui_not_used" formatted="false">"未使用"</string>
+    <string name="ui_user_annotation" formatted="false">"用户标注"</string>
+    <string name="ui_total" formatted="false">"总计"</string>
+    <string name="ui_click_to_rename_or_delete" formatted="false">"点击可重命名或删除"</string>
+    <string name="ui_modify_the_label_name_or_delete_this_user" formatted="false">"修改标签名称，或删除这个用户标签。"</string>
+    <string name="ui_the_label_will_be_removed_from_all_user" formatted="false">"将从所有用户标注中移除该标签。"</string>
+    <string name="ui_switch" formatted="false">"切换"</string>
+    <string name="ui_jump_to_play">"跳转到 %1$s 播放"</string>
+    <string name="ui_jump_to_play_220241" formatted="false">"跳转播放"</string>
+    <string name="ui_not_played" formatted="false">"未播放"</string>
+    <string name="ui_cancel_favorites" formatted="false">"取消收藏"</string>
+    <string name="ui_sound_effects_panel" formatted="false">"音效面板"</string>
+    <string name="ui_enabled" formatted="false">"已开启"</string>
+    <string name="ui_disabled" formatted="false">"已关闭"</string>
+    <string name="ui_slice_play" formatted="false">"切片播放"</string>
+    <string name="ui_play_mode" formatted="false">"播放模式"</string>
+    <string name="ui_fast_forward_10_seconds" formatted="false">"快进10秒"</string>
+    <string name="ui_there_are_no_synchronized_lyrics_in_the_current" formatted="false">"当前音频暂无同步歌词"</string>
+    <string name="ui_long_press_to_adjust_volume" formatted="false">"长按调整音量"</string>
+    <string name="ui_volume" formatted="false">"音量"</string>
+    <string name="ui_play_queue" formatted="false">"播放队列"</string>
+    <string name="ui_first">"%1$s 首"</string>
+    <string name="ui_collapse_playlist" formatted="false">"收起播放列表"</string>
+    <string name="ui_expand_playlist" formatted="false">"展开播放列表"</string>
+    <string name="ui_play_queue_is_empty" formatted="false">"播放队列为空"</string>
+    <string name="ui_playing" formatted="false">"播放中"</string>
+    <string name="ui_clip_trimming" formatted="false">"片段裁剪"</string>
+    <string name="ui_set_as_current" formatted="false">"设为当前"</string>
+    <string name="ui_set_to_0" formatted="false">"设为 0"</string>
+    <string name="ui_set_to_end" formatted="false">"设为末尾"</string>
+    <string name="ui_manually_bind_lyrics" formatted="false">"手动绑定歌词"</string>
+    <string name="ui_add_lyrics" formatted="false">"添加歌词"</string>
+    <string name="ui_play_queue_animation_only_belongs_to_tablet_horizontal" formatted="false">"播放队列动效只属于平板横屏布局"</string>
+    <string name="ui_audio_spectrum_animation_only_belongs_to_horizontal_screen" formatted="false">"音频频谱动效只属于横屏布局"</string>
+    <string name="ui_the_current_audio_cannot_be_listened_to_together" formatted="false">"当前音频无法参与一起听"</string>
+    <string name="ui_people_are_listening_with_you" formatted="false">" 人正在和你一起听"</string>
+    <string name="ui_appreciating_loneliness" formatted="false">"孤独赏鉴中"</string>
+    <string name="ui_swipe_up_to_switch_cover_layout" formatted="false">"上滑切换封面排布"</string>
+    <string name="ui_lyrics" formatted="false">"歌词"</string>
+    <string name="ui_slice_management" formatted="false">"切片管理"</string>
+    <string name="ui_clear" formatted="false">"清空"</string>
+    <string name="ui_no_slices_yet" formatted="false">"暂无切片"</string>
+    <string name="ui_play_slice" formatted="false">"播放切片"</string>
+    <string name="ui_delete_slice" formatted="false">"删除切片"</string>
+    <string name="ui_modify_starting_point" formatted="false">"修改起点"</string>
+    <string name="ui_modify_end_point" formatted="false">"修改终点"</string>
+    <string name="ui_if_you_need_to_replace_lyrics_with_online" formatted="false">"在线音频如需替换歌词，请先下载音频到本地"</string>
+    <string name="ui_setup_successful_is_expected_to_pause_playback">"设置成功，预计%1$s暂停播放"</string>
+    <string name="ui_canceled_favorites" formatted="false">"已取消收藏"</string>
+    <string name="ui_added_to_my_favorites" formatted="false">"已添加到我的收藏"</string>
+    <string name="ui_online_audio_does_not_currently_support_tag_management" formatted="false">"在线音频暂不支持标签管理"</string>
+    <string name="ui_lyrics_added" formatted="false">"歌词已添加"</string>
+    <string name="ui_failed_to_add_lyrics" formatted="false">"歌词添加失败"</string>
+    <string name="ui_only_supports_lrc_srt_vtt_lyric_files" formatted="false">"仅支持 LRC、SRT、VTT 歌词文件"</string>
+    <string name="ui_queued_items_skipped_items">"已加入队列 %1$s 项，跳过 %2$s 项"</string>
+    <string name="ui_items_have_been_added_to_the_play_queue">"已加入播放队列 %1$s 项"</string>
+    <string name="ui_the_selected_item_is_already_in_the_play" formatted="false">"所选项目已在播放队列中"</string>
+    <string name="ui_play_only_slices_is_on" formatted="false">"仅播放切片已开启"</string>
+    <string name="ui_play_only_slices_is_off" formatted="false">"仅播放切片已关闭"</string>
+    <string name="ui_slice_deleted" formatted="false">"已删除切片"</string>
+    <string name="ui_failed_to_delete_slice" formatted="false">"删除切片失败"</string>
+    <string name="ui_slice_cleared" formatted="false">"已清空切片"</string>
+    <string name="ui_failed_to_clear_slices" formatted="false">"清空切片失败"</string>
+    <string name="ui_end_time_cannot_be_earlier_than_start_time" formatted="false">"结束时间不能早于开始时间"</string>
+    <string name="ui_the_slice_overlaps_an_existing_slice" formatted="false">"切片与已有切片重叠"</string>
+    <string name="ui_failed_to_update_slice" formatted="false">"更新切片失败"</string>
+    <string name="ui_there_are_currently_no_tracks_to_play" formatted="false">"暂无可播放曲目"</string>
+    <string name="ui_unable_to_get_duration" formatted="false">"无法获取时长"</string>
+    <string name="ui_the_starting_point_falls_within_an_existing_slice" formatted="false">"起点落在已有切片内"</string>
+    <string name="ui_starting_point_marked" formatted="false">"已标记起点"</string>
+    <string name="ui_slice_created" formatted="false">"已创建切片"</string>
+    <string name="ui_failed_to_create_slice" formatted="false">"创建切片失败"</string>
+    <string name="ui_single_loop" formatted="false">"单曲循环"</string>
+    <string name="ui_shuffle" formatted="false">"随机播放"</string>
+    <string name="ui_list_loop" formatted="false">"列表循环"</string>
+    <string name="ui_play_mode_2a61bc">"播放模式：%1$s"</string>
+    <string name="ui_no_playable_audio_track_found" formatted="false">"未找到可播放的音轨"</string>
+    <string name="ui_player_not_connected" formatted="false">"播放器未连接"</string>
+    <string name="ui_current_play_queue" formatted="false">"当前播放队列"</string>
+    <string name="ui_remaining">"剩余 %1$s"</string>
+    <string name="ui_no_scheduled_shutdown_is_set" formatted="false">"未设置定时关闭"</string>
+    <string name="ui_scheduled_shutdown" formatted="false">"定时关闭"</string>
+    <string name="ui_enter_the_number_of_minutes" formatted="false">"输入分钟数"</string>
+    <string name="ui_cancel_timer" formatted="false">"取消定时"</string>
+    <string name="ui_enter_the_number_of_minutes_for_the_scheduled" formatted="false">"输入定时关闭的分钟数。"</string>
+    <string name="ui_your_favorites_will_appear_here" formatted="false">"收藏的内容会在这里出现"</string>
+    <string name="ui_this_list_has_no_content_yet" formatted="false">"这个列表还没有内容"</string>
+    <string name="ui_removed_from_my_list" formatted="false">"已从我的列表移除"</string>
+    <string name="ui_select_list" formatted="false">"选择列表"</string>
+    <string name="ui_new_list_name" formatted="false">"新建列表名称"</string>
+    <string name="ui_no_optional_list_yet" formatted="false">"暂无可选列表"</string>
+    <string name="ui_items_will_be_added">"将添加 %1$s 项"</string>
+    <string name="ui_total_first">"共 %1$s 首"</string>
+    <string name="ui_no_list_created_yet" formatted="false">"还没有创建列表"</string>
+    <string name="ui_are_you_sure_you_want_to_delete_list">"确定要删除列表“%1$s”吗？此操作不可撤销。"</string>
+    <string name="ui_please_enter_a_new_list_name" formatted="false">"请输入新列表名称。"</string>
+    <string name="ui_please_enter_a_list_name" formatted="false">"请输入列表名称"</string>
+    <string name="ui_please_enter_a_new_list_name_761c9f" formatted="false">"请输入新的列表名称。"</string>
+    <string name="ui_playlist_created">"已创建播放列表：%1$s"</string>
+    <string name="ui_list_name_already_exists">"列表名称已存在：%1$s"</string>
+    <string name="ui_deleted_playlist">"已删除播放列表：%1$s"</string>
+    <string name="ui_list_name_cannot_be_empty" formatted="false">"列表名称不能为空"</string>
+    <string name="ui_list_does_not_exist" formatted="false">"列表不存在"</string>
+    <string name="ui_failed_to_add_to_favorites_please_try_again" formatted="false">"添加到收藏失败，请重试"</string>
+    <string name="ui_failed_to_add_to_list_please_try_again" formatted="false">"添加到列表失败，请重试"</string>
+    <string name="ui_added_items_to_skipping_items">"已添加 %1$s 项到%2$s，跳过 %3$s 项"</string>
+    <string name="ui_added_items_to">"已添加 %1$s 项到%2$s"</string>
+    <string name="ui_the_selected_item_is_already_in">"所选项目已在%1$s"</string>
+    <string name="ui_search_history" formatted="false">"搜索历史"</string>
+    <string name="ui_clear_search_history" formatted="false">"清空搜索历史"</string>
+    <string name="ui_no_search_history_yet" formatted="false">"还没有搜索记录"</string>
+    <string name="ui_popular_voice_actors" formatted="false">"热门声优"</string>
+    <string name="ui_popular_tags" formatted="false">"热门标签"</string>
+    <string name="ui_guess_you_like" formatted="false">"猜你喜欢"</string>
+    <string name="ui_recommended" formatted="false">"推荐中"</string>
+    <string name="ui_change_a_batch" formatted="false">"换一批"</string>
+    <string name="ui_already_finished_reading" formatted="false">"已看完"</string>
+    <string name="ui_clear_search_history_334950" formatted="false">"是否清空历史搜索记录？"</string>
+    <string name="ui_recommended_works" formatted="false">"推荐作品"</string>
+    <string name="ui_chinese_works" formatted="false">"中文作品"</string>
+    <string name="ui_all_works" formatted="false">"全部作品"</string>
+    <string name="ui_pre_sale" formatted="false">"预售"</string>
+    <string name="ui_purchased" formatted="false">"已购"</string>
+    <string name="ui_search_albums_circles_voice_actors" formatted="false">"搜索专辑、社团、CV..."</string>
+    <string name="ui_the_search_is_being_processed_please_try_again" formatted="false">"搜索处理中，请稍后再试"</string>
+    <string name="ui_pull_down_to_refresh" formatted="false">"下拉刷新"</string>
+    <string name="ui_release_to_refresh" formatted="false">"松手刷新"</string>
+    <string name="ui_refreshing" formatted="false">"正在刷新"</string>
+    <string name="ui_no_search_results_yet" formatted="false">"还没有搜索结果"</string>
+    <string name="ui_no_matching_results_found" formatted="false">"没有找到匹配结果"</string>
+    <string name="ui_there_s_something_wrong_with_the_network_connection" formatted="false">"网络连接出了点问题"</string>
+    <string name="ui_pull_up_next_page" formatted="false">"上拉下一页"</string>
+    <string name="ui_let_go_and_turn_the_page" formatted="false">"松手翻页"</string>
+    <string name="ui_turning_pages" formatted="false">"正在翻页"</string>
+    <string name="ui_the_current_scope_does_not_support_work_filtering" formatted="false">"当前范围不支持作品筛选"</string>
+    <string name="ui_item_filtering_is_not_enabled" formatted="false">"未启用作品筛选"</string>
+    <string name="ui_1_item_filter_enabled" formatted="false">"已启用 1 项作品筛选"</string>
+    <string name="ui_2_item_filters_enabled" formatted="false">"已启用 2 项作品筛选"</string>
+    <string name="ui_work_screening" formatted="false">"作品筛选"</string>
+    <string name="ui_with_subtitles" formatted="false">"有字幕"</string>
+    <string name="ui_all_ages" formatted="false">"全年龄"</string>
+    <string name="ui_language_of_work" formatted="false">"作品语言"</string>
+    <string name="ui_app_language" formatted="false">"跟随应用"</string>
+    <string name="ui_filtered" formatted="false">"已筛选"</string>
+    <string name="ui_unfiltered" formatted="false">"未筛选"</string>
+    <string name="ui_return_to_first_page" formatted="false">"回到第一页"</string>
+    <string name="ui_previous_page" formatted="false">"上一页"</string>
+    <string name="ui_page">"第 %1$s 页"</string>
+    <string name="ui_next_page" formatted="false">"下一页"</string>
+    <string name="ui_popularity_order" formatted="false">"人气顺序"</string>
+    <string name="ui_latest_sale" formatted="false">"最新发售"</string>
+    <string name="ui_highest_sales_volume" formatted="false">"销量最高"</string>
+    <string name="ui_highest_price" formatted="false">"价格最高"</string>
+    <string name="ui_latest_collection" formatted="false">"最新收录"</string>
+    <string name="ui_top_rated" formatted="false">"评分最高"</string>
+    <string name="ui_please_log_in_to_dlsite_before_using_purchased" formatted="false">"请先登录 DLsite 后再使用\"已购\"搜索"</string>
+    <string name="ui_search_canceled_please_try_again" formatted="false">"搜索已取消，请重试"</string>
+    <string name="ui_search_failed_please_try_again_later" formatted="false">"搜索失败，请稍后重试"</string>
+    <string name="ui_connection_timed_out_please_try_again_later" formatted="false">"连接超时，请稍后重试"</string>
+    <string name="ui_network_connection_failed_please_check_the_network_and" formatted="false">"网络连接失败，请检查网络后重试"</string>
+    <string name="ui_login_has_expired_please_log_in_again" formatted="false">"登录已过期，请重新登录"</string>
+    <string name="ui_access_is_restricted_please_try_again_later" formatted="false">"访问受限，请稍后再试"</string>
+    <string name="ui_request_failed_please_try_again_later" formatted="false">"请求失败，请稍后重试"</string>
+    <string name="ui_access_is_restricted_or_risk_control_is_triggered" formatted="false">"访问受限或触发风控，请稍后再试"</string>
+    <string name="ui_collected_works" formatted="false">"已收录作品"</string>
+    <string name="ui_saving_failed_please_try_again_later" formatted="false">"保存失败，请稍后重试"</string>
+    <string name="ui_page_translation" formatted="false">"页面翻译"</string>
+    <string name="ui_page_translation_cache_cleared" formatted="false">"页面翻译缓存已清空"</string>
+    <string name="ui_clearing_failed_please_try_again_later" formatted="false">"清空失败，请稍后重试"</string>
+    <string name="ui_clear_page_translation_cache" formatted="false">"清空页面翻译缓存"</string>
+    <string name="ui_clearing" formatted="false">"正在清空"</string>
+    <string name="ui_target_language" formatted="false">"目标语言"</string>
+    <string name="ui_translate_pages_automatically" formatted="false">"自动翻译页面"</string>
+    <string name="ui_collected" formatted="false">"已收起"</string>
+    <string name="ui_manage_scan_directories_refresh_local_content_and_synchronize" formatted="false">"管理扫描目录、刷新本地内容与同步元数据"</string>
+    <string name="ui_blocked_keywords" formatted="false">"屏蔽词"</string>
+    <string name="ui_filter_keywords_you_don_t_want_to_see" formatted="false">"过滤搜索结果中不想看到的关键词"</string>
+    <string name="ui_appearance" formatted="false">"外观"</string>
+    <string name="ui_adjust_theme_theme_color_and_playback_page_background" formatted="false">"调整主题、主题色与播放页背景"</string>
+    <string name="ui_playback" formatted="false">"播放设置"</string>
+    <string name="ui_manage_audio_output_and_fades" formatted="false">"管理音频输出与淡入淡出"</string>
+    <string name="ui_configure_the_display_effect_of_lyrics_page_and" formatted="false">"配置歌词页与悬浮歌词的显示效果"</string>
+    <string name="ui_language_and_translation" formatted="false">"语言和翻译"</string>
+    <string name="ui_manage_page_translation_subtitle_models_and_translation_apis" formatted="false">"管理页面翻译、字幕模型与翻译 API"</string>
+    <string name="ui_services_and_proxy" formatted="false">"服务状态与代理"</string>
+    <string name="ui_test_service_connectivity_and_configure_proxy_and_dns" formatted="false">"测试服务连通性并配置代理与 DNS"</string>
+    <string name="ui_app_cache" formatted="false">"APP 缓存"</string>
+    <string name="ui_set_cache_capacity_limit_and_clear_cache" formatted="false">"设置缓存容量上限并清理缓存"</string>
+    <string name="ui_about" formatted="false">"关于"</string>
+    <string name="ui_view_version_information_and_check_for_app_updates" formatted="false">"查看版本信息并检查应用更新"</string>
+    <string name="ui_unable_to_obtain_read_and_write_permissions_for" formatted="false">"无法获取下载目录读写权限"</string>
+    <string name="ui_download_catalog" formatted="false">"下载目录"</string>
+    <string name="ui_select_directory" formatted="false">"选择目录"</string>
+    <string name="ui_reset_default" formatted="false">"重置默认"</string>
+    <string name="ui_add_directory" formatted="false">"添加目录"</string>
+    <string name="ui_album_456ccf">"专辑 %1$s/%2$s：%3$s"</string>
+    <string name="ui_directory_added" formatted="false">"已添加目录"</string>
+    <string name="ui_none_yet" formatted="false">"暂无"</string>
+    <string name="ui_theme_mode" formatted="false">"主题模式"</string>
+    <string name="ui_system" formatted="false">"系统"</string>
+    <string name="ui_light_color" formatted="false">"浅色"</string>
+    <string name="ui_dark" formatted="false">"深色"</string>
+    <string name="ui_soft_dark_color" formatted="false">"柔和深色"</string>
+    <string name="ui_theme_color" formatted="false">"主题色"</string>
+    <string name="ui_cover_dynamic_theme_global" formatted="false">"封面动态主题（全局）"</string>
+    <string name="ui_player_lyrics_background" formatted="false">"播放页/歌词页背景模式"</string>
+    <string name="ui_solid_color" formatted="false">"纯色"</string>
+    <string name="ui_flowing_light" formatted="false">"流光"</string>
+    <string name="ui_animated_flowing_background" formatted="false">"动态流光背景"</string>
+    <string name="ui_play_page_lyric_page_cover_background" formatted="false">"播放页/歌词页封面背景"</string>
+    <string name="ui_background_cover_preview_method" formatted="false">"背景封面预览方式"</string>
+    <string name="ui_slide" formatted="false">"滑动"</string>
+    <string name="ui_turn" formatted="false">"转动"</string>
+    <string name="ui_cover_background_clarity">"封面背景清晰度：%1$s%%"</string>
+    <string name="ui_sfw_switch" formatted="false">"SFW开关"</string>
+    <string name="ui_when_turned_on_it_will_try_to_hide" formatted="false">"开启后会尽量隐藏系统锁屏和通知栏里的媒体控制按钮，但仍保留后台播放所需的前台通知。"</string>
+    <string name="ui_system_sound_effects_some_systems_will_turn_on" formatted="false">"系统音效：部分系统会默认开启杜比全景声效果，可自行选择是否开启"</string>
+    <string name="ui_pause_playback_immediately_when_speakers_wired_bluetooth_headphones" formatted="false">"断开扬声器、有线/蓝牙耳机或蓝牙关闭时立刻暂停播放"</string>
+    <string name="ui_automatic_pause_when_output_is_disconnected" formatted="false">"输出断开自动暂停"</string>
+    <string name="ui_if_the_external_amplifier_headphone_or_bluetooth_output" formatted="false">"播放中如果外放、耳机或蓝牙输出被移除，会立刻暂停，避免声音突然外放。"</string>
+    <string name="ui_continue_playback_when_connected_to_wired_bluetooth_headphones" formatted="false">"连接有线/蓝牙耳机或其他外接输出时继续播放"</string>
+    <string name="ui_output_access_automatic_recovery" formatted="false">"输出接入自动恢复"</string>
+    <string name="ui_when_an_external_output_such_as_headphones_bluetooth" formatted="false">"检测到耳机、蓝牙耳机、USB 音频、HDMI 或 AUX 等外接输出接入时，如果播放器当前处于暂停，会自动尝试恢复播放；手机扬声器不触发。"</string>
+    <string name="ui_gradually_increase_volume_while_playing_ms">"播放时逐渐增强音量: %1$sms"</string>
+    <string name="ui_play_fade_in" formatted="false">"播放淡入"</string>
+    <string name="ui_when_you_click_play_the_volume_will_smoothly" formatted="false">"点击播放时，音量会在设定时长内从低到高平滑升到正常值。"</string>
+    <string name="ui_gradually_lower_volume_while_paused_ms">"暂停时逐渐降低音量: %1$sms"</string>
+    <string name="ui_pause_fade" formatted="false">"暂停淡出"</string>
+    <string name="ui_when_you_click_pause_the_volume_will_gradually" formatted="false">"点击暂停时，音量会在设定时长内逐渐降到 0，然后再真正暂停。"</string>
+    <string name="ui_pause_when_other_applications_play_audio_video" formatted="false">"其他应用播放音/视频时暂停"</string>
+    <string name="ui_audio_focus_paused" formatted="false">"音频焦点暂停"</string>
+    <string name="ui_pause_playback_when_another_music_or_video_app" formatted="false">"当其他音乐或视频应用抢占音频焦点时暂停播放；普通通知提示音不会触发。"</string>
+    <string name="ui_turn_on_floating_lyrics" formatted="false">"开启悬浮歌词"</string>
+    <string name="ui_unable_to_open_overlay_permission_settings" formatted="false">"无法打开悬浮窗权限设置"</string>
+    <string name="ui_suspended_lyrics_details" formatted="false">"悬浮歌词细节"</string>
+    <string name="ui_font_size">"字体大小: %1$s"</string>
+    <string name="ui_vertical_position_y_axis" formatted="false">"垂直位置 (Y轴)"</string>
+    <string name="ui_alignment" formatted="false">"对齐方式"</string>
+    <string name="ui_lyrics_color" formatted="false">"歌词颜色"</string>
+    <string name="ui_click_to_penetrate_lock_position" formatted="false">"点击穿透(锁定位置)"</string>
+    <string name="ui_final_touches" formatted="false">"最终润色"</string>
+    <string name="ui_after_the_translation_is_completed_you_can_swipe" formatted="false">"翻译完成后，可在任务管理中左滑作品卡片，对现有中文字幕进行整体润色。此操作会额外消耗 Token。"</string>
+    <string name="ui_current_version_4f5e78">"当前版本：%1$s (%2$s)"</string>
+    <string name="ui_automatically_check_for_updates_on_startup" formatted="false">"启动时自动检查更新"</string>
+    <string name="ui_checking" formatted="false">"检查中…"</string>
+    <string name="ui_check_for_updates" formatted="false">"检查更新"</string>
+    <string name="ui_already_latest">"已是最新：%1$s"</string>
+    <string name="ui_download_and_install" formatted="false">"下载并安装"</string>
+    <string name="ui_downloading_460547">"正在下载：%1$s"</string>
+    <string name="ui_download_completed">"下载完成：%1$s"</string>
+    <string name="ui_install_updates" formatted="false">"安装更新"</string>
+    <string name="ui_the_directory_will_be_removed_from_the_list" formatted="false">"将从列表中移除该目录，后续不会再扫描它。"</string>
+    <string name="ui_after_the_switch_the_local_libraries_download_tasks" formatted="false">"切换后将清理旧目录中由 App 下载的本地库、下载任务和字幕翻译任务记录，但不会删除或移动物理文件；同一目录内手动导入的其他作品会保留。切换成功后会自动扫描新的目标目录。是否继续？"</string>
+    <string name="ui_the_cache_generated_by_online_images_online_audio" formatted="false">"将清理网络图片、在线音频播放和在线预览产生的缓存，不会删除下载内容、本地媒体或收藏数据。"</string>
+    <string name="ui_clean_up" formatted="false">"清理"</string>
+    <string name="ui_are_you_sure_you_want_to_delete_the">"确定删除“%1$s”模型？约 29 MiB 的公共运行时会保留，之后下载任一模型时无需重复安装。"</string>
+    <string name="ui_delete_model" formatted="false">"删除模型"</string>
+    <string name="ui_play_page_lyrics" formatted="false">"播放页歌词"</string>
+    <string name="ui_display_multiple_lines_in_full" formatted="false">"多行完整显示"</string>
+    <string name="ui_the_vertical_screen_classic_layout_uses_a_fixed" formatted="false">"竖屏经典布局使用固定字幕区，悬浮歌词按实际行数调整高度。超长字幕可上下滑动阅读；悬浮歌词可拖动字幕区域边缘调整位置，开启点击穿透后无法滑动。"</string>
+    <string name="ui_highlight_font_size_sp">"高亮字体大小: %1$ssp"</string>
+    <string name="ui_subtitle_translation" formatted="false">"字幕翻译"</string>
+    <string name="ui_batch_translation_requires_local_audio_a_downloaded_and" formatted="false">"批量翻译需要本地音频、已下载并选用的字幕模型，以及已保存的翻译 API 配置。"</string>
+    <string name="ui_download_online_audio_first_once_configured_tap_batch" formatted="false">"在线音频请先下载。配置完成后，在本地库作品详情中点击“批量翻译”或“翻译选中”开始；保存 API Key 不会自动创建任务。"</string>
+    <string name="ui_token_balance">"Token %1$s · 余额 %2$s"</string>
+    <string name="ui_api_key_configured" formatted="false">"API Key 已配置"</string>
+    <string name="ui_replace" formatted="false">"替换"</string>
+    <string name="ui_thinking_model" formatted="false">"思考模式"</string>
+    <string name="ui_thinking_level" formatted="false">"思考等级"</string>
+    <string name="ui_current">"%1$s · 当前"</string>
+    <string name="ui_currently_in_use" formatted="false">"当前使用"</string>
+    <string name="ui_current_not_installed" formatted="false">"当前（未安装）"</string>
+    <string name="ui_installed" formatted="false">"已安装"</string>
+    <string name="ui_not_installed" formatted="false">"未安装"</string>
+    <string name="ui_waiting_to_download_subtitle_component" formatted="false">"等待下载字幕组件"</string>
+    <string name="ui_cancel_download" formatted="false">"取消下载"</string>
+    <string name="ui_the_device_does_not_support" formatted="false">"设备不支持"</string>
+    <string name="ui_source_not_available" formatted="false">"来源不可用"</string>
+    <string name="ui_other_models_are_being_downloaded" formatted="false">"其他模型正在下载"</string>
+    <string name="ui_download_again" formatted="false">"重新下载"</string>
+    <string name="ui_download_model" formatted="false">"下载模型"</string>
+    <string name="ui_current_occupation">"当前占用：%1$s"</string>
+    <string name="ui_the_space_is_shared_by_network_pictures_online" formatted="false">"空间由网络图片、在线音频播放和在线预览缓存共享。缓存满后会优先清理较早使用的资源。"</string>
+    <string name="ui_cache_space_limit_mb">"缓存空间上限：%1$s MB"</string>
+    <string name="ui_minimum_mb">"最小 %1$s MB"</string>
+    <string name="ui_maximum_mb">"最大 %1$s MB"</string>
+    <string name="ui_cleaning_up" formatted="false">"正在清理…"</string>
+    <string name="ui_clear_app_cache" formatted="false">"清理 APP 缓存"</string>
+    <string name="ui_lyrics_page" formatted="false">"歌词页"</string>
+    <string name="ui_font_size_sp">"字体大小: %1$ssp"</string>
+    <string name="ui_font_shadow_sp">"字体阴影: %1$ssp"</string>
+    <string name="ui_line_spacing_x">"行间距: %1$sx"</string>
+    <string name="ui_display_area" formatted="false">"显示区域"</string>
+    <string name="ui_upper_1_4" formatted="false">"上1/4"</string>
+    <string name="ui_medium_1_4" formatted="false">"中1/4"</string>
+    <string name="ui_next_1_4" formatted="false">"下1/4"</string>
+    <string name="ui_block_keywords" formatted="false">"屏蔽关键词"</string>
+    <string name="ui_search_advanced_usage" formatted="false">"搜索高级用法"</string>
+    <string name="ui_add_to" formatted="false">"添加"</string>
+    <string name="ui_no_blocked_keywords_yet" formatted="false">"暂无屏蔽关键词"</string>
+    <string name="ui_knew" formatted="false">"知道了"</string>
+    <string name="ui_and_search_separated_by_spaces_rain_sound_helps" formatted="false">"和 搜索(空格分割)：「雨声 助眠」，表示同时包含指定关键词"</string>
+    <string name="ui_or_search_separated_by_vertical_lines_in_english" formatted="false">"或 搜索(英文竖线分割)：「雨声|助眠」，表示包含一个或多个指定关键词均可"</string>
+    <string name="ui_exclude_search_space_and_minus_sign_rain_sound" formatted="false">"排除 搜索(空格与减号)：「雨声 -助眠」，表示排除指定关键词"</string>
+    <string name="ui_complete_search_wrapped_in_english_double_quotes_simplified" formatted="false">"完整 搜索(英文双引号包裹)：「\"【简体中文】 雨声\"」，表示将多个词当做完整词组搜索"</string>
+    <string name="ui_block_keywords_such_as_fanfic" formatted="false">"屏蔽关键词，例如：同人"</string>
+    <string name="ui_delete_b7bef2">"删除 %1$s"</string>
+    <string name="ui_enter">"进入%1$s"</string>
+    <string name="ui_return_to_settings" formatted="false">"返回设置"</string>
+    <string name="ui_description">"%1$s说明"</string>
+    <string name="ui_off_the_background_and_cover_remain_centered_and" formatted="false">"关闭：背景与封面保持居中静止"</string>
+    <string name="ui_sliding_both_the_play_page_cover_and_lyrics" formatted="false">"滑动：播放页封面与歌词页背景都使用双指拖动预览，且会临时屏蔽左侧菜单侧滑"</string>
+    <string name="ui_rotate_preview_other_areas_of_the_cover_by" formatted="false">"转动：通过转动手机预览封面其他区域"</string>
+    <string name="ui_please_complete_or_delete_unfinished_tasks_first" formatted="false">"请先完成或删除未完成任务"</string>
+    <string name="ui_the_download_directory_has_been_switched_and_the" formatted="false">"下载目录已切换，正在扫描目标目录"</string>
+    <string name="ui_the_download_directory_is_currently_in_use" formatted="false">"当前已使用该下载目录"</string>
+    <string name="ui_failed_to_switch_download_directory" formatted="false">"切换下载目录失败"</string>
+    <string name="ui_unable_to_open_system_sound_settings" formatted="false">"无法打开系统音效设置"</string>
+    <string name="ui_unable_to_start_model_download" formatted="false">"无法开始模型下载"</string>
+    <string name="ui_api_key_failed_to_save" formatted="false">"API Key 保存失败"</string>
+    <string name="ui_unable_to_fetch_deepseek_model_list" formatted="false">"DeepSeek 模型列表拉取失败"</string>
+    <string name="ui_api_url_changed_enter_your_api_key_again" formatted="false">"API 地址已更改，请重新输入 API Key"</string>
+    <string name="ui_unable_to_fetch_model_list_7c8fa4" formatted="false">"模型列表拉取失败"</string>
+    <string name="ui_translation_settings_saved" formatted="false">"翻译配置已保存"</string>
+    <string name="ui_check_for_updates_failed" formatted="false">"检查更新失败"</string>
+    <string name="ui_download_file_is_invalid" formatted="false">"下载文件无效"</string>
+    <string name="ui_download_failed_e0dab2" formatted="false">"下载失败"</string>
+    <string name="ui_translation_service" formatted="false">"翻译服务"</string>
+    <string name="ui_api_settings" formatted="false">"API 配置"</string>
+    <string name="ui_api_url" formatted="false">"API 地址"</string>
+    <string name="ui_configured" formatted="false">"已配置"</string>
+    <string name="ui_generation_settings" formatted="false">"生成设置"</string>
+    <string name="ui_maximum_output_tokens" formatted="false">"最大输出 Token"</string>
+    <string name="ui_enter_a_positive_integer" formatted="false">"请输入正整数"</string>
+    <string name="ui_reasoning_effort" formatted="false">"思考强度"</string>
+    <string name="ui_invalid_input" formatted="false">"输入无效"</string>
+    <string name="ui_select_model" formatted="false">"选择模型"</string>
+    <string name="ui_enter_manually" formatted="false">"手动输入"</string>
+    <string name="ui_model_98fd0c" formatted="false">"模型"</string>
+    <string name="ui_fetch_models" formatted="false">"拉取模型"</string>
+    <string name="ui_model_name" formatted="false">"模型名称"</string>
+    <string name="ui_unable_to_open_installation_authorization_page" formatted="false">"无法打开安装授权页面"</string>
+    <string name="ui_unable_to_open_system_installer" formatted="false">"无法打开系统安装器"</string>
+    <string name="ui_asmr_one_request_failed_please_go_to_settings" formatted="false">"ASMR One 请求失败，请前往“设置 → 服务状态与代理”尝试切换镜像站点后重试"</string>
+    <string name="ui_the_current_site_connection_failed_please_try_switching" formatted="false">"当前站点连接失败，请尝试切换其他站点"</string>
+    <string name="ui_operation_failed_please_try_again_later" formatted="false">"操作失败，请稍后重试"</string>
+    <string name="ui_login_status_has_expired_please_log_in_again" formatted="false">"登录状态已失效，请重新登录后重试"</string>
+    <string name="ui_access_is_currently_restricted_please_try_again_later" formatted="false">"当前访问受限，请稍后再试"</string>
+    <string name="ui_no_relevant_content_found_please_check_and_try" formatted="false">"未找到相关内容，请检查后重试"</string>
+    <string name="ui_the_request_is_too_frequent_please_try_again" formatted="false">"请求过于频繁，请稍后再试"</string>
+    <string name="ui_request_timed_out_please_try_again_later" formatted="false">"请求超时，请稍后重试"</string>
+    <string name="ui_playback_failed_please_try_again_later" formatted="false">"播放失败，请稍后重试"</string>
+    <string name="ui_online_resource_loading_failed_please_try_again_later" formatted="false">"在线资源加载失败，请稍后重试"</string>
+    <string name="ui_scan_failed_please_check_directory_permissions_and_try" formatted="false">"扫描失败，请检查目录权限后重试"</string>
+    <string name="ui_refresh_failed_please_try_again_later" formatted="false">"刷新失败，请稍后重试"</string>
+    <string name="ui_deletion_failed_please_try_again_later" formatted="false">"删除失败，请稍后重试"</string>
+    <string name="ui_rescan_failed_please_check_the_directory_and_try" formatted="false">"重扫失败，请检查目录后重试"</string>
+    <string name="ui_a_local_file_task_is_running_try_again" formatted="false">"本地文件任务进行中，请稍后重试"</string>
+    <string name="ui_invalid_local_file_path" formatted="false">"本地文件路径无效"</string>
+    <string name="ui_the_local_file_was_moved_deleted_or_is" formatted="false">"本地文件已移动、删除或无法访问"</string>
+    <string name="ui_the_local_file_was_moved_or_deleted" formatted="false">"本地文件已移动或删除"</string>
+    <string name="ui_unable_to_check_local_file" formatted="false">"无法读取本地文件状态"</string>
+    <string name="ui_the_local_file_changed_during_this_task_writing" formatted="false">"本地文件在任务期间已被修改，已停止写入"</string>
+    <string name="app_language">应用语言</string>
+    <string name="follow_system">跟随系统</string>
+    <string name="ui_add_to_my_lists">添加到我的列表</string>
+    <string name="ui_album_details">专辑详情</string>
+    <string name="ui_purchased_login_required">请先登录后再使用“已购”搜索</string>
+    <string name="ui_trial_zip">试听下载 (ZIP)</string>
+    <string name="ui_translation_service_name">%1$s 翻译服务</string>
+    <string name="ui_http_message_action">%1$s。%2$s</string>
+    <string name="ui_http_message_detail_action">%1$s：%2$s。%3$s</string>
+    <string name="language_simplified_chinese">简中</string>
+    <string name="language_traditional_chinese">繁中</string>
+    <string name="language_japanese">日文</string>
+    <string name="language_english">英文</string>
+    <string name="language_russian">俄语</string>
+    <string name="language_korean">韩语</string>
+    <string name="eq_bright">清亮 (Bright)</string>
+    <string name="eq_bass_boost">低音增强 (Bass Boost)</string>
+    <string name="eq_tapping_crisp">拍打-清脆 (Tapping-Crisp)</string>
+    <string name="eq_tapping_dull">拍打-沉闷 (Tapping-Dull)</string>
+    <string name="eq_vocal">人声增强 (Vocal)</string>
+</resources>

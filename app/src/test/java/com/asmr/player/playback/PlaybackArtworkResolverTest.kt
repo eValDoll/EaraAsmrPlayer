@@ -32,7 +32,7 @@ import org.robolectric.annotation.Config
 import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
-@Config(manifest = Config.NONE, application = Application::class, sdk = [34])
+@Config(manifest = Config.NONE, application = com.asmr.player.LocalizedTestApplication::class, sdk = [34])
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class PlaybackArtworkResolverTest {
     private lateinit var context: Context

@@ -1,6 +1,5 @@
 package com.asmr.player.ui.player
 
-import android.app.Application
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
@@ -18,7 +17,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [28])
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [28])
 class PlayerSurfaceColorsTest {
 
     @Test

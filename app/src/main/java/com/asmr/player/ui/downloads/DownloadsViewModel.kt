@@ -1,5 +1,8 @@
 package com.asmr.player.ui.downloads
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.util.LocalFileScopes
 import com.asmr.player.util.LocalFileOperation
 import com.asmr.player.util.tryBeginFileMutation
@@ -248,7 +251,7 @@ class DownloadsViewModel @Inject constructor(
                 rows.groupBy { row ->
                     row.rjCode.trim()
                         .ifBlank { row.workId.trim() }
-                        .ifBlank { "未知作品编号" }
+                        .ifBlank { appString(R.string.ui_unknown_work_number) }
                 }.map { (rjCode, groupRows) ->
                     TranslationSubtitleGroupUi(
                         rjCode = rjCode,
@@ -266,7 +269,7 @@ class DownloadsViewModel @Inject constructor(
                         subtitles = groupRows.map { row ->
                             TranslationSubtitleUi(
                                 trackId = row.trackId,
-                                title = row.trackTitle.ifBlank { "本地字幕" },
+                                title = row.trackTitle.ifBlank { appString(R.string.ui_local_subtitles) },
                                 subtitleCount = row.subtitleCount
                             )
                         }
@@ -581,7 +584,7 @@ class DownloadsViewModel @Inject constructor(
                 downloadDao.deleteItemsForTask(taskId)
                 downloadDao.deleteTaskById(taskId)
                 DownloadQueueCoordinator.requestSchedule(context)
-                messageManager.showInfo("已删除任务")
+                messageManager.showInfo(appString(R.string.ui_task_deleted))
             }
             if (!deletedTask) messageManager.showInfo(LocalFileOperationCoordinator.BUSY_MESSAGE)
         }
@@ -640,7 +643,7 @@ class DownloadsViewModel @Inject constructor(
                     downloadDao.deleteTaskById(item.taskId)
                 }
                 DownloadQueueCoordinator.requestSchedule(context)
-                messageManager.showInfo("已删除文件：${item.fileName}")
+                messageManager.showInfo(appString(R.string.ui_deleted_file, item.fileName))
             }
             if (!deletedItem) messageManager.showInfo(LocalFileOperationCoordinator.BUSY_MESSAGE)
         }
@@ -657,13 +660,13 @@ class DownloadsViewModel @Inject constructor(
                     val activeItem = AppDatabaseProvider.get(context).subtitleTaskDao().getItemForTrack(trackId)
                     if (activeItem != null) {
                         subtitleTaskRepository.cancelItem(activeItem.id)
-                        messageManager.showInfo("已先取消对应字幕任务，清理完成后可删除字幕")
+                        messageManager.showInfo(appString(R.string.ui_the_corresponding_subtitle_task_has_been_canceled_first))
                         return@launch
                     }
                     trackDao.deleteSubtitlesByUser(listOf(trackId))
                 }
                     .onFailure {
-                        messageManager.showError("删除字幕失败")
+                        messageManager.showError(appString(R.string.ui_failed_to_delete_subtitles))
                     }
             } finally {
                 fileLease.close()
@@ -685,13 +688,13 @@ class DownloadsViewModel @Inject constructor(
                     val activeItems = distinctTrackIds.mapNotNull { subtitleTaskDao.getItemForTrack(it) }
                     if (activeItems.isNotEmpty()) {
                         activeItems.forEach { subtitleTaskRepository.cancelItem(it.id) }
-                        messageManager.showInfo("已先取消对应字幕任务，清理完成后可删除字幕")
+                        messageManager.showInfo(appString(R.string.ui_the_corresponding_subtitle_task_has_been_canceled_first))
                         return@launch
                     }
                     trackDao.deleteSubtitlesByUser(distinctTrackIds)
-                    messageManager.showInfo("已删除 ${distinctTrackIds.size} 个字幕")
+                    messageManager.showInfo(appString(R.string.ui_subtitles_deleted, distinctTrackIds.size))
                 }.onFailure {
-                    messageManager.showError("删除字幕失败")
+                    messageManager.showError(appString(R.string.ui_failed_to_delete_subtitles))
                 }
             } finally {
                 fileLease.close()
@@ -706,14 +709,14 @@ class DownloadsViewModel @Inject constructor(
                 val handle = subtitleTaskRepository.enqueueTranslation(
                     SubtitleTranslationTarget(
                         trackId = trackId,
-                        title = title.ifBlank { "本地字幕" }
+                        title = title.ifBlank { appString(R.string.ui_local_subtitles) }
                     )
                 )
                 messageManager.showInfo(
-                    if (handle.reusedExisting) "该音频已有可继续的字幕任务" else "已加入全局翻译队列"
+                    if (handle.reusedExisting) appString(R.string.ui_this_audio_already_has_a_subtitle_task_that) else appString(R.string.ui_joined_the_global_translation_queue)
                 )
             }.onFailure { error ->
-                showSubtitleActionFailure(error, fallback = "无法重新翻译字幕")
+                showSubtitleActionFailure(error, fallback = appString(R.string.ui_unable_to_re_translate_subtitles))
             }
         }
     }
@@ -725,7 +728,7 @@ class DownloadsViewModel @Inject constructor(
             runCatching { albumDao.getAlbumByWorkIdOnce(rjCode) }.getOrNull()
         }
         if (album == null) {
-            messageManager.showWarning("找不到对应作品，无法润色")
+            messageManager.showWarning(appString(R.string.ui_can_t_find_the_corresponding_work_and_can_f77a32))
             return@launch
         }
         val error = subtitleTaskRepository.requestAlbumPolish(album.id)
@@ -747,7 +750,7 @@ class DownloadsViewModel @Inject constructor(
     fun retrySubtitleItem(itemId: String) = viewModelScope.launch {
         runCatching { subtitleTaskRepository.retryItem(itemId) }
             .onFailure { error ->
-                showSubtitleActionFailure(error, fallback = "无法重试字幕任务")
+                showSubtitleActionFailure(error, fallback = appString(R.string.ui_unable_to_retry_subtitle_task))
             }
     }
 

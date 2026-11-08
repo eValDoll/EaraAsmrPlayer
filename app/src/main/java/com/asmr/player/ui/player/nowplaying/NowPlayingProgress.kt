@@ -1,5 +1,8 @@
 package com.asmr.player.ui.player
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
@@ -130,7 +133,7 @@ internal fun PlayerProgress(
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.ContentCut,
-                        contentDescription = "片段裁剪",
+                        contentDescription = appString(R.string.ui_clip_trimming),
                         tint = if (sliceUiState.tempStartMs != null) activeColor else colorScheme.onSurface.copy(alpha = 0.85f),
                         modifier = Modifier.size(if (compactLayout) 20.dp else 22.dp)
                     )
@@ -724,20 +727,20 @@ internal fun SliceTimeEditDialog(
                             selectedMs = if (safeDuration > 0L) v.coerceAtMost(safeDuration) else v
                             if (safeDuration > 0L) fraction = (selectedMs.toDouble() / safeDuration.toDouble()).toFloat().coerceIn(0f, 1f)
                         }
-                    ) { Text("设为当前") }
+                    ) { Text(androidx.compose.ui.res.stringResource(R.string.ui_set_as_current)) }
                     TextButton(
                         onClick = {
                             selectedMs = 0L
                             fraction = 0f
                         }
-                    ) { Text("设为 0") }
+                    ) { Text(androidx.compose.ui.res.stringResource(R.string.ui_set_to_0)) }
                     if (safeDuration > 0L) {
                         TextButton(
                             onClick = {
                                 selectedMs = safeDuration
                                 fraction = 1f
                             }
-                        ) { Text("设为末尾") }
+                        ) { Text(androidx.compose.ui.res.stringResource(R.string.ui_set_to_end)) }
                     }
                 }
             }
@@ -747,8 +750,8 @@ internal fun SliceTimeEditDialog(
                 onClick = {
                     onConfirm(selectedMs)
                 }
-            ) { Text("确定") }
+            ) { Text(androidx.compose.ui.res.stringResource(R.string.ui_ok)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(androidx.compose.ui.res.stringResource(R.string.ui_cancel)) } }
     )
 }

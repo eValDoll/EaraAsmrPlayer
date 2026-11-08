@@ -48,7 +48,7 @@ data class SearchAssistSearchRequest(
     val hasSubtitle: Boolean = false,
     val allAges: Boolean = false,
     val collectedSortName: String = SearchCollectedSortOption.ReleaseNew.name,
-    val locale: String = "ja_JP"
+    val locale: String = ""
 ) {
     val selectedOrder: SearchSortOption
         get() = SearchSortOption.values().firstOrNull { it.name == orderName } ?: SearchSortOption.Trend

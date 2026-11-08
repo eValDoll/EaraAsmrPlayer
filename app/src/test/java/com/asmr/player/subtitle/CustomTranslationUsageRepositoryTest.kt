@@ -11,7 +11,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [28])
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [28])
 class CustomTranslationUsageRepositoryTest {
     private val context = ApplicationProvider.getApplicationContext<Application>()
 

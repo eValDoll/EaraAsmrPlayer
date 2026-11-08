@@ -1,6 +1,5 @@
 package com.asmr.player.ui.common
 
-import android.app.Application
 import android.os.Looper
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.ScrollableState
@@ -25,7 +24,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [28])
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [28])
 @OptIn(ExperimentalFoundationApi::class)
 class ScrollInterruptionTest {
     @After

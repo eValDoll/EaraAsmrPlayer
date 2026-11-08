@@ -1,5 +1,8 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.i18n.appString
+import com.asmr.player.R
+
 import com.asmr.player.ui.common.AudioMetadataLine
 import com.asmr.player.ui.common.formatCvNames
 import com.asmr.player.ui.common.AudioSource
@@ -181,7 +184,7 @@ internal fun CompactDirectoryBreadcrumbContent(
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         CompactBreadcrumbNode(
-            text = "根目录",
+            text = appString(R.string.ui_root_directory),
             selected = currentPath.isBlank(),
             icon = Icons.Rounded.Home,
             onClick = { onNavigate("") }
@@ -263,7 +266,7 @@ internal fun DirectoryFolderRow(
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.MoreVert,
-                        contentDescription = "目录操作",
+                        contentDescription = appString(R.string.ui_directory_operations),
                         tint = colorScheme.textSecondary,
                         modifier = Modifier.size(20.dp)
                     )
@@ -280,7 +283,7 @@ internal fun DirectoryFolderRow(
                         modifier = Modifier.background(dynamicContainerColor)
                     ) {
                         DropdownMenuItem(
-                            text = { Text("删除目录", color = materialColorScheme.error) },
+                            text = { Text(androidx.compose.ui.res.stringResource(R.string.ui_delete_directory), color = materialColorScheme.error) },
                             onClick = {
                                 showMenuExpanded = false
                                 onDelete()
@@ -311,7 +314,7 @@ internal fun DirectoryBatchBarEmbedded(
     onOpenBatchPlaylistPicker: (List<MediaItem>) -> Unit,
     onAddMediaItemsToQueue: (List<MediaItem>) -> Unit,
     showTranslateAction: Boolean = false,
-    subtitleGenerationText: String = "生成并翻译字幕",
+    subtitleGenerationText: String = appString(R.string.ui_generate_and_translate_subtitles),
     subtitleGenerationEnabled: Boolean = false,
     onGenerateSubtitles: () -> Unit = {},
     onSubtitleGenerationUnavailable: (() -> Unit)? = null
@@ -352,13 +355,13 @@ internal fun DirectoryBatchBarEmbedded(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 DirectoryActionGroupButton(
-                    text = "收藏",
+                    text = appString(R.string.ui_favorites_d07cee),
                     icon = Icons.Rounded.FavoriteBorder,
                     enabled = hasMediaItems,
                     onClick = { onAddToFavorites(mediaItems) }
                 )
                 DirectoryActionGroupButton(
-                    text = "列表",
+                    text = appString(R.string.ui_list),
                     icon = Icons.AutoMirrored.Rounded.PlaylistAdd,
                     enabled = hasMediaItems,
                     onClick = {
@@ -368,7 +371,7 @@ internal fun DirectoryBatchBarEmbedded(
                     }
                 )
                 DirectoryActionGroupButton(
-                    text = "队列",
+                    text = appString(R.string.ui_queue),
                     icon = Icons.AutoMirrored.Rounded.PlaylistPlay,
                     enabled = hasMediaItems,
                     onClick = { onAddMediaItemsToQueue(mediaItems) }
@@ -419,7 +422,7 @@ internal fun DirectoryBrowserPanel(
     onTogglePreferredPath: ((Boolean) -> Unit)? = null,
     folderKeyPrefix: String,
     fileKeyPrefix: String,
-    emptyText: String = "当前目录暂无文件",
+    emptyText: String = appString(R.string.ui_there_are_no_files_in_the_current_directory),
     fileContent: @Composable (
         file: DirectoryFileItem,
         selectionMode: Boolean,
@@ -472,10 +475,10 @@ internal fun DirectoryBrowserPanel(
         if (selectionMode) selectedFiles.mapNotNull { it.playlistTarget } else batchTargets
     }
     val batchSummaryText = remember(selectionMode, selectedPaths.size, batchTargets.size) {
-        if (selectionMode) "已选 ${selectedPaths.size} 项" else "媒体 ${batchTargets.size} 项"
+        if (selectionMode) appString(R.string.ui_items_selected, selectedPaths.size) else appString(R.string.ui_media_items, batchTargets.size)
     }
     val batchHintText = remember(selectionMode) {
-        if (selectionMode) "点击文件可增减选择" else "长按可批量操作"
+        if (selectionMode) appString(R.string.ui_click_on_the_file_to_increase_or_decrease) else appString(R.string.ui_long_press_to_perform_batch_operations)
     }
     val showTranslateAction = if (selectionMode) {
         onGenerateSubtitlesForSelectedFiles != null
@@ -557,7 +560,7 @@ internal fun DirectoryBrowserPanel(
                     onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
                     onAddMediaItemsToQueue = onAddMediaItemsToQueue,
                     showTranslateAction = showTranslateAction,
-                    subtitleGenerationText = if (selectionMode) "翻译选中" else "批量翻译",
+                    subtitleGenerationText = if (selectionMode) appString(R.string.ui_translate_selected) else appString(R.string.ui_batch_translation),
                     subtitleGenerationEnabled = subtitleGenerationEnabled,
                     onGenerateSubtitles = onGenerateSubtitles,
                     onSubtitleGenerationUnavailable = onGenerateSubtitles
@@ -586,7 +589,7 @@ internal fun DirectoryBrowserPanel(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "默认打开",
+                            text = appString(R.string.ui_open_by_default),
                             style = MaterialTheme.typography.labelMedium,
                             color = preferredTextColor
                         )
@@ -898,7 +901,7 @@ internal fun DirectoryFileRow(
                                 if (selected) {
                                     Icon(
                                         imageVector = Icons.Rounded.Check,
-                                        contentDescription = "已选择",
+                                        contentDescription = appString(R.string.ui_selected),
                                         tint = colorScheme.primary,
                                         modifier = Modifier.size(18.dp)
                                     )
@@ -923,7 +926,7 @@ internal fun DirectoryFileRow(
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Photo,
-                                contentDescription = if (isCoverSelected) "取消指定封面" else "设为封面",
+                                contentDescription = if (isCoverSelected) appString(R.string.ui_remove_custom_cover) else appString(R.string.ui_set_as_cover),
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -937,7 +940,7 @@ internal fun DirectoryFileRow(
                             ) {
                                 Icon(
                                     imageVector = Icons.Rounded.MoreVert,
-                                    contentDescription = "更多操作",
+                                    contentDescription = appString(R.string.ui_more_actions),
                                     tint = colorScheme.textSecondary,
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -955,7 +958,7 @@ internal fun DirectoryFileRow(
                                 ) {
                                     if (showPrimaryAction) {
                                         DropdownMenuItem(
-                                            text = { Text("播放") },
+                                            text = { Text(androidx.compose.ui.res.stringResource(R.string.ui_play)) },
                                             onClick = {
                                                 onPrimary()
                                                 showMenuExpanded = false
@@ -967,7 +970,7 @@ internal fun DirectoryFileRow(
                                     }
                                     if (onDownload != null) {
                                         DropdownMenuItem(
-                                            text = { Text("下载") },
+                                            text = { Text(androidx.compose.ui.res.stringResource(R.string.ui_download)) },
                                             onClick = {
                                                 onDownload()
                                                 showMenuExpanded = false
@@ -979,7 +982,7 @@ internal fun DirectoryFileRow(
                                     }
                                     if (onAddToQueue != null) {
                                         DropdownMenuItem(
-                                            text = { Text("添加到播放队列") },
+                                            text = { Text(androidx.compose.ui.res.stringResource(R.string.ui_add_to_play_queue)) },
                                             onClick = {
                                                 onAddToQueue()
                                                 showMenuExpanded = false
@@ -991,7 +994,7 @@ internal fun DirectoryFileRow(
                                     }
                                     if (onAddToPlaylist != null) {
                                         DropdownMenuItem(
-                                            text = { Text("添加到我的列表") },
+                                            text = { Text(androidx.compose.ui.res.stringResource(R.string.ui_add_to_my_list)) },
                                             onClick = {
                                                 onAddToPlaylist()
                                                 showMenuExpanded = false
@@ -1008,7 +1011,7 @@ internal fun DirectoryFileRow(
                                             colorScheme.textTertiary
                                         }
                                         DropdownMenuItem(
-                                            text = { Text("生成并翻译字幕", color = subtitleGenerationColor) },
+                                            text = { Text(androidx.compose.ui.res.stringResource(R.string.ui_generate_and_translate_subtitles), color = subtitleGenerationColor) },
                                             onClick = {
                                                 onGenerateSubtitles()
                                                 showMenuExpanded = false
@@ -1020,7 +1023,7 @@ internal fun DirectoryFileRow(
                                     }
                                     if (onManageTags != null) {
                                         DropdownMenuItem(
-                                            text = { Text("标签管理") },
+                                            text = { Text(androidx.compose.ui.res.stringResource(R.string.ui_tag_management)) },
                                             onClick = {
                                                 onManageTags()
                                                 showMenuExpanded = false
@@ -1032,7 +1035,7 @@ internal fun DirectoryFileRow(
                                     }
                                     if (onRemoveFromAlbum != null) {
                                         DropdownMenuItem(
-                                            text = { Text("从专辑移除") },
+                                            text = { Text(androidx.compose.ui.res.stringResource(R.string.ui_remove_from_album)) },
                                             onClick = {
                                                 onRemoveFromAlbum()
                                                 showMenuExpanded = false
@@ -1044,7 +1047,7 @@ internal fun DirectoryFileRow(
                                     }
                                     if (onDelete != null) {
                                         DropdownMenuItem(
-                                            text = { Text("删除", color = materialColorScheme.error) },
+                                            text = { Text(androidx.compose.ui.res.stringResource(R.string.ui_delete), color = materialColorScheme.error) },
                                             onClick = {
                                                 onDelete()
                                                 showMenuExpanded = false

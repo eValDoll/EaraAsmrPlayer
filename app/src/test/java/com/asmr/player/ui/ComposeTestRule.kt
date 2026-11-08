@@ -17,7 +17,9 @@ fun createEaraComposeRule(): ComposeContentTestRule {
     val composeRule = createComposeRule()
     val registerActivity = object : ExternalResource() {
         override fun before() {
+            org.robolectric.RuntimeEnvironment.setQualifiers("+zh-rCN")
             val context = ApplicationProvider.getApplicationContext<Context>()
+            com.asmr.player.i18n.AppLanguage.initialize(context)
             shadowOf(context.packageManager).addActivityIfNotPresent(ComponentName(context, ComponentActivity::class.java))
         }
     }

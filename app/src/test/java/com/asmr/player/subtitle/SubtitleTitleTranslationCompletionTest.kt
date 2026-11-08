@@ -35,7 +35,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [34], manifest = Config.NONE)
+@Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [34], manifest = Config.NONE)
 class SubtitleTitleTranslationCompletionTest {
     private lateinit var database: AppDatabase
     private lateinit var repository: SubtitleTaskRepository
