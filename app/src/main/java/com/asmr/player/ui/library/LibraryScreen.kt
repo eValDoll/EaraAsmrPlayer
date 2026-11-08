@@ -164,6 +164,7 @@ import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.common.shouldFadeInCover
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.common.rememberSaveablePrefetchedLazyListState
+import com.asmr.player.ui.common.rememberSaveablePrefetchedStaggeredGridState
 import com.asmr.player.ui.library.prepared.PreparedAlbumParagraphItem
 import com.asmr.player.ui.library.prepared.PreparedAlbumParagraphs
 import com.asmr.player.ui.common.collectAsStateWhileActive
@@ -289,9 +290,7 @@ private fun LibraryScreenContent(
     }
 
     val listState = rememberSaveablePrefetchedLazyListState(stateKey = "library")
-    val gridState = rememberSaveable(saver = androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState.Saver) {
-        androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState()
-    }
+    val gridState = rememberSaveablePrefetchedStaggeredGridState(stateKey = "library")
 
     val mode = (viewMode ?: 0).coerceIn(0, 2)
     val tabletList = LocalTabletLayout.current.landscape && mode == 0

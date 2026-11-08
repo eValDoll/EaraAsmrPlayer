@@ -31,7 +31,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed as lazyItemsIndexed
-import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
@@ -82,6 +81,7 @@ import com.asmr.player.ui.common.albumStableKey
 import com.asmr.player.ui.common.lightweightVerticalStretchOverscroll
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.rememberSaveablePrefetchedLazyListState
+import com.asmr.player.ui.common.rememberSaveablePrefetchedStaggeredGridState
 import com.asmr.player.ui.library.prepared.PreparedAlbumParagraphItem
 import com.asmr.player.ui.library.prepared.PreparedAlbumParagraphs
 import com.asmr.player.ui.common.shouldFadeInCover
@@ -161,9 +161,7 @@ private fun HotListeningScreenContent(
         forwardCompositionPrefetchCount = 4,
         backwardCompositionPrefetchCount = 4,
     )
-    val gridState = rememberSaveable(contentScrollKey, saver = LazyStaggeredGridState.Saver) {
-        LazyStaggeredGridState()
-    }
+    val gridState = rememberSaveablePrefetchedStaggeredGridState(stateKey = contentScrollKey)
     val tabletList = LocalTabletLayout.current.landscape && viewMode == 0
     val activeScroll: ScrollableState = if (viewMode == 0 && !tabletList) listState else gridState
 

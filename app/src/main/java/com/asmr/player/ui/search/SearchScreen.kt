@@ -48,7 +48,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed as lazyItemsIndexed
-import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.rememberScrollState
@@ -148,6 +147,7 @@ import com.asmr.player.ui.common.consumeTapThrough
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.common.rememberSaveablePrefetchedLazyListState
+import com.asmr.player.ui.common.rememberSaveablePrefetchedStaggeredGridState
 import com.asmr.player.ui.library.prepared.PreparedAlbumParagraphItem
 import com.asmr.player.ui.library.prepared.PreparedAlbumParagraphs
 import com.asmr.player.ui.common.shouldFadeInCover
@@ -446,7 +446,7 @@ private fun SearchScreenContent(
     val success = uiState as? SearchUiState.Success
     val resultScrollKey = searchResultScrollKey(success)
     val listState = rememberSaveablePrefetchedLazyListState(stateKey = resultScrollKey)
-    val gridState = rememberSaveable(resultScrollKey, saver = LazyStaggeredGridState.Saver) { LazyStaggeredGridState() }
+    val gridState = rememberSaveablePrefetchedStaggeredGridState(stateKey = resultScrollKey)
     val tabletList = LocalTabletLayout.current.landscape && viewMode == 0
     val useSingleColumnList = viewMode == 0 && !tabletList
     val activeScroll: ScrollableState = if (useSingleColumnList) listState else gridState
