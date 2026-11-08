@@ -1,9 +1,29 @@
 package com.asmr.player.data.remote.update
 
+import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GitHubUpdateClientTest {
+    @Test
+    fun `four part hotfix version upgrades the previous release`() {
+        val client = GitHubUpdateClient(OkHttpClient(), supportedAbis = emptyList())
+
+        assertTrue(client.isNewerThanCurrent("v1.2.5.1", "1.2.5"))
+        assertFalse(client.isNewerThanCurrent("1.2.5", "1.2.5.1"))
+        assertFalse(client.isNewerThanCurrent("1.2.5.1", "1.2.5.1"))
+    }
+
+    @Test
+    fun `next patch version upgrades the hotfix release`() {
+        val client = GitHubUpdateClient(OkHttpClient(), supportedAbis = emptyList())
+
+        assertTrue(client.isNewerThanCurrent("1.2.6", "1.2.5.1"))
+        assertFalse(client.isNewerThanCurrent("1.2.5.1", "1.2.6"))
+    }
+
     @Test
     fun `prefers the device ABI before universal`() {
         val assets = listOf(
