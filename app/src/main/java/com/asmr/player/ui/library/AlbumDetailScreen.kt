@@ -498,6 +498,7 @@ fun AlbumDetailScreen(
     onAddMediaItemsToFavorites: (List<MediaItem>) -> Unit = {},
     onOpenPlaylistPicker: (MediaItem) -> Unit = {},
     onOpenDlsiteLogin: () -> Unit = {},
+    onOpenAsmrOneLogin: () -> Unit = {},
     onOpenAlbumByRj: (String, DlsiteRecommendedWork?) -> Unit = { _, _ -> },
     onSearchKeyword: (String) -> Unit = {},
     initialTab: Int? = null,
@@ -536,6 +537,7 @@ fun AlbumDetailScreen(
     var showAsmrDownloadDialog by remember { mutableStateOf(false) }
     var isPreparingDownload by remember { mutableStateOf(false) }
     var showOnlineSaveDialog by remember { mutableStateOf(false) }
+    var saveToCloud by remember { mutableStateOf(false) }
     var pendingOnlineSaveSelection by remember { mutableStateOf<PendingOnlineSaveSelection?>(null) }
     var batchPlaylistItems by remember { mutableStateOf<List<MediaItem>?>(null) }
     var groupPickerAlbumId by remember { mutableStateOf<Long?>(null) }
@@ -1038,17 +1040,22 @@ fun AlbumDetailScreen(
                                     viewModel.downloadDlsitePlayLosslessArchive()
                                 },
                                 onSaveClick = {
-                                    incrementalSource?.let { source ->
+                                    val hasLocalSave = incrementalSource != null && incrementalTree.isNotEmpty()
+                                    saveToCloud = !hasLocalSave
+                                    if (hasLocalSave) {
                                         prepareIncrementalAlbumAction(
                                             action = IncrementalAlbumAction.Save,
-                                            source = source,
-                                            tree = incrementalTree
+                                            source = checkNotNull(incrementalSource),
+                                            tree = incrementalTree,
                                         )
+                                    } else {
+                                        showOnlineSaveDialog = true
                                     }
                                 },
                                 downloadEnabled = headerDownloadEnabled,
                                 losslessDownloadEnabled = tab == 2 && resolvedInitialTarget && model.dlsitePlayTree.isNotEmpty(),
-                                saveEnabled = if (isLocalTab) headerDownloadEnabled else canUseAsmrOneTreeActions,
+                                saveEnabled = (if (isLocalTab) headerDownloadEnabled else canUseAsmrOneTreeActions) ||
+                                    model.asmrOneWorkId?.toLongOrNull() != null || model.rjCode.isNotBlank(),
                                 showGroupButton = isLocalTab && model.localAlbum != null,
                                 onOpenGroupPicker = { id -> groupPickerAlbumId = id },
                                 introSessionKey = introSessionKey,
@@ -1605,15 +1612,23 @@ fun AlbumDetailScreen(
                     )
                 }
 
-                if (showOnlineSaveDialog && canSaveOnline) {
+                if (showOnlineSaveDialog) {
                     val saveTree = when (onlineSaveSource) {
                         OnlineDownloadSource.DlsitePlay -> model.dlsitePlayTree
                         else -> asmrOneTree
                     }
                     OnlineSaveDialog(
                         albumTitle = album.title,
-                        trackTree = saveTree,
+                        trackTree = if (canSaveOnline) saveTree else emptyList(),
                         disabledPaths = saveDisabledPaths,
+                        initialCloudSelected = saveToCloud,
+                        cloudContent = {
+                            com.asmr.player.ui.asmrone.AsmrOneAlbumSaveContent(
+                                album = album.copy(rjCode = model.rjCode.ifBlank { localActionRj }),
+                                workId = model.asmrOneWorkId?.toLongOrNull(),
+                                onOpenLogin = { showOnlineSaveDialog = false; onOpenAsmrOneLogin() },
+                            )
+                        },
                         onDismiss = { showOnlineSaveDialog = false },
                         onConfirm = { selected ->
                             pendingOnlineSaveSelection = PendingOnlineSaveSelection(

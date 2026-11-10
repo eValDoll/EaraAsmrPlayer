@@ -1024,6 +1024,7 @@ fun MainContainer(
     var downloadsScrollToTopSignal by remember { mutableLongStateOf(0L) }
     var settingsScrollToTopSignal by remember { mutableLongStateOf(0L) }
     var settingsDetailPageVisible by rememberSaveable { mutableStateOf(false) }
+    var cloudPlaylists by rememberSaveable { mutableStateOf(false) }
     var hotListeningScrollToTopSignal by remember { mutableLongStateOf(0L) }
     val appVolumeWarningSessionState = rememberAppVolumeWarningSessionState()
     val audioOutputRouteKind = rememberCurrentAudioOutputRouteKind()
@@ -1712,6 +1713,7 @@ fun MainContainer(
                                     resolvedTitleRoute == "downloads" -> appString(R.string.ui_tasks)
                                     resolvedTitleRoute == "listening_calendar" -> appString(R.string.ui_asmr_dashboard)
                                     resolvedTitleRoute == "dlsite_login" -> appString(R.string.ui_dlsite_login)
+                                    resolvedTitleRoute == "asmr_one_login" -> appString(R.string.cloud_account)
                                     resolvedTitleRoute?.startsWith("playlist_picker") == true -> appString(R.string.ui_add_to_my_lists)
                                     resolvedTitleRoute?.startsWith("album_detail") == true -> appString(R.string.ui_album_details)
                                     else -> appName
@@ -1783,6 +1785,12 @@ fun MainContainer(
                                     currentRoute
                                 }
                                 Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (headerActionRoute == "playlists") {
+                                        com.asmr.player.ui.asmrone.CloudSourceToggle(
+                                            cloud = cloudPlaylists,
+                                            onToggle = { cloudPlaylists = !cloudPlaylists },
+                                        )
+                                    }
                                     if (headerActionRoute != null &&
                                         (isPrimaryRoute(headerActionRoute) || headerActionRoute == "playlist_system/{type}") &&
                                         !(headerActionRoute == "settings" && settingsDetailPageVisible)
@@ -2281,6 +2289,13 @@ fun MainContainer(
                                                 isActive = primaryRouteActive,
                                                 isDataActive = primaryRouteDataActive,
                                                 scrollToTopSignal = playlistsScrollToTopSignal,
+                                                cloud = cloudPlaylists,
+                                                onOpenAsmrOneLogin = { navController.navigateSingleTop("asmr_one_login") },
+                                                onCloudAlbumClick = { album ->
+                                                    val workNo = album.rjCode.ifBlank { album.workId }.ifBlank { album.asmrOneWorkId?.toString().orEmpty() }
+                                                    AlbumCoverHintStore.record(album.id, workNo, album.title, album.circle, album.coverUrl)
+                                                    openAlbumDetailFromSearch(albumId = null, rj = workNo)
+                                                },
                                                 onPlaylistClick = { playlist ->
                                                     val encoded = URLEncoder.encode(playlist.name, "UTF-8")
                                                     navController.navigateSingleTop("playlist/${playlist.id}/$encoded")
@@ -2372,6 +2387,7 @@ fun MainContainer(
                                                 isActive = primaryRouteActive,
                                                 isDataActive = primaryRouteDataActive,
                                                 onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
+                                                onOpenAsmrOneLogin = { navController.navigateSingleTop("asmr_one_login") },
                                                 onOpenAlbum = { session ->
                                                     AlbumCoverHintStore.record(
                                                         albumId = session.albumId.takeIf { it > 0L },
@@ -2660,6 +2676,7 @@ fun MainContainer(
                                 albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
                             },
                             onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
+                            onOpenAsmrOneLogin = { navController.navigateSingleTop("asmr_one_login") },
                             onOpenAlbumByRj = { targetRj, work ->
                                 AlbumCoverHintStore.record(
                                     albumId = null,
@@ -2750,6 +2767,7 @@ fun MainContainer(
                                 albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
                             },
                             onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
+                            onOpenAsmrOneLogin = { navController.navigateSingleTop("asmr_one_login") },
                             onOpenAlbumByRj = { targetRj, work ->
                                 AlbumCoverHintStore.record(
                                     albumId = null,
@@ -2822,6 +2840,7 @@ fun MainContainer(
                                 albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
                             },
                             onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
+                            onOpenAsmrOneLogin = { navController.navigateSingleTop("asmr_one_login") },
                             onOpenAlbumByRj = { targetRj, work ->
                                 AlbumCoverHintStore.record(
                                     albumId = null,
@@ -2971,6 +2990,14 @@ fun MainContainer(
                             windowSizeClass = windowSizeClass,
                             onDone = { navController.popBackStack() },
                             viewModel = dlsiteLoginViewModel
+                        )
+                    }
+                }
+                composable("asmr_one_login") {
+                    SecondaryPageBackground(topPadding = secondaryPageTopPadding) {
+                        com.asmr.player.ui.asmrone.AsmrOneLoginScreen(
+                            windowSizeClass = windowSizeClass,
+                            onDone = { navController.popBackStack() },
                         )
                     }
                 }
