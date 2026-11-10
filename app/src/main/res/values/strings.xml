@@ -1317,4 +1317,5 @@
     <string name="eq_tapping_crisp">Tapping – Crisp</string>
     <string name="eq_tapping_dull">Tapping – Dull</string>
     <string name="eq_vocal">Vocal</string>
+    <string name="ui_floating_lyrics_background_transparency">Background transparency: %1$d%%</string>
 </resources>

@@ -1,6 +1,8 @@
 package com.asmr.player.service
 
 import android.content.res.Configuration
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.SystemClock
 import android.os.ParcelFileDescriptor
 import android.text.TextUtils
@@ -21,6 +23,18 @@ import org.junit.runner.RunWith
 class FloatingLyricsViewTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val longCue = SubtitleEntry(0, 1000, "这是一条需要完整阅读的悬浮字幕，自动换行后不应隐藏任何文字。".repeat(30))
+
+    @Test
+    fun blackBackgroundTransparencyDoesNotFadeLyrics() = onMain {
+        val view = createView()
+        for (multiline in listOf(false, true)) {
+            for ((opacity, alpha) in listOf(0f to 0, 0.5f to 128, 1f to 255)) {
+                view.applySettings(FloatingLyricsSettings(backgroundOpacity = opacity), multiline)
+                assertEquals(Color.argb(alpha, 0, 0, 0), (view.background as ColorDrawable).color)
+                assertEquals(255, Color.alpha(view.textView.currentTextColor))
+            }
+        }
+    }
 
     @Test
     fun heightFollowsLineCountAndCapsLongCuesWithoutTruncatingText() = onMain {
@@ -145,6 +159,7 @@ class FloatingLyricsViewTest {
             instrumentation.waitForIdleSync()
             onMain {
                 assertEquals(1, view.textView.lineCount)
+                assertVerticalDrag(view)
                 overlay!!.applySettings(FloatingLyricsSettings(yOffset = 2000), multilineEnabled = true)
             }
             instrumentation.waitForIdleSync()
@@ -166,6 +181,7 @@ class FloatingLyricsViewTest {
                 val location = IntArray(2)
                 view.getLocationOnScreen(location)
                 assertEquals((view.resources.displayMetrics.heightPixels - view.height).coerceAtMost(2000), location[1])
+                assertVerticalDrag(view)
                 overlay!!.applySettings(FloatingLyricsSettings(touchable = false), multilineEnabled = true)
                 val params = view.layoutParams as WindowManager.LayoutParams
                 assertTrue(params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE != 0)
@@ -200,6 +216,20 @@ class FloatingLyricsViewTest {
             view.dispatchTouchEvent(event)
             event.recycle()
         }
+    }
+
+    private fun assertVerticalDrag(view: View) {
+        val params = view.layoutParams as WindowManager.LayoutParams
+        val initialY = params.y
+        val start = SystemClock.uptimeMillis()
+        listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE, MotionEvent.ACTION_UP).forEachIndexed { index, action ->
+            val event = MotionEvent.obtain(start, start + index * 40L, action,
+                if (index == 0) 1f else 101f, if (index == 0) 1f else -39f, 0)
+            view.dispatchTouchEvent(event)
+            event.recycle()
+        }
+        assertEquals(0, params.x)
+        assertEquals((initialY - 40).coerceAtLeast(0), params.y)
     }
 
     private fun onMain(block: () -> Unit) {

@@ -36,6 +36,32 @@ class SettingsRepositoryTest {
     }
 
     @Test
+    fun floatingLyricsSettings_ignoreLegacyHorizontalOffsetAndKeepExistingOptions() = runBlocking {
+        dataStore.edit {
+            it[SettingsKeys.FLOATING_LYRICS_X] = 240
+            it[SettingsKeys.FLOATING_LYRICS_Y] = 360
+            it[SettingsKeys.FLOATING_LYRICS_SIZE] = 24f
+        }
+
+        val settings = repository.floatingLyricsSettings.first()
+        assertEquals(FloatingLyricsSettings(yOffset = 360, size = 24f), settings)
+        repository.updateFloatingLyricsSettings(settings.copy(backgroundOpacity = 0.75f))
+
+        val recreated = SettingsRepository(dataStore, proxyPasswordStorage)
+        assertEquals(settings.copy(backgroundOpacity = 0.75f), recreated.floatingLyricsSettings.first())
+        assertFalse(dataStore.data.first().contains(SettingsKeys.FLOATING_LYRICS_X))
+    }
+
+    @Test
+    fun floatingLyricsBackgroundOpacity_supportsTransparentAndOpaqueLimits() = runBlocking {
+        assertEquals(0.5f, repository.floatingLyricsSettings.first().backgroundOpacity)
+        for ((input, expected) in listOf(-1f to 0f, 0f to 0f, 1f to 1f, 2f to 1f)) {
+            repository.updateFloatingLyricsSettings(FloatingLyricsSettings(backgroundOpacity = input))
+            assertEquals(expected, repository.floatingLyricsSettings.first().backgroundOpacity)
+        }
+    }
+
+    @Test
     fun loadPlaybackRuntimeSettings_returnsStoredValues() = runBlocking {
         dataStore.edit { prefs ->
             prefs[SettingsKeys.PAUSE_ON_OUTPUT_DISCONNECT] = false
