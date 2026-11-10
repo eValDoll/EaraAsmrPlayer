@@ -3,8 +3,8 @@ package com.asmr.player.data.settings
 data class FloatingLyricsSettings(
     val color: Int = 0xFFFFFFFF.toInt(),
     val size: Float = 16f,
-    val xOffset: Int = 0,
     val yOffset: Int = 120,
     val align: Int = 1, // 0:Left, 1:Center, 2:Right
-    val touchable: Boolean = true
+    val touchable: Boolean = true,
+    val backgroundOpacity: Float = 0.5f
 )

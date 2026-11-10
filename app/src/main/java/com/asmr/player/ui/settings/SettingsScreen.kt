@@ -934,7 +934,7 @@ fun SettingsScreen(
 
                 // 歌词
                 if (currentSection == SettingsSection.Lyrics) {
-                    item(key = "group:lyrics") {
+                    item(key = "group:floating_lyrics") {
                         SettingsDetailCard {
                             SettingsToggleRow(
                                 text = appString(R.string.ui_turn_on_floating_lyrics),
@@ -957,7 +957,108 @@ fun SettingsScreen(
                                     }
                                 }
                             )
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
+                            Text(androidx.compose.ui.res.stringResource(R.string.ui_suspended_lyrics_details), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+
+                            if (floatingLyricsEnabled && overlayGranted) {
+                                SettingsSliderRow(
+                                    text = appString(R.string.ui_floating_lyrics_background_transparency, ((1f - floatingSettings.backgroundOpacity) * 100).roundToInt()),
+                                    value = 1f - floatingSettings.backgroundOpacity,
+                                    range = 0f..1f,
+                                    onValueChange = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(backgroundOpacity = 1f - it)) },
+                                    onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
+                                )
+
+                                SettingsSliderRow(
+                                    text = appString(R.string.ui_font_size, floatingSettings.size.toInt()),
+                                    value = floatingSettings.size,
+                                    range = 12f..32f,
+                                    onValueChange = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(size = it)) },
+                                    onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
+                                )
+
+                                SettingsSliderRow(
+                                    text = appString(R.string.ui_vertical_position_y_axis),
+                                    value = floatingSettings.yOffset.toFloat(),
+                                    range = 0f..2000f,
+                                    onValueChange = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(yOffset = it.toInt())) },
+                                    onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(androidx.compose.ui.res.stringResource(R.string.ui_alignment), style = MaterialTheme.typography.bodyMedium)
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    SingleChoiceSegmentedButtonRow {
+                                        SegmentedButton(
+                                            selected = floatingSettings.align == 0,
+                                            onClick = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(align = 0)) },
+                                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
+                                            colors = segmentedButtonColors,
+                                            icon = {},
+                                            label = { Icon(Icons.AutoMirrored.Rounded.FormatAlignLeft, null) }
+                                        )
+                                        SegmentedButton(
+                                            selected = floatingSettings.align == 1,
+                                            onClick = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(align = 1)) },
+                                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
+                                            colors = segmentedButtonColors,
+                                            icon = {},
+                                            label = { Icon(Icons.Rounded.FormatAlignCenter, null) }
+                                        )
+                                        SegmentedButton(
+                                            selected = floatingSettings.align == 2,
+                                            onClick = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(align = 2)) },
+                                            shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
+                                            colors = segmentedButtonColors,
+                                            icon = {},
+                                            label = { Icon(Icons.AutoMirrored.Rounded.FormatAlignRight, null) }
+                                        )
+                                    }
+                                }
+
+                                val presetColors = remember {
+                                    listOf(
+                                        0xFFFFFFFF.toInt(),
+                                        0xFFFFE14D.toInt(),
+                                        0xFF39D5FF.toInt(),
+                                        0xFF5CFF95.toInt(),
+                                        0xFFFF5FA2.toInt()
+                                    )
+                                }
+                                Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text(androidx.compose.ui.res.stringResource(R.string.ui_lyrics_color), style = MaterialTheme.typography.bodyMedium)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        presetColors.forEach { c ->
+                                            val selected = floatingSettings.color == c
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(30.dp)
+                                                    .clip(CircleShape)
+                                                    .background(Color(c))
+                                                    .border(
+                                                        width = if (selected) 2.dp else 1.dp,
+                                                        color = if (selected) colorScheme.primary else colorScheme.onSurface.copy(alpha = 0.25f),
+                                                        shape = CircleShape
+                                                    )
+                                                    .clickable { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(color = c)) }
+                                            )
+                                        }
+                                    }
+                                }
+
+                                SettingsToggleRow(
+                                    text = appString(R.string.ui_click_to_penetrate_lock_position),
+                                    checked = !floatingSettings.touchable,
+                                    onCheckedChange = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(touchable = !it)) }
+                                )
+                            }
+                        }
+                    }
+                    item(key = "group:lyrics") {
+                        SettingsDetailCard {
                             NowPlayingLyricsSettingsSection(
                                 settings = nowPlayingLyricsSettings,
                                 onSettingsChange = viewModel::updateNowPlayingLyricsSettings,
@@ -972,99 +1073,8 @@ fun SettingsScreen(
                                 onSettingsChange = { next -> viewModel.updateLyricsPageSettings(next) },
                                 onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
                             )
-
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
-                        Text(androidx.compose.ui.res.stringResource(R.string.ui_suspended_lyrics_details), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-
-                        if (floatingLyricsEnabled && overlayGranted) {
-                            SettingsSliderRow(
-                                text = appString(R.string.ui_font_size, floatingSettings.size.toInt()),
-                                value = floatingSettings.size,
-                                range = 12f..32f,
-                                onValueChange = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(size = it)) },
-                                onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
-                            )
-
-                            SettingsSliderRow(
-                                text = appString(R.string.ui_vertical_position_y_axis),
-                                value = floatingSettings.yOffset.toFloat(),
-                                range = 0f..2000f,
-                                onValueChange = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(yOffset = it.toInt())) },
-                                onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
-                            )
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(androidx.compose.ui.res.stringResource(R.string.ui_alignment), style = MaterialTheme.typography.bodyMedium)
-                                Spacer(modifier = Modifier.weight(1f))
-                                SingleChoiceSegmentedButtonRow {
-                                    SegmentedButton(
-                                        selected = floatingSettings.align == 0,
-                                        onClick = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(align = 0)) },
-                                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
-                                        colors = segmentedButtonColors,
-                                        icon = {},
-                                        label = { Icon(Icons.AutoMirrored.Rounded.FormatAlignLeft, null) }
-                                    )
-                                    SegmentedButton(
-                                        selected = floatingSettings.align == 1,
-                                        onClick = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(align = 1)) },
-                                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
-                                        colors = segmentedButtonColors,
-                                        icon = {},
-                                        label = { Icon(Icons.Rounded.FormatAlignCenter, null) }
-                                    )
-                                    SegmentedButton(
-                                        selected = floatingSettings.align == 2,
-                                        onClick = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(align = 2)) },
-                                        shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
-                                        colors = segmentedButtonColors,
-                                        icon = {},
-                                        label = { Icon(Icons.AutoMirrored.Rounded.FormatAlignRight, null) }
-                                    )
-                                }
-                            }
-
-                            val presetColors = remember {
-                                listOf(
-                                    0xFFFFFFFF.toInt(),
-                                    0xFFFFE14D.toInt(),
-                                    0xFF39D5FF.toInt(),
-                                    0xFF5CFF95.toInt(),
-                                    0xFFFF5FA2.toInt()
-                                )
-                            }
-                            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Text(androidx.compose.ui.res.stringResource(R.string.ui_lyrics_color), style = MaterialTheme.typography.bodyMedium)
-                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    presetColors.forEach { c ->
-                                        val selected = floatingSettings.color == c
-                                        Box(
-                                            modifier = Modifier
-                                                .size(30.dp)
-                                                .clip(CircleShape)
-                                                .background(Color(c))
-                                                .border(
-                                                    width = if (selected) 2.dp else 1.dp,
-                                                    color = if (selected) colorScheme.primary else colorScheme.onSurface.copy(alpha = 0.25f),
-                                                    shape = CircleShape
-                                                )
-                                                .clickable { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(color = c)) }
-                                        )
-                                    }
-                                }
-                            }
-
-                            SettingsToggleRow(
-                                text = appString(R.string.ui_click_to_penetrate_lock_position),
-                                checked = !floatingSettings.touchable,
-                                onCheckedChange = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(touchable = !it)) }
-                            )
                         }
                     }
-                }
                 }
                 if (currentSection == SettingsSection.Translation) {
                     item(key = "app_language") { SettingsDetailCard { AppLanguageSettings() } }

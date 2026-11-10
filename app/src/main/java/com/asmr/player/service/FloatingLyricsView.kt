@@ -41,7 +41,6 @@ internal class FloatingLyricsView(context: Context) : FrameLayout(context) {
     }
 
     init {
-        background = null
         setPadding(dp(14), dp(10), dp(14), dp(10))
         addView(scrollView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
     }
@@ -50,6 +49,7 @@ internal class FloatingLyricsView(context: Context) : FrameLayout(context) {
         get() = (resources.displayMetrics.heightPixels * 0.45f).roundToInt().coerceAtLeast(1)
 
     fun applySettings(settings: FloatingLyricsSettings, multiline: Boolean) {
+        setBackgroundColor(Color.argb((settings.backgroundOpacity.coerceIn(0f, 1f) * 255).roundToInt(), 0, 0, 0))
         val modeChanged = multilineEnabled != multiline
         multilineEnabled = multiline
         textView.apply {

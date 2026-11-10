@@ -42,10 +42,12 @@ object SettingsKeys {
     val FLOATING_LYRICS_ENABLED = booleanPreferencesKey("floating_lyrics_enabled")
     val FLOATING_LYRICS_COLOR = intPreferencesKey("floating_lyrics_color")
     val FLOATING_LYRICS_SIZE = floatPreferencesKey("floating_lyrics_size")
+    // 旧版横向偏移，仅用于清理历史设置。
     val FLOATING_LYRICS_X = intPreferencesKey("floating_lyrics_x")
     val FLOATING_LYRICS_Y = intPreferencesKey("floating_lyrics_y")
     val FLOATING_LYRICS_ALIGN = intPreferencesKey("floating_lyrics_align")
     val FLOATING_LYRICS_TOUCHABLE = booleanPreferencesKey("floating_lyrics_touchable")
+    val FLOATING_LYRICS_BACKGROUND_OPACITY = floatPreferencesKey("floating_lyrics_background_opacity")
 
     // Enhanced EQ & Audio Effects
     val EQ_VIRTUALIZER_STRENGTH = intPreferencesKey("eq_virtualizer_strength") // 0-1000

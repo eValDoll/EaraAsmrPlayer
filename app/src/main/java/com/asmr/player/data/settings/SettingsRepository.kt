@@ -136,10 +136,10 @@ class SettingsRepository private constructor(
         FloatingLyricsSettings(
             color = prefs[SettingsKeys.FLOATING_LYRICS_COLOR] ?: 0xFFFFFFFF.toInt(),
             size = prefs[SettingsKeys.FLOATING_LYRICS_SIZE] ?: 16f,
-            xOffset = prefs[SettingsKeys.FLOATING_LYRICS_X] ?: 0,
             yOffset = prefs[SettingsKeys.FLOATING_LYRICS_Y] ?: 120,
             align = prefs[SettingsKeys.FLOATING_LYRICS_ALIGN] ?: 1, // 0:Left, 1:Center, 2:Right
-            touchable = prefs[SettingsKeys.FLOATING_LYRICS_TOUCHABLE] ?: true
+            touchable = prefs[SettingsKeys.FLOATING_LYRICS_TOUCHABLE] ?: true,
+            backgroundOpacity = (prefs[SettingsKeys.FLOATING_LYRICS_BACKGROUND_OPACITY] ?: 0.5f).coerceIn(0f, 1f)
         )
     }
 
@@ -369,10 +369,11 @@ class SettingsRepository private constructor(
             context.settingsDataStore.edit {
                 it[SettingsKeys.FLOATING_LYRICS_COLOR] = settings.color
                 it[SettingsKeys.FLOATING_LYRICS_SIZE] = settings.size
-                it[SettingsKeys.FLOATING_LYRICS_X] = settings.xOffset
+                it.remove(SettingsKeys.FLOATING_LYRICS_X)
                 it[SettingsKeys.FLOATING_LYRICS_Y] = settings.yOffset
                 it[SettingsKeys.FLOATING_LYRICS_ALIGN] = settings.align
                 it[SettingsKeys.FLOATING_LYRICS_TOUCHABLE] = settings.touchable
+                it[SettingsKeys.FLOATING_LYRICS_BACKGROUND_OPACITY] = settings.backgroundOpacity.coerceIn(0f, 1f)
             }
         }
     }

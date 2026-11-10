@@ -1317,4 +1317,5 @@
     <string name="eq_tapping_crisp">拍打-清脆 (Tapping-Crisp)</string>
     <string name="eq_tapping_dull">拍打-沉闷 (Tapping-Dull)</string>
     <string name="eq_vocal">人声增强 (Vocal)</string>
+    <string name="ui_floating_lyrics_background_transparency">背景透明度：%1$d%%</string>
 </resources>
