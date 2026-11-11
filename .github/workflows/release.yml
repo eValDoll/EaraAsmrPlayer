@@ -3,7 +3,7 @@ name: Issue 381 Hotfix
 on:
   push:
     tags:
-      - "test-1.2.5.1-issue-381"
+      - "test-1.2.5.1-issue-381-r2"
 
 permissions:
   contents: write
@@ -26,12 +26,12 @@ jobs:
           set -euo pipefail
           sed -i 's/\r$//' gradlew
           chmod +x gradlew
-      - name: Check API compatibility and run release unit tests
-        run: ./gradlew :app:lintVitalRelease :app:testReleaseUnitTest
       - name: Prepare release signing keystore
         shell: bash
         env:
           EARA_RELEASE_JKS_BASE64: ${{ secrets.EARA_RELEASE_JKS_BASE64 }}
+          EARA_RELEASE_STORE_PASSWORD: ${{ secrets.EARA_RELEASE_STORE_PASSWORD }}
+          EARA_RELEASE_KEY_ALIAS: ${{ secrets.EARA_RELEASE_KEY_ALIAS }}
         run: |
           set -euo pipefail
           if [ -z "${EARA_RELEASE_JKS_BASE64}" ]; then
@@ -40,13 +40,29 @@ jobs:
           fi
           printf '%s' "${EARA_RELEASE_JKS_BASE64}" | base64 --decode > eara-release.jks
           chmod 600 eara-release.jks
+          certificate="$(keytool -list -v -keystore eara-release.jks -storepass:env EARA_RELEASE_STORE_PASSWORD -alias "$EARA_RELEASE_KEY_ALIAS" | sed -n 's/^[[:space:]]*SHA256: //p' | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')"
+          echo "Keystore certificate SHA-256: $certificate"
+          if [ "$certificate" != "4858dd7674fb4cf871441cf57648823f3af159634e0504523736ea93603a168a" ]; then
+            echo "Release keystore does not match the published v1.2.5.1 APK"
+            exit 1
+          fi
+      - name: Check API compatibility and run release unit tests
+        run: ./gradlew :app:lintVitalRelease :app:testReleaseUnitTest
       - name: Build release APK
-        run: ./gradlew :app:assembleRelease
+        run: ./gradlew --no-daemon :app:assembleRelease
         env:
           EARA_RELEASE_STORE_FILE: eara-release.jks
           EARA_RELEASE_STORE_PASSWORD: ${{ secrets.EARA_RELEASE_STORE_PASSWORD }}
           EARA_RELEASE_KEY_ALIAS: ${{ secrets.EARA_RELEASE_KEY_ALIAS }}
           EARA_RELEASE_KEY_PASSWORD: ${{ secrets.EARA_RELEASE_KEY_PASSWORD }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: issue-381-signed-candidate
+          retention-days: 7
+          include-hidden-files: true
+          path: |
+            .build_asmr_player_android/app/outputs/apk/release/*.apk
+            .build_asmr_player_android/app/outputs/mapping/release/mapping.txt
       - name: Prepare release artifacts
         shell: bash
         run: |
@@ -73,7 +89,8 @@ jobs:
           fi
 
           apksigner="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
-          certificate="$("$apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
+          certificate="$("$apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | tr -d '[:space:]')"
+          echo "APK certificate SHA-256: $certificate"
           if [ "$certificate" != "4858dd7674fb4cf871441cf57648823f3af159634e0504523736ea93603a168a" ]; then
             echo "Signing certificate does not match the published v1.2.5.1 APK"
             exit 1
