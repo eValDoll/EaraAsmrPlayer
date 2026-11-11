@@ -1,9 +1,9 @@
-name: Release
+name: Issue 381 Hotfix
 
 on:
   push:
     tags:
-      - "v*"
+      - "test-1.2.5.1-issue-381"
 
 permissions:
   contents: write
@@ -72,15 +72,35 @@ jobs:
             exit 1
           fi
 
+          apksigner="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          certificate="$("$apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
+          if [ "$certificate" != "4858dd7674fb4cf871441cf57648823f3af159634e0504523736ea93603a168a" ]; then
+            echo "Signing certificate does not match the published v1.2.5.1 APK"
+            exit 1
+          fi
+
           target="AsmrPlayer-${{ github.ref_name }}-universal.apk"
           echo "Copying $apk -> dist/$target"
           cp "$apk" "dist/$target"
           ls -lh dist
+          cd dist
+          sha256sum *.apk > SHA256SUMS.txt
       - uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.ref_name }}
+          name: "1.2.5.1 搜索闪退临时修复"
           tag_name: ${{ github.ref_name }}
-          generate_release_notes: true
+          prerelease: true
+          make_latest: "false"
+          body: |
+            基于正式版 v1.2.5.1，仅加入 #381 的搜索缓存兼容修复。
+
+            修复旧搜索缓存导致启动数秒后或进入在线搜索时闪退的问题。
+
+            - 版本：1.2.5.1-hotfix（versionCode 10207）。
+            - 使用与正式版 v1.2.5.1 相同的签名，可直接覆盖安装并保留数据。
+            - 此版本为 Pre-release，不进入应用自动更新检查；请手动下载 APK 安装。
           overwrite: true
-          files: dist/*.apk
+          files: |
+            dist/*.apk
+            dist/SHA256SUMS.txt
           token: ${{ secrets.GITHUB_TOKEN }}
