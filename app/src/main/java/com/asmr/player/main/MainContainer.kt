@@ -1024,7 +1024,7 @@ fun MainContainer(
     var downloadsScrollToTopSignal by remember { mutableLongStateOf(0L) }
     var settingsScrollToTopSignal by remember { mutableLongStateOf(0L) }
     var settingsDetailPageVisible by rememberSaveable { mutableStateOf(false) }
-    var cloudPlaylists by rememberSaveable { mutableStateOf(false) }
+    var cloudGroups by rememberSaveable { mutableStateOf(false) }
     var hotListeningScrollToTopSignal by remember { mutableLongStateOf(0L) }
     val appVolumeWarningSessionState = rememberAppVolumeWarningSessionState()
     val audioOutputRouteKind = rememberCurrentAudioOutputRouteKind()
@@ -1785,10 +1785,10 @@ fun MainContainer(
                                     currentRoute
                                 }
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    if (headerActionRoute == "playlists") {
+                                    if (headerActionRoute == "groups") {
                                         com.asmr.player.ui.asmrone.CloudSourceToggle(
-                                            cloud = cloudPlaylists,
-                                            onToggle = { cloudPlaylists = !cloudPlaylists },
+                                            cloud = cloudGroups,
+                                            onToggle = { cloudGroups = !cloudGroups },
                                         )
                                     }
                                     if (headerActionRoute != null &&
@@ -2289,13 +2289,6 @@ fun MainContainer(
                                                 isActive = primaryRouteActive,
                                                 isDataActive = primaryRouteDataActive,
                                                 scrollToTopSignal = playlistsScrollToTopSignal,
-                                                cloud = cloudPlaylists,
-                                                onOpenAsmrOneLogin = { navController.navigateSingleTop("asmr_one_login") },
-                                                onCloudAlbumClick = { album ->
-                                                    val workNo = album.rjCode.ifBlank { album.workId }.ifBlank { album.asmrOneWorkId?.toString().orEmpty() }
-                                                    AlbumCoverHintStore.record(album.id, workNo, album.title, album.circle, album.coverUrl)
-                                                    openAlbumDetailFromSearch(albumId = null, rj = workNo)
-                                                },
                                                 onPlaylistClick = { playlist ->
                                                     val encoded = URLEncoder.encode(playlist.name, "UTF-8")
                                                     navController.navigateSingleTop("playlist/${playlist.id}/$encoded")
@@ -2335,6 +2328,13 @@ fun MainContainer(
                                                 isActive = primaryRouteActive,
                                                 isDataActive = primaryRouteDataActive,
                                                 scrollToTopSignal = groupsScrollToTopSignal,
+                                                cloud = cloudGroups,
+                                                onOpenAsmrOneLogin = { navController.navigateSingleTop("asmr_one_login") },
+                                                onCloudAlbumClick = { album ->
+                                                    val workNo = album.rjCode.ifBlank { album.workId }.ifBlank { album.asmrOneWorkId?.toString().orEmpty() }
+                                                    AlbumCoverHintStore.record(album.id, workNo, album.title, album.circle, album.coverUrl)
+                                                    openAlbumDetailFromSearch(albumId = null, rj = workNo)
+                                                },
                                                 onGroupClick = { group ->
                                                     val encoded = encodeRouteArg(group.name)
                                                     navController.navigateSingleTop("group/${group.id}/$encoded")

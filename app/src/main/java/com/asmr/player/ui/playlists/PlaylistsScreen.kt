@@ -81,34 +81,6 @@ fun PlaylistsScreen(
     onPlaylistClick: (PlaylistEntity) -> Unit,
     scrollToTopSignal: Long = 0L,
     detailContent: (@Composable (PlaylistEntity) -> Unit)? = null,
-    viewModel: PlaylistsViewModel = hiltViewModel(),
-    onCloudAlbumClick: (com.asmr.player.domain.model.Album) -> Unit = {},
-    cloud: Boolean = false,
-    onOpenAsmrOneLogin: () -> Unit = {},
-) {
-    val savedSources = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
-    Column(Modifier.fillMaxSize().padding(top = LocalMainHeaderPadding.current)) {
-        androidx.compose.runtime.CompositionLocalProvider(LocalMainHeaderPadding provides 0.dp) {
-            savedSources.SaveableStateProvider(cloud) {
-                if (cloud) {
-                    com.asmr.player.ui.asmrone.AsmrOneCloudScreen(isDataActive, onCloudAlbumClick, scrollToTopSignal,
-                        onOpenLogin = onOpenAsmrOneLogin)
-                } else {
-                    LocalPlaylistsScreen(windowSizeClass, isActive, isDataActive, onPlaylistClick, scrollToTopSignal, detailContent, viewModel)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun LocalPlaylistsScreen(
-    windowSizeClass: WindowSizeClass,
-    isActive: Boolean = true,
-    isDataActive: Boolean = isActive,
-    onPlaylistClick: (PlaylistEntity) -> Unit,
-    scrollToTopSignal: Long = 0L,
-    detailContent: (@Composable (PlaylistEntity) -> Unit)? = null,
     viewModel: PlaylistsViewModel = hiltViewModel()
 ) {
     val playlists by viewModel.playlists.collectAsStateWhileActive(isDataActive)

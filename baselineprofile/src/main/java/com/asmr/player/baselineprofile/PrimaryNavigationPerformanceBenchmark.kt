@@ -98,7 +98,7 @@ class PrimaryNavigationPerformanceBenchmark {
     )
 
     @Test
-    fun playlistSourceRoundTrips() {
+    fun groupSourceRoundTrips() {
         benchmarkRule.measureRepeated(
             packageName = PackageName,
             metrics = frameMetrics(),
@@ -107,7 +107,7 @@ class PrimaryNavigationPerformanceBenchmark {
             iterations = Iterations,
             setupBlock = {
                 killProcess()
-                startMainActivity(startRoute = "playlists", clearData = false)
+                startMainActivity(startRoute = "groups", clearData = false)
                 check(device.wait(Until.hasObject(By.desc("切换本地与云端")), PrimaryContentTimeoutMs))
             },
         ) {

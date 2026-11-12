@@ -40,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.foundation.background
 import com.asmr.player.ui.common.CollectionPaneLayout
 import com.asmr.player.ui.common.LocalTabletLayout
@@ -60,6 +61,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.data.local.db.dao.AlbumGroupStatsRow
 import com.asmr.player.data.local.db.entities.AlbumGroupEntity
+import com.asmr.player.domain.model.Album
+import com.asmr.player.ui.asmrone.AsmrOneCloudScreen
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.EaraBrandedEmptyState
 import com.asmr.player.ui.common.FlatActionDialog
@@ -85,7 +88,38 @@ fun AlbumGroupsScreen(
     onGroupClick: (AlbumGroupEntity) -> Unit,
     scrollToTopSignal: Long = 0L,
     detailContent: (@Composable (AlbumGroupEntity) -> Unit)? = null,
-    viewModel: AlbumGroupsViewModel = hiltViewModel()
+    viewModel: AlbumGroupsViewModel = hiltViewModel(),
+    cloud: Boolean = false,
+    onCloudAlbumClick: (Album) -> Unit = {},
+    onOpenAsmrOneLogin: () -> Unit = {},
+) {
+    val savedSources = rememberSaveableStateHolder()
+    savedSources.SaveableStateProvider(cloud) {
+        if (cloud) {
+            Box(Modifier.fillMaxSize().padding(top = LocalMainHeaderPadding.current)) {
+                AsmrOneCloudScreen(
+                    isActive = isDataActive,
+                    onAlbumClick = onCloudAlbumClick,
+                    scrollToTopSignal = scrollToTopSignal,
+                    onOpenLogin = onOpenAsmrOneLogin,
+                )
+            }
+        } else {
+            LocalAlbumGroupsScreen(windowSizeClass, isActive, isDataActive, onGroupClick, scrollToTopSignal,
+                detailContent, viewModel)
+        }
+    }
+}
+
+@Composable
+private fun LocalAlbumGroupsScreen(
+    windowSizeClass: WindowSizeClass,
+    isActive: Boolean,
+    isDataActive: Boolean,
+    onGroupClick: (AlbumGroupEntity) -> Unit,
+    scrollToTopSignal: Long,
+    detailContent: (@Composable (AlbumGroupEntity) -> Unit)?,
+    viewModel: AlbumGroupsViewModel,
 ) {
     val groups by viewModel.groups.collectAsStateWhileActive(isDataActive)
     val colorScheme = AsmrTheme.colorScheme

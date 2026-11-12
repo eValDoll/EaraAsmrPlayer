@@ -160,7 +160,8 @@ fun AsmrOneCloudScreen(
                 } else {
                     items(content.rows, key = { it.work.id }) { row ->
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            AlbumItem(row.album, onClick = { onAlbumClick(row.album) }, modifier = Modifier.weight(1f))
+                            AlbumItem(row.album, onClick = { onAlbumClick(row.album) }, modifier = Modifier.weight(1f),
+                                showCollectedIndicator = false)
                             Column(Modifier.padding(end = 4.dp)) {
                                 IconButton(onClick = { membershipWork = row.work }) {
                                     Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, appString(R.string.cloud_add_to_playlist), tint = colors.primary)
