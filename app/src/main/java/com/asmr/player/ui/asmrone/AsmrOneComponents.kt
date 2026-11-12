@@ -10,6 +10,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.CloudQueue
+import androidx.compose.material.icons.rounded.Smartphone
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material.icons.rounded.SyncProblem
 import androidx.compose.material3.*
@@ -19,8 +21,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.foundation.text.KeyboardOptions
@@ -134,12 +136,14 @@ internal fun AsmrOneAccountContent(viewModel: AsmrOneViewModel, onLoggedIn: () -
 @Composable
 fun CloudSourceToggle(cloud: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
     val colors = AsmrTheme.colorScheme
-    val description = appString(R.string.cloud_switch_source)
-    TextButton(onClick = onToggle,
-        modifier = modifier.testTag("asmr_source_toggle").semantics { contentDescription = description },
-        colors = ButtonDefaults.textButtonColors(contentColor = colors.primary,
-            disabledContentColor = colors.textTertiary)) {
-        Text(if (cloud) "ASMR.one" else appString(R.string.cloud_local), maxLines = 1)
+    val source = appString(if (cloud) R.string.cloud_remote else R.string.cloud_local)
+    IconButton(onClick = onToggle,
+        modifier = modifier.testTag("asmr_source_toggle").semantics { stateDescription = source }) {
+        Icon(
+            imageVector = if (cloud) Icons.Rounded.CloudQueue else Icons.Rounded.Smartphone,
+            contentDescription = appString(R.string.cloud_switch_source),
+            tint = colors.primary,
+        )
     }
 }
 

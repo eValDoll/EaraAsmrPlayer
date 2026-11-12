@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import com.asmr.player.LocalizedRobolectricTest
 import com.asmr.player.R
@@ -30,12 +31,15 @@ class AsmrOneEntryUiTest : LocalizedRobolectricTest() {
                 CloudSourceToggle(cloud, { cloud = !cloud })
             }
         }
-        compose.onNodeWithText("本地").assertIsDisplayed()
-        compose.onNodeWithContentDescription(appString(R.string.cloud_switch_source)).performClick()
-        compose.onNodeWithText("ASMR.one").assertIsDisplayed()
+        val sourceToggle = compose.onNodeWithContentDescription(appString(R.string.cloud_switch_source))
+        sourceToggle.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, appString(R.string.cloud_local)))
         compose.onNodeWithText("本地").assertDoesNotExist()
-        compose.onNodeWithContentDescription(appString(R.string.cloud_switch_source)).performClick()
-        compose.onNodeWithText("本地").assertIsDisplayed()
+        sourceToggle.performClick()
+        sourceToggle.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, appString(R.string.cloud_remote)))
+        compose.onNodeWithText("ASMR.one").assertDoesNotExist()
+        compose.onNodeWithText("本地").assertDoesNotExist()
+        sourceToggle.performClick()
+        sourceToggle.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, appString(R.string.cloud_local)))
     }
 
     @Test fun dashboardAccountEntriesShareActionsAndKeepDlsiteSummary() {

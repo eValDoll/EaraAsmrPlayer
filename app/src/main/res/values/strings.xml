@@ -1319,6 +1319,7 @@
     <string name="eq_vocal">Vocal</string>
     <string name="ui_floating_lyrics_background_transparency">Background transparency: %1$d%%</string>
     <string name="cloud_local">Local</string>
+    <string name="cloud_remote">Cloud</string>
     <string name="cloud_login">Log in</string>
     <string name="cloud_login_again">Log in again</string>
     <string name="cloud_logout">Log out</string>
@@ -1360,6 +1361,6 @@
     <string name="cloud_operation_failed">Operation failed. Refresh and try again</string>
     <string name="cloud_invalid_credentials">Incorrect username or password</string>
     <string name="cloud_account">ASMR.one account</string>
-    <string name="cloud_switch_source">Switch local and ASMR.one</string>
+    <string name="cloud_switch_source">Switch local and cloud</string>
     <string name="cloud_login_to_site">Log in to ASMR.one</string>
 </resources>

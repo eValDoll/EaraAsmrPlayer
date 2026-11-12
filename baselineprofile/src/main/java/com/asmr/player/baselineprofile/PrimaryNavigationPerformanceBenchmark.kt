@@ -108,11 +108,11 @@ class PrimaryNavigationPerformanceBenchmark {
             setupBlock = {
                 killProcess()
                 startMainActivity(startRoute = "playlists", clearData = false)
-                check(device.wait(Until.hasObject(By.desc("切换本地与 ASMR.one")), PrimaryContentTimeoutMs))
+                check(device.wait(Until.hasObject(By.desc("切换本地与云端")), PrimaryContentTimeoutMs))
             },
         ) {
             repeat(6) {
-                checkNotNull(device.wait(Until.findObject(By.desc("切换本地与 ASMR.one")), 5_000)).click()
+                checkNotNull(device.wait(Until.findObject(By.desc("切换本地与云端")), 5_000)).click()
                 // Direct source switching preserves accounts, settings and local collections.
                 SystemClock.sleep(PrimaryTransitionSettleMs)
             }

@@ -88,12 +88,27 @@ fun AsmrOneCloudScreen(
             Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.TopCenter) { CloudLoginButton(onOpenLogin) }
         } else {
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (selectedId != null) IconButton(onClick = { viewModel.select(null) }) {
-                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, appString(R.string.cloud_back), tint = colors.textPrimary)
+                if (selectedId == null) {
+                    Row(
+                        Modifier.weight(1f).heightIn(min = 48.dp)
+                            .clickable { viewModel.select(AsmrOneAccountRepository.REVIEW_PREFIX + "all") }
+                            .padding(horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(Icons.Rounded.History, null, tint = colors.primary, modifier = Modifier.size(20.dp))
+                        Text(appString(R.string.cloud_listening_history), style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold, color = colors.textPrimary, maxLines = 1,
+                            overflow = TextOverflow.Ellipsis)
+                    }
+                } else {
+                    IconButton(onClick = { viewModel.select(null) }) {
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, appString(R.string.cloud_back), tint = colors.textPrimary)
+                    }
+                    Text(if (reviews) appString(R.string.cloud_listening_history) else selected?.let(::cloudPlaylistName).orEmpty(),
+                        Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
+                        color = colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                Text(if (reviews) appString(R.string.cloud_listening_history) else selected?.let(::cloudPlaylistName) ?: "ASMR.one",
-                    Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
-                    color = colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (busy) CircularProgressIndicator(Modifier.padding(12.dp).size(20.dp), color = colors.primary, strokeWidth = 2.dp)
                 else IconButton(onClick = viewModel::refresh) {
                     Icon(if (operations.any { it.account == account.name && it.blocked }) Icons.Rounded.SyncProblem else Icons.Rounded.Sync,
@@ -118,14 +133,6 @@ fun AsmrOneCloudScreen(
             LazyColumn(state = state, modifier = Modifier.fillMaxSize(), flingBehavior = rememberCalmScrollableFlingBehavior(),
                 contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current + 88.dp)) {
                 if (selectedId == null) {
-                    item("history") {
-                        Row(Modifier.fillMaxWidth().clickable { viewModel.select(AsmrOneAccountRepository.REVIEW_PREFIX + "all") }
-                            .padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Rounded.History, null, tint = colors.primary)
-                            Spacer(Modifier.width(12.dp))
-                            Text(appString(R.string.cloud_listening_history), color = colors.textPrimary)
-                        }
-                    }
                     items(playlists, key = { it.id }) { playlist ->
                         Row(Modifier.fillMaxWidth().clickable { viewModel.select(playlist.id) }.padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically) {
