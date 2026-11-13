@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -50,25 +52,27 @@ fun cloudPlaylistName(playlist: AsmrCloudPlaylist): String = when (playlist.name
 }
 
 @Composable
-internal fun CloudSelector(value: String, options: List<String>, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
+internal fun CloudSelector(value: String, options: List<String>, onSelect: (Int) -> Unit, modifier: Modifier = Modifier,
+    selectedIndex: Int = options.indexOf(value), enabled: Boolean = true) {
     val colors = AsmrTheme.colorScheme
     var expanded by remember { mutableStateOf(false) }
+    LaunchedEffect(enabled) { if (!enabled) expanded = false }
     val shape = RoundedCornerShape(8.dp)
     val density = LocalDensity.current
     val position = remember(density) { ThemedDropdownMenuPositionProvider(with(density) { 4.dp.roundToPx() }, with(density) { 12.dp.roundToPx() }) }
     Box(modifier) {
         Row(Modifier.fillMaxWidth().clip(shape).background(colors.surface)
-            .border(1.dp, colors.textTertiary.copy(alpha = 0.22f), shape).clickable { expanded = true }
+            .border(1.dp, colors.textTertiary.copy(alpha = 0.22f), shape).clickable(enabled = enabled) { expanded = true }
             .padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(value, Modifier.weight(1f), color = colors.textPrimary, style = MaterialTheme.typography.bodyMedium)
-            Icon(Icons.Rounded.ArrowDropDown, contentDescription = null, tint = colors.textSecondary)
+            Text(value, Modifier.weight(1f), color = if (enabled) colors.textPrimary else colors.textTertiary, style = MaterialTheme.typography.bodyMedium)
+            Icon(Icons.Rounded.ArrowDropDown, contentDescription = null, tint = if (enabled) colors.textSecondary else colors.textTertiary)
         }
-        if (expanded) Popup(popupPositionProvider = position, onDismissRequest = { expanded = false }, properties = PopupProperties(focusable = true)) {
-            Column(Modifier.widthIn(min = 180.dp, max = 320.dp).heightIn(max = 360.dp).clip(shape)
-                .background(colors.surface).border(1.dp, colors.textTertiary.copy(alpha = 0.22f), shape)
-                .verticalScroll(rememberScrollState()).padding(vertical = 4.dp)) {
-                options.forEachIndexed { index, label ->
-                    val selected = label == value
+        if (expanded && enabled) Popup(popupPositionProvider = position, onDismissRequest = { expanded = false }, properties = PopupProperties(focusable = true)) {
+            LazyColumn(Modifier.widthIn(min = 180.dp, max = 320.dp).heightIn(max = 360.dp).clip(shape)
+                .background(colors.surface).border(1.dp, colors.textTertiary.copy(alpha = 0.22f), shape),
+                contentPadding = PaddingValues(vertical = 4.dp)) {
+                itemsIndexed(options) { index, label ->
+                    val selected = index == selectedIndex
                     Row(Modifier.fillMaxWidth().background(if (selected) colors.primarySoft else colors.surface)
                         .clickable { expanded = false; onSelect(index) }.padding(horizontal = 14.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically) {
@@ -167,6 +171,8 @@ internal fun CloudMembershipContent(
     val loading by viewModel.membershipLoading.collectAsStateWhileActive(true)
     val memberships by viewModel.memberships.collectAsStateWhileActive(true)
     val resolvedWork by viewModel.membershipWork.collectAsStateWhileActive(true)
+    val saving by viewModel.savingMemberships.collectAsStateWhileActive(true)
+    val operations by viewModel.operations.collectAsStateWhileActive(true)
     val colors = AsmrTheme.colorScheme
     LaunchedEffect(work.id, work.source_id, account.name, account.authenticated) {
         if (account.authenticated) viewModel.openMembership(work)
@@ -188,14 +194,24 @@ internal fun CloudMembershipContent(
             } else memberships.filter { it.user_name == account.name }.forEach { playlist ->
                 val target = resolvedWork ?: work
                 val checked = playlist.exist == true
-                Row(Modifier.fillMaxWidth().clickable(enabled = target.id > 0) { viewModel.setMembership(playlist, target, !checked) }
+                val isSaving = playlist.id in saving
+                val pending = operations.firstOrNull { it.account == account.name && it.listId == playlist.id && it.workId == target.id }
+                Row(Modifier.fillMaxWidth().clickable(enabled = target.id > 0 && !isSaving) { viewModel.setMembership(playlist, target, !checked) }
                     .padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     TriStateCheckbox(state = when (playlist.exist) {
                         true -> ToggleableState.On; false -> ToggleableState.Off; null -> ToggleableState.Indeterminate
-                    }, onClick = { viewModel.setMembership(playlist, target, !checked) }, enabled = target.id > 0,
+                    }, onClick = { viewModel.setMembership(playlist, target, !checked) }, enabled = target.id > 0 && !isSaving,
                         colors = CheckboxDefaults.colors(checkedColor = colors.primary, uncheckedColor = colors.textSecondary,
-                            checkmarkColor = colors.onPrimary, disabledUncheckedColor = colors.textTertiary))
+                            checkmarkColor = colors.onPrimary, disabledUncheckedColor = colors.textTertiary,
+                            disabledCheckedColor = colors.primarySoft, disabledIndeterminateColor = colors.primarySoft))
                     Text(cloudPlaylistName(playlist), color = colors.textPrimary, modifier = Modifier.weight(1f))
+                    if (isSaving) CircularProgressIndicator(Modifier.padding(8.dp).size(20.dp), color = colors.primary, strokeWidth = 2.dp)
+                    else if (pending != null) Icon(
+                        if (pending.blocked) Icons.Rounded.SyncProblem else Icons.Rounded.Sync,
+                        appString(if (pending.blocked) R.string.cloud_operation_failed else R.string.cloud_saved_pending),
+                        tint = if (pending.blocked) colors.danger else colors.primary,
+                        modifier = Modifier.padding(8.dp).size(20.dp),
+                    )
                 }
             }
         }

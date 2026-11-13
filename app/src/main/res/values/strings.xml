@@ -1363,4 +1363,13 @@
     <string name="cloud_account">ASMR.one account</string>
     <string name="cloud_switch_source">Switch local and cloud</string>
     <string name="cloud_login_to_site">Log in to ASMR.one</string>
+    <string name="cloud_added_to_list">Added to “%1$s”</string>
+    <string name="cloud_removed_from_list">Removed from “%1$s”</string>
+    <string name="cloud_saved_pending">Saved to the sync queue</string>
+    <string name="cloud_sync_to_site">Sync to ASMR.one</string>
+    <string name="cloud_sync_group_title">Sync “%1$s” to ASMR.one</string>
+    <string name="cloud_group_new_list">Create a cloud list</string>
+    <string name="cloud_group_queued">Submitted %1$d works for syncing</string>
+    <string name="cloud_group_partial">Submitted %1$d works; %2$d unmatched</string>
+    <string name="cloud_group_no_match">No works could be synced (%1$d unmatched)</string>
 </resources>

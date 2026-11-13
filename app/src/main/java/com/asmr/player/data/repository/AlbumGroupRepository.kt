@@ -4,6 +4,7 @@ import com.asmr.player.data.local.db.dao.AlbumGroupDao
 import com.asmr.player.data.local.db.dao.AlbumGroupItemDao
 import com.asmr.player.data.local.db.dao.AlbumGroupStatsRow
 import com.asmr.player.data.local.db.dao.AlbumGroupTrackRow
+import com.asmr.player.data.local.db.dao.AlbumGroupWorkRow
 import com.asmr.player.data.local.db.dao.TrackDao
 import com.asmr.player.data.local.db.entities.AlbumGroupEntity
 import com.asmr.player.data.local.db.entities.AlbumGroupItemEntity
@@ -25,6 +26,8 @@ class AlbumGroupRepository @Inject constructor(
     fun observeGroupsWithStats(): Flow<List<AlbumGroupStatsRow>> = groupDao.observeGroupsWithStats()
 
     fun observeGroupTracks(groupId: Long): Flow<List<AlbumGroupTrackRow>> = groupItemDao.observeGroupTracks(groupId)
+
+    suspend fun getGroupAlbumsOnce(groupId: Long): List<AlbumGroupWorkRow> = groupItemDao.getGroupAlbumsOnce(groupId)
 
     suspend fun getGroupById(id: Long): AlbumGroupEntity? = groupDao.getGroupByIdOnce(id)
 

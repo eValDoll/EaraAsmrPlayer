@@ -1363,4 +1363,13 @@
     <string name="cloud_account">ASMR.one 账号</string>
     <string name="cloud_switch_source">切换本地与云端</string>
     <string name="cloud_login_to_site">登录 ASMR.one</string>
+    <string name="cloud_added_to_list">已加入「%1$s」</string>
+    <string name="cloud_removed_from_list">已移出「%1$s」</string>
+    <string name="cloud_saved_pending">已保存到同步队列</string>
+    <string name="cloud_sync_to_site">同步到 ASMR.one</string>
+    <string name="cloud_sync_group_title">同步「%1$s」到 ASMR.one</string>
+    <string name="cloud_group_new_list">新建云端列表</string>
+    <string name="cloud_group_queued">已提交 %1$d 部作品，正在同步</string>
+    <string name="cloud_group_partial">已提交 %1$d 部作品，%2$d 部未匹配</string>
+    <string name="cloud_group_no_match">未找到可同步的作品（%1$d 部未匹配）</string>
 </resources>

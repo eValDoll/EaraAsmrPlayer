@@ -37,6 +37,10 @@ data class AsmrCloudContent(val account: String = "", val listId: String = "", v
 class AsmrLoginRequired : IllegalStateException()
 class AsmrCredentialsRejected : IllegalArgumentException()
 class AsmrWriteUncertain : IOException()
+class AsmrWorkNotFound : IllegalArgumentException()
+
+enum class AsmrMembershipSaveResult { SYNCED, QUEUED, BLOCKED }
+data class AsmrGroupSyncResult(val queued: Int, val skipped: Int)
 
 internal fun mergeCloudWorks(remote: List<AsmrCloudWork>, operations: List<Pair<AsmrCloudWork, Boolean>>): List<AsmrCloudWork> {
     val result = LinkedHashMap<Long, AsmrCloudWork>()
@@ -212,7 +216,7 @@ class AsmrOneAccountRepository @Inject constructor(
                     playlist.copy(exist = if (present) true else if (complete) false else null)
                 }
             }
-        val pending = dao.operations(current.name).first().filter { it.workId == workId }.associateBy { it.listId }
+        val pending = dao.operations(current.name).first().filter { it.workId == workId && !it.blocked }.associateBy { it.listId }
         remote.map { it.copy(exist = pending[it.id]?.desired ?: it.exist) }
     }
 
@@ -220,37 +224,112 @@ class AsmrOneAccountRepository @Inject constructor(
         if (work.id > 0) return@withContext work
         val current = capture()
         val workNo = work.source_id.orEmpty().trim().uppercase(java.util.Locale.ROOT)
-        require(Regex("RJ[0-9]{6,}").matches(workNo))
+        if (!Regex("RJ[0-9]{6,}").matches(workNo)) throw AsmrWorkNotFound()
         val response = request(current) { provider.api().searchWork(bearer(current), workNo) }
         val matches = response.works.orEmpty().filter {
             it.id > 0 && it.source_id.orEmpty().uppercase(java.util.Locale.ROOT).removePrefix("RJ").trimStart('0') == workNo.removePrefix("RJ").trimStart('0')
         }
-        check(matches.size == 1) { "ASMR.one work could not be uniquely resolved" }
+        if (matches.size != 1) throw AsmrWorkNotFound()
         matches.single()
     }
 
     suspend fun enqueueMembership(playlist: AsmrCloudPlaylist, work: AsmrCloudWork, desired: Boolean) = withContext(Dispatchers.IO) {
         val current = capture()
         require(work.id > 0 && playlist.id.isNotBlank() && playlist.user_name == current.name)
+        val operation = AsmrMembershipOperation(current.name, playlist.id, work.id, desired,
+            gson.toJson(work), UUID.randomUUID().toString(), System.currentTimeMillis())
         database.withTransaction {
             checkCurrent(current)
-            dao.putOperation(AsmrMembershipOperation(current.name, playlist.id, work.id, desired,
-                gson.toJson(work), UUID.randomUUID().toString(), System.currentTimeMillis()))
+            dao.putOperation(operation)
         }
         scheduling.enqueue(current.name)
+        operation
     }
 
     suspend fun createPlaylist(name: String, privacy: Int) = withContext(Dispatchers.IO) {
         require(name.isNotBlank() && name.length <= 100 && privacy in 0..2 && !name.startsWith("__SYS_PLAYLIST_"))
         val current = capture()
+        refreshPlaylists()
+        checkCurrent(current)
+        val previousIds = dao.playlists(current.name).first().mapTo(hashSetOf()) { it.id }
         try {
             request(current) { checkMutation(provider.api().create(bearer(current), AsmrCreatePlaylist(name.trim(), privacy,
                 com.asmr.player.i18n.AppLanguage.selected().ifBlank { "en" }))) }
         } catch (error: IOException) {
             throw AsmrWriteUncertain()
+        } catch (error: HttpException) {
+            if (error.code() >= 500) throw AsmrWriteUncertain()
+            throw error
         }
-        refreshPlaylists()
+        try {
+            refreshPlaylists()
+            checkCurrent(current)
+            dao.playlists(current.name).first().map { gson.fromJson(it.payload, AsmrCloudPlaylist::class.java) }
+                .singleOrNull { it.id !in previousIds && it.user_name == current.name && it.name == name.trim() }
+                ?: throw AsmrWriteUncertain()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: AsmrLoginRequired) {
+            throw error
+        } catch (_: Exception) {
+            throw AsmrWriteUncertain()
+        }
     }
+
+    suspend fun syncMembership(operation: AsmrMembershipOperation): AsmrMembershipSaveResult = withContext(Dispatchers.IO) {
+        if (!syncMutex.tryLock()) return@withContext AsmrMembershipSaveResult.QUEUED
+        try {
+            val current = capture()
+            if (current.name != operation.account) throw CancellationException("ASMR.one account changed")
+            val pending = dao.operations(current.name).first()
+                .firstOrNull { it.listId == operation.listId && it.workId == operation.workId }
+                ?: return@withContext AsmrMembershipSaveResult.SYNCED
+            if (pending.version != operation.version) return@withContext AsmrMembershipSaveResult.QUEUED
+            if (pending.blocked) return@withContext AsmrMembershipSaveResult.BLOCKED
+            reconcileOperation(current, provider.api(), pending)
+        } finally {
+            syncMutex.unlock()
+        }
+    }
+
+    suspend fun syncGroupWorks(name: String, works: List<AsmrCloudWork>, target: AsmrCloudPlaylist?): AsmrGroupSyncResult =
+        withContext(Dispatchers.IO) {
+            val current = capture()
+            if (target != null) require(target.user_name == current.name && target.id.isNotBlank())
+            val resolved = linkedMapOf<Long, AsmrCloudWork>()
+            val seen = hashSetOf<String>()
+            var skipped = 0
+            for (work in works) {
+                checkCurrent(current)
+                val sourceId = work.source_id.orEmpty().trim().uppercase(java.util.Locale.ROOT)
+                val identity = if (work.id > 0) "id:${work.id}" else if (Regex("RJ[0-9]{6,}").matches(sourceId))
+                    "rj:${sourceId.removePrefix("RJ").trimStart('0')}" else null
+                if (identity != null && !seen.add(identity)) continue
+                try {
+                    val value = resolveMembershipWork(work)
+                    checkCurrent(current)
+                    resolved[value.id] = value
+                } catch (_: AsmrWorkNotFound) {
+                    skipped++
+                }
+            }
+            if (resolved.isEmpty()) return@withContext AsmrGroupSyncResult(0, skipped)
+            val destination = if (target == null) createPlaylist(name, 0) else {
+                request(current) { provider.api().metadata(bearer(current), target.id) }.also {
+                    require(it.id == target.id && it.user_name == current.name)
+                }
+            }
+            checkCurrent(current)
+            database.withTransaction {
+                checkCurrent(current)
+                dao.putOperations(resolved.values.map { work ->
+                    AsmrMembershipOperation(current.name, destination.id, work.id, true, gson.toJson(work),
+                        UUID.randomUUID().toString(), System.currentTimeMillis())
+                })
+            }
+            scheduling.enqueue(current.name)
+            AsmrGroupSyncResult(resolved.size, skipped)
+        }
 
     suspend fun renamePlaylist(playlist: AsmrCloudPlaylist, name: String) = withContext(Dispatchers.IO) {
         require(name.isNotBlank() && name.length <= 100 && !name.startsWith("__SYS_PLAYLIST_"))
@@ -313,34 +392,17 @@ class AsmrOneAccountRepository @Inject constructor(
             if (current.name != accountName) return@withLock true
             val api = provider.api()
             var changed = false
-            for (operation in dao.pending(current.name)) {
-                try {
-                    checkCurrent(current)
-                    val target = membershipRemote(current, api, operation.workId).firstOrNull { it.id == operation.listId }
-                    if (target == null || target.user_name != current.name) {
-                        dao.block(current.name, operation.listId, operation.workId, operation.version)
-                        continue
+            while (true) {
+                val batch = dao.pending(current.name)
+                if (batch.isEmpty()) break
+                for (operation in batch) {
+                    val result = try { reconcileOperation(current, api, operation) }
+                    catch (_: AsmrLoginRequired) { return@withLock true }
+                    when (result) {
+                        AsmrMembershipSaveResult.SYNCED -> changed = true
+                        AsmrMembershipSaveResult.QUEUED -> return@withLock false
+                        AsmrMembershipSaveResult.BLOCKED -> Unit
                     }
-                    val desired = operation.desired
-                    if (target.exist != desired) {
-                        val body = AsmrPlaylistWorks(operation.listId, listOf(operation.workId))
-                        request(current) { checkMutation(if (desired) api.add(bearer(current), body) else api.remove(bearer(current), body)) }
-                        val confirmed = membershipRemote(current, api, operation.workId).firstOrNull { it.id == operation.listId }
-                        if (confirmed?.exist != desired) return@withLock false
-                    }
-                    confirmOperation(current, operation)
-                    changed = true
-                } catch (_: AsmrLoginRequired) {
-                    return@withLock true
-                } catch (error: HttpException) {
-                    if (error.code() == 429 || error.code() >= 500) return@withLock false
-                    dao.block(current.name, operation.listId, operation.workId, operation.version)
-                } catch (error: CancellationException) {
-                    throw error
-                } catch (_: IOException) {
-                    return@withLock false
-                } catch (_: Exception) {
-                    dao.block(current.name, operation.listId, operation.workId, operation.version)
                 }
             }
             val complete = dao.pending(current.name).isEmpty()
@@ -351,6 +413,36 @@ class AsmrOneAccountRepository @Inject constructor(
             }
             complete
         }
+    }
+
+    private suspend fun reconcileOperation(current: AsmrOneCredentials, api: AsmrOneAccountApi,
+        operation: AsmrMembershipOperation): AsmrMembershipSaveResult {
+        try {
+            checkCurrent(current)
+            val target = membershipRemote(current, api, operation.workId).firstOrNull { it.id == operation.listId }
+            if (target != null && target.user_name == current.name) {
+                if (target.exist != operation.desired) {
+                    val body = AsmrPlaylistWorks(operation.listId, listOf(operation.workId))
+                    request(current) { checkMutation(if (operation.desired) api.add(bearer(current), body) else api.remove(bearer(current), body)) }
+                    val confirmed = membershipRemote(current, api, operation.workId).firstOrNull { it.id == operation.listId }
+                    if (confirmed?.exist != operation.desired) return AsmrMembershipSaveResult.QUEUED
+                }
+                confirmOperation(current, operation)
+                return AsmrMembershipSaveResult.SYNCED
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: AsmrLoginRequired) {
+            throw error
+        } catch (error: HttpException) {
+            if (error.code() == 429 || error.code() >= 500) return AsmrMembershipSaveResult.QUEUED
+        } catch (_: IOException) {
+            return AsmrMembershipSaveResult.QUEUED
+        } catch (_: Exception) {
+            // Keep rejected intents available for explicit retry without claiming success.
+        }
+        dao.block(current.name, operation.listId, operation.workId, operation.version)
+        return AsmrMembershipSaveResult.BLOCKED
     }
 
     private suspend fun confirmOperation(current: AsmrOneCredentials, operation: AsmrMembershipOperation) {

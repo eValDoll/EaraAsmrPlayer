@@ -37,6 +37,8 @@ interface AsmrOneCloudDao {
     suspend fun putPage(value: AsmrWorkPageCache)
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun putOperation(value: AsmrMembershipOperation)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putOperations(values: List<AsmrMembershipOperation>)
     @Query("DELETE FROM cloud_playlists WHERE account = :account")
     suspend fun clearPlaylists(account: String)
     @Query("DELETE FROM cloud_pages WHERE account = :account AND listId = :listId")

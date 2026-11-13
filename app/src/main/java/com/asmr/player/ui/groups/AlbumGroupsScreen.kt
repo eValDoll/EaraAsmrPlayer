@@ -31,6 +31,8 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.CloudUpload
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -63,6 +65,8 @@ import com.asmr.player.data.local.db.dao.AlbumGroupStatsRow
 import com.asmr.player.data.local.db.entities.AlbumGroupEntity
 import com.asmr.player.domain.model.Album
 import com.asmr.player.ui.asmrone.AsmrOneCloudScreen
+import com.asmr.player.ui.asmrone.AsmrOneGroupSyncDialog
+import com.asmr.player.ui.asmrone.AsmrOneViewModel
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.EaraBrandedEmptyState
 import com.asmr.player.ui.common.FlatActionDialog
@@ -106,7 +110,7 @@ fun AlbumGroupsScreen(
             }
         } else {
             LocalAlbumGroupsScreen(windowSizeClass, isActive, isDataActive, onGroupClick, scrollToTopSignal,
-                detailContent, viewModel)
+                detailContent, viewModel, onOpenAsmrOneLogin)
         }
     }
 }
@@ -120,11 +124,15 @@ private fun LocalAlbumGroupsScreen(
     scrollToTopSignal: Long,
     detailContent: (@Composable (AlbumGroupEntity) -> Unit)?,
     viewModel: AlbumGroupsViewModel,
+    onOpenAsmrOneLogin: () -> Unit,
 ) {
     val groups by viewModel.groups.collectAsStateWhileActive(isDataActive)
     val colorScheme = AsmrTheme.colorScheme
     val listState = rememberLazyListState()
     var showCreate by remember { mutableStateOf(false) }
+    val cloudViewModel: AsmrOneViewModel = hiltViewModel()
+    val syncingGroup by cloudViewModel.syncingGroup.collectAsStateWhileActive(isDataActive)
+    var syncTarget by remember { mutableStateOf<AlbumGroupStatsRow?>(null) }
 
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
     val tabletLayout = LocalTabletLayout.current
@@ -199,7 +207,10 @@ private fun LocalAlbumGroupsScreen(
                                     else onGroupClick(entity)
                                 },
                                 onDelete = { viewModel.deleteGroup(entity) },
-                                onRename = { newName -> viewModel.renameGroup(entity.id, newName) }
+                                onRename = { newName -> viewModel.renameGroup(entity.id, newName) },
+                                onSync = { syncTarget = group },
+                                syncing = syncingGroup == group.id,
+                                syncEnabled = syncingGroup == null && group.albumCount > 0,
                             )
                         }
                     }
@@ -228,6 +239,9 @@ private fun LocalAlbumGroupsScreen(
             }
         )
     }
+    syncTarget?.let { group ->
+        AsmrOneGroupSyncDialog(group, cloudViewModel, { syncTarget = null }, onOpenAsmrOneLogin)
+    }
 }
 
 @Composable
@@ -236,7 +250,10 @@ private fun AlbumGroupRow(
     group: AlbumGroupStatsRow,
     onClick: () -> Unit,
     onDelete: () -> Unit,
-    onRename: (String) -> Unit
+    onRename: (String) -> Unit,
+    onSync: () -> Unit,
+    syncing: Boolean,
+    syncEnabled: Boolean,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val cover = remember(group.firstArtworkUri) { group.firstArtworkUri?.trim().orEmpty() }
@@ -276,6 +293,15 @@ private fun AlbumGroupRow(
                     style = MaterialTheme.typography.bodySmall,
                     color = colorScheme.textTertiary
                 )
+            }
+            if (syncing) {
+                Box(Modifier.size(AlbumGroupRowActionButtonSize), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(Modifier.size(AlbumGroupRowActionIconSize), color = colorScheme.primary, strokeWidth = 2.dp)
+                }
+            } else IconButton(onClick = onSync, enabled = syncEnabled, modifier = Modifier.size(AlbumGroupRowActionButtonSize)) {
+                Icon(Icons.Rounded.CloudUpload, appString(R.string.cloud_sync_to_site),
+                    tint = if (syncEnabled) colorScheme.primary else colorScheme.textTertiary,
+                    modifier = Modifier.size(AlbumGroupRowActionIconSize))
             }
             IconButton(onClick = { showRename = true }, modifier = Modifier.size(AlbumGroupRowActionButtonSize)) {
                 Icon(
