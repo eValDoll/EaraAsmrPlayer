@@ -1,7 +1,6 @@
 package com.asmr.player.ui
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,24 +62,24 @@ class AsmrOneEntryUiTest : LocalizedRobolectricTest() {
         compose.onNodeWithText(appString(R.string.ui_logged_in)).assertIsDisplayed()
     }
 
-    @Test fun existingSaveSheetSwitchesBetweenFilesAndCloudWithoutAnotherDialog() {
+    @Test fun localSaveSheetOnlyConfirmsSelectedFilesAndHasNoCloudEntry() {
         val files = listOf(
             AsmrOneTrackNodeResponse(title = "第一轨.mp3", type = "audio", mediaDownloadUrl = "https://example.test/one.mp3"),
             AsmrOneTrackNodeResponse(title = "第二轨.mp3", type = "audio", mediaDownloadUrl = "https://example.test/two.mp3"),
         )
+        var saved: Set<String>? = null
         compose.setContent {
             AsmrPlayerTheme {
-                OnlineSaveDialog(albumTitle = "作品", trackTree = files, onDismiss = {}, onConfirm = {},
-                    cloudContent = { Text("云端播放列表内容") })
+                OnlineSaveDialog(albumTitle = "作品", trackTree = files, onDismiss = {}, onConfirm = { saved = it })
             }
         }
+        compose.onNodeWithTag("asmr_source_toggle").assertDoesNotExist()
+        compose.onNodeWithContentDescription(appString(R.string.cloud_add_to_playlist)).assertDoesNotExist()
+        compose.onNodeWithText(appString(R.string.ui_select_file_to_save)).assertIsDisplayed()
         compose.onAllNodes(isToggleable())[0].performClick()
         compose.onAllNodes(isToggleable())[0].assertIsOff()
-        compose.onNodeWithContentDescription(appString(R.string.cloud_switch_source)).performClick()
-        compose.onNodeWithText("云端播放列表内容").assertIsDisplayed()
-        compose.onNodeWithText(appString(R.string.ui_save_to_local_library)).assertDoesNotExist()
-        compose.onNodeWithContentDescription(appString(R.string.cloud_switch_source)).performClick()
-        compose.onNodeWithText(appString(R.string.ui_save_to_local_library)).assertIsDisplayed()
-        compose.onAllNodes(isToggleable())[0].assertIsOff()
+        compose.onAllNodes(isToggleable())[1].assertIsOn()
+        compose.onNodeWithText(appString(R.string.ui_save_to_local_library)).performClick()
+        assertEquals(setOf("第二轨.mp3"), saved)
     }
 }

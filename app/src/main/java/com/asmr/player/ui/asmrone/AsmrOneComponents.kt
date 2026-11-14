@@ -21,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
@@ -227,8 +228,16 @@ internal fun CloudMembershipDialog(work: AsmrCloudWork, onDismiss: () -> Unit, v
 }
 
 @Composable
-fun AsmrOneAlbumSaveContent(album: Album, workId: Long?, onOpenLogin: () -> Unit, viewModel: AsmrOneViewModel = hiltViewModel()) {
+internal fun AlbumCloudSaveButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    IconButton(onClick = onClick, modifier = modifier.testTag("asmr_album_cloud_save")) {
+        Icon(Icons.Rounded.CloudQueue, appString(R.string.cloud_add_to_playlist), tint = Color.White)
+    }
+}
+
+@Composable
+fun AsmrOneAlbumSaveDialog(album: Album, workId: Long?, onDismiss: () -> Unit, onOpenLogin: () -> Unit,
+    viewModel: AsmrOneViewModel = hiltViewModel()) {
     val work = remember(workId, album) { AsmrCloudWork(id = workId ?: album.asmrOneWorkId?.toLong() ?: 0,
         title = album.title, source_id = album.rjCode.ifBlank { album.workId }, mainCoverUrl = album.coverUrl) }
-    CloudMembershipContent(work, onOpenLogin, viewModel, Modifier.fillMaxSize())
+    CloudMembershipDialog(work, onDismiss, viewModel, onOpenLogin)
 }

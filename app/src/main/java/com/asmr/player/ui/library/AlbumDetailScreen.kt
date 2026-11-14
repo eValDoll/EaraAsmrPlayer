@@ -537,7 +537,7 @@ fun AlbumDetailScreen(
     var showAsmrDownloadDialog by remember { mutableStateOf(false) }
     var isPreparingDownload by remember { mutableStateOf(false) }
     var showOnlineSaveDialog by remember { mutableStateOf(false) }
-    var saveToCloud by remember { mutableStateOf(false) }
+    var showCloudSaveDialog by remember { mutableStateOf(false) }
     var pendingOnlineSaveSelection by remember { mutableStateOf<PendingOnlineSaveSelection?>(null) }
     var batchPlaylistItems by remember { mutableStateOf<List<MediaItem>?>(null) }
     var groupPickerAlbumId by remember { mutableStateOf<Long?>(null) }
@@ -660,6 +660,10 @@ fun AlbumDetailScreen(
                         resolveAlbumDetailRj(model.baseRjCode, model.localAlbum)
                     }
                     val hasValidLocalRj = localActionRj.isNotBlank()
+                    val openCloudSave = remember { { showCloudSaveDialog = true } }
+                    val cloudSaveAction = openCloudSave.takeIf {
+                        model.asmrOneWorkId?.toLongOrNull()?.let { it > 0 } == true || model.rjCode.isNotBlank() || hasValidLocalRj
+                    }
                     val localOnlineSource = when {
                         asmrOneTree.isNotEmpty() -> OnlineDownloadSource.AsmrOne
                         hasDlsitePlayCredentials && model.dlsitePlayTree.isNotEmpty() -> OnlineDownloadSource.DlsitePlay
@@ -1040,22 +1044,17 @@ fun AlbumDetailScreen(
                                     viewModel.downloadDlsitePlayLosslessArchive()
                                 },
                                 onSaveClick = {
-                                    val hasLocalSave = incrementalSource != null && incrementalTree.isNotEmpty()
-                                    saveToCloud = !hasLocalSave
-                                    if (hasLocalSave) {
+                                    incrementalSource?.let { source ->
                                         prepareIncrementalAlbumAction(
                                             action = IncrementalAlbumAction.Save,
-                                            source = checkNotNull(incrementalSource),
+                                            source = source,
                                             tree = incrementalTree,
                                         )
-                                    } else {
-                                        showOnlineSaveDialog = true
                                     }
                                 },
                                 downloadEnabled = headerDownloadEnabled,
                                 losslessDownloadEnabled = tab == 2 && resolvedInitialTarget && model.dlsitePlayTree.isNotEmpty(),
-                                saveEnabled = (if (isLocalTab) headerDownloadEnabled else canUseAsmrOneTreeActions) ||
-                                    model.asmrOneWorkId?.toLongOrNull() != null || model.rjCode.isNotBlank(),
+                                saveEnabled = if (isLocalTab) headerDownloadEnabled else canUseAsmrOneTreeActions,
                                 showGroupButton = isLocalTab && model.localAlbum != null,
                                 onOpenGroupPicker = { id -> groupPickerAlbumId = id },
                                 introSessionKey = introSessionKey,
@@ -1128,6 +1127,7 @@ fun AlbumDetailScreen(
                                     animateIntro = shouldAnimateHeaderIntro,
                                     artworkSize = landscapeArtworkSize,
                                     showCoverLoadingState = showHeroCoverLoadingState,
+                                    onCloudSaveClick = cloudSaveAction,
                                     collapsePx = { heroMotion.collapsePx },
                                     collapseMaxPx = heroCollapseMaxPx,
                                     modifier = Modifier
@@ -1144,6 +1144,7 @@ fun AlbumDetailScreen(
                                     pageContainerColor = pageContainerColor,
                                     listenTogetherRjListenerCount = model.listenTogetherRjListenerCount,
                                     showCoverLoadingState = showHeroCoverLoadingState,
+                                    onCloudSaveClick = cloudSaveAction,
                                     messageManager = viewModel.messageManager,
                                     onMetaLongClick = ::openMetaActions,
                                     blurLayerCache = heroBlurLayerCache,
@@ -1612,23 +1613,24 @@ fun AlbumDetailScreen(
                     )
                 }
 
-                if (showOnlineSaveDialog) {
+                if (showCloudSaveDialog) {
+                    com.asmr.player.ui.asmrone.AsmrOneAlbumSaveDialog(
+                        album = album.copy(rjCode = model.rjCode.ifBlank { localActionRj }),
+                        workId = model.asmrOneWorkId?.toLongOrNull(),
+                        onDismiss = { showCloudSaveDialog = false },
+                        onOpenLogin = onOpenAsmrOneLogin,
+                    )
+                }
+
+                if (showOnlineSaveDialog && canSaveOnline) {
                     val saveTree = when (onlineSaveSource) {
                         OnlineDownloadSource.DlsitePlay -> model.dlsitePlayTree
                         else -> asmrOneTree
                     }
                     OnlineSaveDialog(
                         albumTitle = album.title,
-                        trackTree = if (canSaveOnline) saveTree else emptyList(),
+                        trackTree = saveTree,
                         disabledPaths = saveDisabledPaths,
-                        initialCloudSelected = saveToCloud,
-                        cloudContent = {
-                            com.asmr.player.ui.asmrone.AsmrOneAlbumSaveContent(
-                                album = album.copy(rjCode = model.rjCode.ifBlank { localActionRj }),
-                                workId = model.asmrOneWorkId?.toLongOrNull(),
-                                onOpenLogin = { showOnlineSaveDialog = false; onOpenAsmrOneLogin() },
-                            )
-                        },
                         onDismiss = { showOnlineSaveDialog = false },
                         onConfirm = { selected ->
                             pendingOnlineSaveSelection = PendingOnlineSaveSelection(
@@ -2145,6 +2147,7 @@ private fun AlbumDetailLandscapeArtworkCover(
     animateIntro: Boolean,
     artworkSize: Dp,
     showCoverLoadingState: Boolean,
+    onCloudSaveClick: (() -> Unit)?,
     collapsePx: () -> Float,
     collapseMaxPx: Float,
     modifier: Modifier = Modifier
@@ -2281,6 +2284,12 @@ private fun AlbumDetailLandscapeArtworkCover(
                         }
                     }
                 )
+                if (onCloudSaveClick != null) {
+                    com.asmr.player.ui.asmrone.AlbumCloudSaveButton(
+                        onClick = onCloudSaveClick,
+                        modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
+                    )
+                }
             }
         }
     }
@@ -2677,6 +2686,7 @@ private fun AlbumDetailHeroBackground(
     pageContainerColor: Color,
     listenTogetherRjListenerCount: Int?,
     showCoverLoadingState: Boolean,
+    onCloudSaveClick: (() -> Unit)?,
     messageManager: MessageManager,
     onMetaLongClick: (String) -> Unit,
     blurLayerCache: AlbumHeroBlurLayerCache,
@@ -2969,6 +2979,15 @@ private fun AlbumDetailHeroBackground(
                     )
                 )
         )
+        if (onCloudSaveClick != null) {
+            com.asmr.player.ui.asmrone.AlbumCloudSaveButton(
+                onClick = onCloudSaveClick,
+                modifier = Modifier.align(Alignment.TopEnd)
+                    .padding(top = com.asmr.player.ui.common.StableWindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 64.dp,
+                        end = AlbumDetailHorizontalPadding)
+                    .graphicsLayer { alpha = heroIntroProgress.value.coerceIn(0f, 1f) },
+            )
+        }
         AlbumHeroIdentityOverlay(
             album = album,
             introSessionKey = introSessionKey,
