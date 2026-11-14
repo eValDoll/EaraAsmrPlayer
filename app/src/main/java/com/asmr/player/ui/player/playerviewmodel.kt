@@ -13,6 +13,7 @@ import com.asmr.player.data.lyrics.lyricsTargetContextFromMediaItem
 import com.asmr.player.playback.PlaybackSnapshot
 import com.asmr.player.playback.MediaItemFactory
 import com.asmr.player.playback.PlayerConnection
+import com.asmr.player.playback.PlayMode
 import com.asmr.player.playback.sourcePlaylistId
 import com.asmr.player.playback.withSourcePlaylist
 import com.asmr.player.domain.model.Album
@@ -581,35 +582,11 @@ class PlayerViewModel @Inject constructor(
 
     fun cyclePlayMode() {
         val snap = playback.value
-        val currentMode = when {
-            snap.shuffleEnabled -> 2
-            snap.repeatMode == Player.REPEAT_MODE_ONE -> 1
-            else -> 0
-        }
-        val nextMode = when (currentMode) {
-            0 -> 1
-            1 -> 2
-            else -> 0
-        }
-        val modeText = when (nextMode) {
-            1 -> {
-                playerConnection.setRepeatMode(Player.REPEAT_MODE_ONE)
-                playerConnection.setShuffleEnabled(false)
-                appString(R.string.ui_single_loop)
-            }
-            2 -> {
-                playerConnection.setRepeatMode(Player.REPEAT_MODE_ALL)
-                playerConnection.setShuffleEnabled(true)
-                appString(R.string.ui_shuffle)
-            }
-            else -> {
-                playerConnection.setRepeatMode(Player.REPEAT_MODE_ALL)
-                playerConnection.setShuffleEnabled(false)
-                appString(R.string.ui_list_loop)
-            }
-        }
+        val nextMode = PlayMode.fromPlayer(snap.repeatMode, snap.shuffleEnabled).next()
+        playerConnection.setPlayMode(nextMode)
+        val modeText = appString(nextMode.labelRes)
         messageManager.showInfo(appString(R.string.ui_play_mode_2a61bc, modeText))
-        viewModelScope.launch { settingsRepository.setPlayMode(nextMode) }
+        viewModelScope.launch { settingsRepository.setPlayMode(nextMode.storageValue) }
     }
 
     fun playTracks(album: Album, tracks: List<Track>, startTrack: Track) {
