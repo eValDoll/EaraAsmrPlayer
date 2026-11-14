@@ -3,6 +3,9 @@ package com.asmr.player
 import com.asmr.player.i18n.appString
 import com.asmr.player.R
 
+import androidx.compose.ui.platform.testTag
+import com.asmr.player.ui.asmrone.AsmrOneAlbumSaveDialog
+import com.asmr.player.ui.library.resolveAlbumDetailRj
 import com.asmr.player.ui.common.LocalAlbumCoverShadowCache
 import com.asmr.player.ui.common.rememberAlbumCoverShadowCache
 
@@ -357,6 +360,7 @@ private fun AlbumDetailRouteFrame(
     onExitStateChanged: (Boolean) -> Unit,
     onLocalAlbumRemoved: (AlbumDetailUiState.Removed) -> Unit = {},
     onEditRj: (String) -> Unit,
+    onOpenAsmrOneLogin: () -> Unit,
     content: @Composable (AlbumDetailViewModel, AlbumHeroBlurLayerCache) -> Unit
 ) {
     val viewModel = hiltViewModel<AlbumDetailViewModel>(backStackEntry)
@@ -486,6 +490,7 @@ private fun AlbumDetailRouteFrame(
                 viewModel = viewModel,
                 onBack = closeAlbumDetail,
                 onEditRj = onEditRj,
+                onOpenAsmrOneLogin = onOpenAsmrOneLogin,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .zIndex(2f)
@@ -500,11 +505,20 @@ private fun AlbumDetailRouteTopBar(
     viewModel: AlbumDetailViewModel,
     onBack: () -> Unit,
     onEditRj: (String) -> Unit,
+    onOpenAsmrOneLogin: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val detailState by viewModel.uiState.collectAsStateWithLifecycle()
     val detailModel = (detailState as? AlbumDetailUiState.Success)?.model
     val showManualBind = detailModel?.localAlbum?.id?.let { it > 0L } == true
+    val cloudRj = remember(detailModel?.rjCode, detailModel?.baseRjCode, detailModel?.localAlbum) {
+        detailModel?.rjCode?.ifBlank {
+            resolveAlbumDetailRj(detailModel.baseRjCode, detailModel.localAlbum)
+        }.orEmpty()
+    }
+    val canSaveToCloud = detailModel != null &&
+        (detailModel.asmrOneWorkId?.toLongOrNull()?.let { it > 0 } == true || cloudRj.isNotBlank())
+    var showCloudSaveDialog by remember { mutableStateOf(false) }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Spacer(modifier = Modifier.windowInsetsTopHeight(StableWindowInsets.statusBars))
@@ -532,6 +546,21 @@ private fun AlbumDetailRouteTopBar(
                 }
             },
             actions = {
+                if (canSaveToCloud) {
+                    EaraTopBarIconButton(
+                        onClick = { showCloudSaveDialog = true },
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .albumDetailTopBarButtonSurface(true)
+                            .testTag("asmr_album_cloud_save")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.CloudQueue,
+                            contentDescription = appString(R.string.cloud_add_to_playlist),
+                            tint = Color.White
+                        )
+                    }
+                }
                 PageTranslationAction(
                     modifier = Modifier
                         .padding(end = 8.dp)
@@ -560,6 +589,14 @@ private fun AlbumDetailRouteTopBar(
                     }
                 }
             }
+        )
+    }
+    if (showCloudSaveDialog && canSaveToCloud && detailModel != null) {
+        AsmrOneAlbumSaveDialog(
+            album = detailModel.displayAlbum.copy(rjCode = cloudRj),
+            workId = detailModel.asmrOneWorkId?.toLongOrNull(),
+            onDismiss = { showCloudSaveDialog = false },
+            onOpenLogin = onOpenAsmrOneLogin,
         )
     }
 }
@@ -2633,6 +2670,7 @@ fun MainContainer(
                             }
                         },
                         onExitStateChanged = { albumDetailExitInProgress = it },
+                        onOpenAsmrOneLogin = { navController.navigateSingleTop("asmr_one_login") },
                         onEditRj = { currentRj ->
                             manualRjInput = currentRj
                             showManualRjDialog = true
@@ -2676,7 +2714,6 @@ fun MainContainer(
                                 albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
                             },
                             onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
-                            onOpenAsmrOneLogin = { navController.navigateSingleTop("asmr_one_login") },
                             onOpenAlbumByRj = { targetRj, work ->
                                 AlbumCoverHintStore.record(
                                     albumId = null,
@@ -2726,6 +2763,7 @@ fun MainContainer(
                         onLocalAlbumRemoved = { removed ->
                             playerViewModel.removeAlbumFromQueue(removed.albumId, removed.mediaIds)
                         },
+                        onOpenAsmrOneLogin = { navController.navigateSingleTop("asmr_one_login") },
                         onEditRj = { currentRj ->
                             manualRjInput = currentRj
                             showManualRjDialog = true
@@ -2767,7 +2805,6 @@ fun MainContainer(
                                 albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
                             },
                             onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
-                            onOpenAsmrOneLogin = { navController.navigateSingleTop("asmr_one_login") },
                             onOpenAlbumByRj = { targetRj, work ->
                                 AlbumCoverHintStore.record(
                                     albumId = null,
@@ -2809,6 +2846,7 @@ fun MainContainer(
                             }
                         },
                         onExitStateChanged = { albumDetailExitInProgress = it },
+                        onOpenAsmrOneLogin = { navController.navigateSingleTop("asmr_one_login") },
                         onEditRj = { currentRj ->
                             manualRjInput = currentRj
                             showManualRjDialog = true
@@ -2840,7 +2878,6 @@ fun MainContainer(
                                 albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
                             },
                             onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
-                            onOpenAsmrOneLogin = { navController.navigateSingleTop("asmr_one_login") },
                             onOpenAlbumByRj = { targetRj, work ->
                                 AlbumCoverHintStore.record(
                                     albumId = null,

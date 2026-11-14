@@ -498,7 +498,6 @@ fun AlbumDetailScreen(
     onAddMediaItemsToFavorites: (List<MediaItem>) -> Unit = {},
     onOpenPlaylistPicker: (MediaItem) -> Unit = {},
     onOpenDlsiteLogin: () -> Unit = {},
-    onOpenAsmrOneLogin: () -> Unit = {},
     onOpenAlbumByRj: (String, DlsiteRecommendedWork?) -> Unit = { _, _ -> },
     onSearchKeyword: (String) -> Unit = {},
     initialTab: Int? = null,
@@ -537,7 +536,6 @@ fun AlbumDetailScreen(
     var showAsmrDownloadDialog by remember { mutableStateOf(false) }
     var isPreparingDownload by remember { mutableStateOf(false) }
     var showOnlineSaveDialog by remember { mutableStateOf(false) }
-    var showCloudSaveDialog by remember { mutableStateOf(false) }
     var pendingOnlineSaveSelection by remember { mutableStateOf<PendingOnlineSaveSelection?>(null) }
     var batchPlaylistItems by remember { mutableStateOf<List<MediaItem>?>(null) }
     var groupPickerAlbumId by remember { mutableStateOf<Long?>(null) }
@@ -660,10 +658,6 @@ fun AlbumDetailScreen(
                         resolveAlbumDetailRj(model.baseRjCode, model.localAlbum)
                     }
                     val hasValidLocalRj = localActionRj.isNotBlank()
-                    val openCloudSave = remember { { showCloudSaveDialog = true } }
-                    val cloudSaveAction = openCloudSave.takeIf {
-                        model.asmrOneWorkId?.toLongOrNull()?.let { it > 0 } == true || model.rjCode.isNotBlank() || hasValidLocalRj
-                    }
                     val localOnlineSource = when {
                         asmrOneTree.isNotEmpty() -> OnlineDownloadSource.AsmrOne
                         hasDlsitePlayCredentials && model.dlsitePlayTree.isNotEmpty() -> OnlineDownloadSource.DlsitePlay
@@ -1127,7 +1121,6 @@ fun AlbumDetailScreen(
                                     animateIntro = shouldAnimateHeaderIntro,
                                     artworkSize = landscapeArtworkSize,
                                     showCoverLoadingState = showHeroCoverLoadingState,
-                                    onCloudSaveClick = cloudSaveAction,
                                     collapsePx = { heroMotion.collapsePx },
                                     collapseMaxPx = heroCollapseMaxPx,
                                     modifier = Modifier
@@ -1144,7 +1137,6 @@ fun AlbumDetailScreen(
                                     pageContainerColor = pageContainerColor,
                                     listenTogetherRjListenerCount = model.listenTogetherRjListenerCount,
                                     showCoverLoadingState = showHeroCoverLoadingState,
-                                    onCloudSaveClick = cloudSaveAction,
                                     messageManager = viewModel.messageManager,
                                     onMetaLongClick = ::openMetaActions,
                                     blurLayerCache = heroBlurLayerCache,
@@ -1610,15 +1602,6 @@ fun AlbumDetailScreen(
                                 OnlineDownloadSource.DlsiteTrial -> viewModel.downloadDlsiteTrialSelected(selected, onFinished)
                             }
                         }
-                    )
-                }
-
-                if (showCloudSaveDialog) {
-                    com.asmr.player.ui.asmrone.AsmrOneAlbumSaveDialog(
-                        album = album.copy(rjCode = model.rjCode.ifBlank { localActionRj }),
-                        workId = model.asmrOneWorkId?.toLongOrNull(),
-                        onDismiss = { showCloudSaveDialog = false },
-                        onOpenLogin = onOpenAsmrOneLogin,
                     )
                 }
 
@@ -2147,7 +2130,6 @@ private fun AlbumDetailLandscapeArtworkCover(
     animateIntro: Boolean,
     artworkSize: Dp,
     showCoverLoadingState: Boolean,
-    onCloudSaveClick: (() -> Unit)?,
     collapsePx: () -> Float,
     collapseMaxPx: Float,
     modifier: Modifier = Modifier
@@ -2284,12 +2266,6 @@ private fun AlbumDetailLandscapeArtworkCover(
                         }
                     }
                 )
-                if (onCloudSaveClick != null) {
-                    com.asmr.player.ui.asmrone.AlbumCloudSaveButton(
-                        onClick = onCloudSaveClick,
-                        modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
-                    )
-                }
             }
         }
     }
@@ -2686,7 +2662,6 @@ private fun AlbumDetailHeroBackground(
     pageContainerColor: Color,
     listenTogetherRjListenerCount: Int?,
     showCoverLoadingState: Boolean,
-    onCloudSaveClick: (() -> Unit)?,
     messageManager: MessageManager,
     onMetaLongClick: (String) -> Unit,
     blurLayerCache: AlbumHeroBlurLayerCache,
@@ -2979,15 +2954,6 @@ private fun AlbumDetailHeroBackground(
                     )
                 )
         )
-        if (onCloudSaveClick != null) {
-            com.asmr.player.ui.asmrone.AlbumCloudSaveButton(
-                onClick = onCloudSaveClick,
-                modifier = Modifier.align(Alignment.TopEnd)
-                    .padding(top = com.asmr.player.ui.common.StableWindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 64.dp,
-                        end = AlbumDetailHorizontalPadding)
-                    .graphicsLayer { alpha = heroIntroProgress.value.coerceIn(0f, 1f) },
-            )
-        }
         AlbumHeroIdentityOverlay(
             album = album,
             introSessionKey = introSessionKey,
