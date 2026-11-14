@@ -9,6 +9,18 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface AlbumGroupItemDao {
+    @Query("""
+        SELECT DISTINCT t.albumId AS albumId,
+            COALESCE(NULLIF(a.displayTitle, ''), a.title) AS title,
+            a.rjCode AS rjCode, a.workId AS workId, a.coverUrl AS coverUrl
+        FROM album_group_items i
+        INNER JOIN tracks t ON t.path = i.mediaId
+        LEFT JOIN albums a ON a.id = t.albumId
+        WHERE i.groupId = :groupId
+        ORDER BY a.title COLLATE NOCASE ASC, t.albumId ASC
+    """)
+    suspend fun getGroupAlbumsOnce(groupId: Long): List<AlbumGroupWorkRow>
+
     @Query(
         """
         SELECT
@@ -90,6 +102,14 @@ interface AlbumGroupItemDao {
     )
     suspend fun deleteAlbumFromGroup(groupId: Long, albumId: Long)
 }
+
+data class AlbumGroupWorkRow(
+    val albumId: Long,
+    val title: String?,
+    val rjCode: String?,
+    val workId: String?,
+    val coverUrl: String?,
+)
 
 data class AlbumGroupTrackRow(
     val groupId: Long,
