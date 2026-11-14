@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -419,13 +420,13 @@ private fun PlaybackCoreButtons(
     ) {
         val mode = PlayMode.fromPlayer(playback.repeatMode, playback.shuffleEnabled)
         val icon = when (mode) {
-            PlayMode.Shuffle -> Icons.Rounded.Shuffle
-            PlayMode.SingleLoop -> Icons.Rounded.RepeatOne
-            PlayMode.ListLoop -> Icons.Rounded.Repeat
-            PlayMode.PauseAfterTrack -> Icons.Rounded.PauseCircleOutline
+            PlayMode.Shuffle -> rememberVectorPainter(Icons.Rounded.Shuffle)
+            PlayMode.SingleLoop -> rememberVectorPainter(Icons.Rounded.RepeatOne)
+            PlayMode.ListLoop -> rememberVectorPainter(Icons.Rounded.Repeat)
+            PlayMode.PauseAfterTrack -> painterResource(R.drawable.ic_pause_after_track)
         }
         Icon(
-            icon,
+            painter = icon,
             contentDescription = appString(R.string.ui_play_mode_2a61bc, appString(mode.labelRes)),
             tint = contentColor,
             modifier = Modifier.size(modeIconSize)
