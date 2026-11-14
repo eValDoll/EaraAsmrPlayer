@@ -28,6 +28,10 @@
 -keep class androidx.media3.** { *; }
 -keep class com.google.common.util.concurrent.** { *; }
 
+# 音轨结束暂停回归测试复用服务使用的播放模式及边界暂停配置。
+-keep class com.asmr.player.playback.PlayMode { *; }
+-keep class com.asmr.player.playback.PlayModeKt { *; }
+
 # Release 设备测试验证 HLS 合并、章节裁切与取消，不接触用户的下载数据库。
 -keep class com.asmr.player.data.remote.download.JapaneseAsmrHlsDownloaderKt { *; }
 -keep class com.asmr.player.data.remote.download.JapaneseAsmrDownloadPreflight { *; }
