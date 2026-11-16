@@ -88,6 +88,7 @@ import com.asmr.player.playback.VolumeThresholdAudioProcessor
 import com.asmr.player.playback.VolumeFader
 import com.asmr.player.playback.isRecoverableRemotePlaybackFailure
 import com.asmr.player.playback.capturePersistedPlaybackState
+import com.asmr.player.playback.configureTrackEndPause
 import com.asmr.player.playback.spectrumVisualDelayMillis
 import com.asmr.player.playback.withPlaybackArtwork
 import com.asmr.player.playback.withExactTrackTitle
@@ -445,6 +446,7 @@ class PlaybackService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
+        exoPlayer.configureTrackEndPause()
         applyVideoOutputEnabled()
 
         spectrumAnalyzer.start()

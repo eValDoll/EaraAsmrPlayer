@@ -6,6 +6,29 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class SliceLoopEngineTest {
+    @Test
+    fun pauseAfterTrack_finishesAtTheTrackBoundaryInsteadOfSkippingOrLooping() {
+        for (positionMs in listOf(5_900L, 6_100L, 10_000L)) {
+            val action = SliceLoopEngine().decide(
+                nowElapsedMs = 1_000L,
+                input = SliceLoopInput(
+                    sliceModeEnabled = true,
+                    userScrubbing = false,
+                    mediaId = "t1",
+                    positionMs = positionMs,
+                    durationMs = 10_000L,
+                    repeatMode = Player.REPEAT_MODE_OFF,
+                    previewSlice = null,
+                    slices = slices
+                )
+            )
+            assertEquals(
+                if (positionMs < 10_000L) SliceLoopAction.SeekTo(10_000L) else SliceLoopAction.None,
+                action
+            )
+        }
+    }
+
     private val slices = listOf(
         Slice(id = 1L, startMs = 1_000L, endMs = 2_000L),
         Slice(id = 2L, startMs = 5_000L, endMs = 6_000L)

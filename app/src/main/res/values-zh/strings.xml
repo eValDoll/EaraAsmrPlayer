@@ -1009,6 +1009,7 @@
     <string name="ui_single_loop" formatted="false">"单曲循环"</string>
     <string name="ui_shuffle" formatted="false">"随机播放"</string>
     <string name="ui_list_loop" formatted="false">"列表循环"</string>
+    <string name="ui_pause_after_track" formatted="false">"播完暂停"</string>
     <string name="ui_play_mode_2a61bc">"播放模式：%1$s"</string>
     <string name="ui_no_playable_audio_track_found" formatted="false">"未找到可播放的音轨"</string>
     <string name="ui_player_not_connected" formatted="false">"播放器未连接"</string>

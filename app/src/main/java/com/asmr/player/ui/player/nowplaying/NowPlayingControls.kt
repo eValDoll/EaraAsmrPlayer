@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -38,7 +39,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.media3.common.Player
 import com.asmr.player.R
 import com.asmr.player.ui.common.AudioOutputRouteIcon
 import com.asmr.player.ui.common.AppVolumeHearingWarningDialog
@@ -46,6 +46,7 @@ import com.asmr.player.ui.common.AppVolumeSlider
 import com.asmr.player.ui.common.AppVolumeWarningSessionState
 import com.asmr.player.playback.AppVolume
 import com.asmr.player.playback.PlaybackSnapshot
+import com.asmr.player.playback.PlayMode
 import com.asmr.player.ui.common.rememberProtectedAppVolumeChangeState
 import com.asmr.player.service.AudioOutputRouteKind
 import com.asmr.player.ui.theme.AsmrTheme
@@ -417,14 +418,16 @@ private fun PlaybackCoreButtons(
         modifier = Modifier.size(coreButtonSize),
         colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
     ) {
-        val icon = when {
-            playback.shuffleEnabled -> Icons.Rounded.Shuffle
-            playback.repeatMode == Player.REPEAT_MODE_ONE -> Icons.Rounded.RepeatOne
-            else -> Icons.Rounded.Repeat
+        val mode = PlayMode.fromPlayer(playback.repeatMode, playback.shuffleEnabled)
+        val icon = when (mode) {
+            PlayMode.Shuffle -> rememberVectorPainter(Icons.Rounded.Shuffle)
+            PlayMode.SingleLoop -> rememberVectorPainter(Icons.Rounded.RepeatOne)
+            PlayMode.ListLoop -> rememberVectorPainter(Icons.Rounded.Repeat)
+            PlayMode.PauseAfterTrack -> painterResource(R.drawable.ic_pause_after_track)
         }
         Icon(
-            icon,
-            contentDescription = appString(R.string.ui_play_mode),
+            painter = icon,
+            contentDescription = appString(R.string.ui_play_mode_2a61bc, appString(mode.labelRes)),
             tint = contentColor,
             modifier = Modifier.size(modeIconSize)
         )

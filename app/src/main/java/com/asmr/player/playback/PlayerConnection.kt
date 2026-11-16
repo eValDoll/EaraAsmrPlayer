@@ -309,7 +309,7 @@ class PlayerConnection @Inject constructor(
             restoreAttemptResolved = true
             if (!restored) {
                 val mode = runCatching { settingsRepository.playMode.first() }.getOrDefault(0)
-                applyPlayModeToController(c, mode)
+                PlayMode.fromStorageValue(mode).applyTo(c)
             }
             updateQueue()
             pruneRemovedMediaItems(c)
@@ -435,12 +435,8 @@ class PlayerConnection @Inject constructor(
         controller?.seekToPrevious()
     }
 
-    fun setRepeatMode(repeatMode: Int) {
-        controller?.repeatMode = repeatMode
-    }
-
-    fun setShuffleEnabled(enabled: Boolean) {
-        controller?.shuffleModeEnabled = enabled
+    fun setPlayMode(mode: PlayMode) {
+        controller?.let(mode::applyTo)
     }
 
     fun setPlaybackSpeed(speed: Float) {
@@ -658,6 +654,7 @@ class PlayerConnection @Inject constructor(
 
     private fun applySliceLoopIfNeeded(c: MediaController) {
         val preview = slicePlaybackController.previewSlice.value
+        if (preview == null && c.repeatMode == Player.REPEAT_MODE_OFF && !c.playWhenReady) return
         val action = sliceLoopEngine.decide(
             nowElapsedMs = SystemClock.elapsedRealtime(),
             input = SliceLoopInput(
@@ -679,23 +676,6 @@ class PlayerConnection @Inject constructor(
                 slicePlaybackController.clearPreview()
             }
             SliceLoopAction.None -> Unit
-        }
-    }
-}
-
-private fun applyPlayModeToController(controller: MediaController, mode: Int) {
-    when (mode) {
-        1 -> {
-            controller.repeatMode = Player.REPEAT_MODE_ONE
-            controller.shuffleModeEnabled = false
-        }
-        2 -> {
-            controller.repeatMode = Player.REPEAT_MODE_ALL
-            controller.shuffleModeEnabled = true
-        }
-        else -> {
-            controller.repeatMode = Player.REPEAT_MODE_ALL
-            controller.shuffleModeEnabled = false
         }
     }
 }

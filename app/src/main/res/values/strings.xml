@@ -1009,6 +1009,7 @@
     <string name="ui_single_loop" formatted="false">"single loop"</string>
     <string name="ui_shuffle" formatted="false">"shuffle"</string>
     <string name="ui_list_loop" formatted="false">"List loop"</string>
+    <string name="ui_pause_after_track" formatted="false">"Pause after track"</string>
     <string name="ui_play_mode_2a61bc">"Play mode: %1$s"</string>
     <string name="ui_no_playable_audio_track_found" formatted="false">"No playable audio track found"</string>
     <string name="ui_player_not_connected" formatted="false">"Player not connected"</string>

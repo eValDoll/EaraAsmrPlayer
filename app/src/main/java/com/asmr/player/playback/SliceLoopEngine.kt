@@ -31,6 +31,9 @@ class SliceLoopEngine(
 
         val sorted = if (slices.isSortedByStart()) slices else slices.sortedBy { it.startMs }
         val pos = input.positionMs.coerceAtLeast(0L)
+        if (input.repeatMode == Player.REPEAT_MODE_OFF && pos >= sorted.last().endMs - endThresholdMs) {
+            return seekIfNotThrottled(nowElapsedMs, pos, input.durationMs)
+        }
 
         val activeIndex = sorted.indexOfFirst { s -> pos >= s.startMs && pos < s.endMs }
         if (activeIndex < 0) {
