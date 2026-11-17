@@ -1576,7 +1576,8 @@ internal fun NowPlayingScreen(
                 isLandscape = isLandscape,
                 onNavigateUp = handleNavigateUp,
                 onShowSleepTimer = onShowSleepTimer,
-                onShowQueue = onShowQueue,
+                onShowEqualizer = { showEqualizer = true },
+                onShowQueue = if (surfaceMode == NowPlayingSurfaceMode.PLAYER && isLandscape && isVideo) onShowQueue else null,
                 onManualBindLyrics = if (surfaceMode == NowPlayingSurfaceMode.LYRICS) openManualLyricsAction else null,
                 navigationEnabled = !pendingRouteExit,
                 showTitle = showSharedHeaderTitle,
@@ -1802,7 +1803,7 @@ internal fun NowPlayingScreen(
                                 val current = playback.currentMediaItem ?: return@PlaybackControls
                                 onOpenPlaylistPicker(current)
                             },
-                            onShowEqualizer = { showEqualizer = true },
+                            onShowQueue = onShowQueue,
                             onManageTags = {
                                 val mediaId = item?.mediaId.orEmpty()
                                 val fallback = metadata?.title?.toString().orEmpty()
@@ -1981,7 +1982,7 @@ internal fun NowPlayingScreen(
                             val current = playback.currentMediaItem ?: return@PlaybackControls
                             onOpenPlaylistPicker(current)
                         },
-                        onShowEqualizer = { showEqualizer = true },
+                        onShowQueue = onShowQueue,
                         onManageTags = {
                             val mediaId = item?.mediaId.orEmpty()
                             val fallback = metadata?.title?.toString().orEmpty()
@@ -2443,7 +2444,7 @@ internal fun NowPlayingScreen(
                                 val current = playback.currentMediaItem ?: return@PlaybackControls
                                 onOpenPlaylistPicker(current)
                             },
-                            onShowEqualizer = { showEqualizer = true },
+                            onShowQueue = onShowQueue,
                             onManageTags = {
                                 val mediaId = item?.mediaId.orEmpty()
                                 val fallback = metadata?.title?.toString().orEmpty()

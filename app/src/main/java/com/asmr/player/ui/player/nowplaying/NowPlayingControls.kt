@@ -64,7 +64,7 @@ internal fun PlaybackControls(
     isFavorite: Boolean,
     viewModel: PlayerViewModel,
     onShowPlaylistPicker: () -> Unit,
-    onShowEqualizer: () -> Unit,
+    onShowQueue: () -> Unit,
     onManageTags: () -> Unit,
     sliceUiState: SliceUiState,
     modifier: Modifier = Modifier,
@@ -145,7 +145,7 @@ internal fun PlaybackControls(
                 isFavorite = isFavorite,
                 viewModel = viewModel,
                 onShowPlaylistPicker = onShowPlaylistPicker,
-                onShowEqualizer = onShowEqualizer,
+                onShowQueue = onShowQueue,
                 onManageTags = onManageTags,
                 sliceUiState = sliceUiState,
                 actionButtonSize = actionButtonSize,
@@ -290,7 +290,7 @@ private fun PlaybackActionButtons(
     isFavorite: Boolean,
     viewModel: PlayerViewModel,
     onShowPlaylistPicker: () -> Unit,
-    onShowEqualizer: () -> Unit,
+    onShowQueue: () -> Unit,
     onManageTags: () -> Unit,
     sliceUiState: SliceUiState,
     actionButtonSize: Dp,
@@ -324,6 +324,19 @@ private fun PlaybackActionButtons(
         )
     }
 
+    IconButton(
+        onClick = onShowQueue,
+        modifier = Modifier.size(actionButtonSize),
+        colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.FormatListNumbered,
+            contentDescription = appString(R.string.ui_play_queue),
+            tint = contentColor.copy(alpha = 0.8f),
+            modifier = Modifier.size(actionIconSize)
+        )
+    }
+
     if (!landscapeControls) {
         val isOnlineMedia = playback.currentMediaItem.isOnlineMedia()
         IconButton(
@@ -340,19 +353,6 @@ private fun PlaybackActionButtons(
                 modifier = Modifier.size(actionIconSize)
             )
         }
-    }
-
-    IconButton(
-        onClick = onShowEqualizer,
-        modifier = Modifier.size(actionButtonSize),
-        colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
-    ) {
-        Icon(
-            imageVector = Icons.Rounded.Tune,
-            contentDescription = appString(R.string.ui_sound_effects_panel),
-            tint = contentColor.copy(alpha = 0.8f),
-            modifier = Modifier.size(actionIconSize)
-        )
     }
 
     if (!landscapeControls) {
