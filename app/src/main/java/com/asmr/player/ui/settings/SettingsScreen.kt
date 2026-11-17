@@ -174,7 +174,7 @@ private fun settingsDetailExitTransition() = slideOutHorizontally(
     targetOffsetX = { fullWidth -> fullWidth },
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     windowSizeClass: WindowSizeClass,
@@ -777,19 +777,21 @@ fun SettingsScreen(
                                 checked = coverBackgroundEnabled,
                                 onCheckedChange = viewModel::setCoverBackgroundEnabled
                             )
-                            Row(
+                            FlowRow(
                                 modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text(androidx.compose.ui.res.stringResource(R.string.ui_background_cover_preview_method), style = MaterialTheme.typography.bodyMedium)
-                                PreviewModeInfoTip(
-                                    active = activeTipKey == "cover_preview_mode",
-                                    onToggle = {
-                                        activeTipKey = if (activeTipKey == "cover_preview_mode") null else "cover_preview_mode"
-                                    }
-                                )
-                                Spacer(modifier = Modifier.weight(1f))
-                                SingleChoiceSegmentedButtonRow {
+                                Row(modifier = Modifier.align(Alignment.CenterVertically), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(androidx.compose.ui.res.stringResource(R.string.ui_background_cover_preview_method), style = MaterialTheme.typography.bodyMedium)
+                                    PreviewModeInfoTip(
+                                        active = activeTipKey == "cover_preview_mode",
+                                        onToggle = {
+                                            activeTipKey = if (activeTipKey == "cover_preview_mode") null else "cover_preview_mode"
+                                        }
+                                    )
+                                }
+                                SingleChoiceSegmentedButtonRow(modifier = Modifier.align(Alignment.CenterVertically)) {
                                     SegmentedButton(
                                         selected = coverPreviewMode == CoverPreviewMode.Disabled,
                                         onClick = { viewModel.setCoverPreviewMode(CoverPreviewMode.Disabled) },
@@ -1940,7 +1942,7 @@ private fun formatCacheSize(sizeBytes: Long): String {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun LyricsPageSettingsSection(
     settings: LyricsPageSettings,
@@ -1973,20 +1975,20 @@ private fun LyricsPageSettingsSection(
         onValueChange = { onSettingsChange(settings.copy(lineHeightMultiplier = it)) },
         onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
     )
-    Row(
+    FlowRow(
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text(androidx.compose.ui.res.stringResource(R.string.ui_display_area), style = MaterialTheme.typography.bodyMedium)
-        Spacer(modifier = Modifier.weight(1f))
-        SingleChoiceSegmentedButtonRow {
+        Text(androidx.compose.ui.res.stringResource(R.string.ui_display_area), modifier = Modifier.align(Alignment.CenterVertically), style = MaterialTheme.typography.bodyMedium)
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.align(Alignment.CenterVertically)) {
             SegmentedButton(
                 selected = settings.displayAreaMode == 0,
                 onClick = { onSettingsChange(settings.copy(displayAreaMode = 0)) },
                 shape = SegmentedButtonDefaults.itemShape(index = 0, count = 4),
                 colors = segmentedButtonColors,
                 icon = {},
-                label = { Text(androidx.compose.ui.res.stringResource(R.string.ui_full_screen)) }
+                label = { Text(androidx.compose.ui.res.stringResource(R.string.ui_lyrics_area_full)) }
             )
             SegmentedButton(
                 selected = settings.displayAreaMode == 1,
@@ -1994,7 +1996,7 @@ private fun LyricsPageSettingsSection(
                 shape = SegmentedButtonDefaults.itemShape(index = 1, count = 4),
                 colors = segmentedButtonColors,
                 icon = {},
-                label = { Text(androidx.compose.ui.res.stringResource(R.string.ui_upper_1_4)) }
+                label = { Text(androidx.compose.ui.res.stringResource(R.string.ui_lyrics_area_top)) }
             )
             SegmentedButton(
                 selected = settings.displayAreaMode == 2,
@@ -2002,7 +2004,7 @@ private fun LyricsPageSettingsSection(
                 shape = SegmentedButtonDefaults.itemShape(index = 2, count = 4),
                 colors = segmentedButtonColors,
                 icon = {},
-                label = { Text(androidx.compose.ui.res.stringResource(R.string.ui_medium_1_4)) }
+                label = { Text(androidx.compose.ui.res.stringResource(R.string.ui_lyrics_area_middle)) }
             )
             SegmentedButton(
                 selected = settings.displayAreaMode == 3,
@@ -2010,7 +2012,7 @@ private fun LyricsPageSettingsSection(
                 shape = SegmentedButtonDefaults.itemShape(index = 3, count = 4),
                 colors = segmentedButtonColors,
                 icon = {},
-                label = { Text(androidx.compose.ui.res.stringResource(R.string.ui_next_1_4)) }
+                label = { Text(androidx.compose.ui.res.stringResource(R.string.ui_lyrics_area_bottom)) }
             )
         }
     }

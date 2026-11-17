@@ -1228,9 +1228,6 @@
     <string name="ui_font_shadow_sp">"Font-Shadow: %1$ssp"</string>
     <string name="ui_line_spacing_x">"Line spacing: %1$sx"</string>
     <string name="ui_display_area" formatted="false">"display area"</string>
-    <string name="ui_upper_1_4" formatted="false">"upper 1/4"</string>
-    <string name="ui_medium_1_4" formatted="false">"Medium 1/4"</string>
-    <string name="ui_next_1_4" formatted="false">"Next 1/4"</string>
     <string name="ui_block_keywords" formatted="false">"Block keywords"</string>
     <string name="ui_search_advanced_usage" formatted="false">"Search advanced usage"</string>
     <string name="ui_add_to" formatted="false">"Add to"</string>
@@ -1373,4 +1370,9 @@
     <string name="cloud_group_queued">Submitted %1$d works for syncing</string>
     <string name="cloud_group_partial">Submitted %1$d works; %2$d unmatched</string>
     <string name="cloud_group_no_match">No works could be synced (%1$d unmatched)</string>
+    <string name="ui_subtitle_stamp" formatted="false">"CHS"</string>
+    <string name="ui_lyrics_area_full" formatted="false">"Full"</string>
+    <string name="ui_lyrics_area_top" formatted="false">"Top ¼"</string>
+    <string name="ui_lyrics_area_middle" formatted="false">"Mid ¼"</string>
+    <string name="ui_lyrics_area_bottom" formatted="false">"Bottom ¼"</string>
 </resources>

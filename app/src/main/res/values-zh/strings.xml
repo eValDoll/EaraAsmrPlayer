@@ -1228,9 +1228,6 @@
     <string name="ui_font_shadow_sp">"字体阴影: %1$ssp"</string>
     <string name="ui_line_spacing_x">"行间距: %1$sx"</string>
     <string name="ui_display_area" formatted="false">"显示区域"</string>
-    <string name="ui_upper_1_4" formatted="false">"上1/4"</string>
-    <string name="ui_medium_1_4" formatted="false">"中1/4"</string>
-    <string name="ui_next_1_4" formatted="false">"下1/4"</string>
     <string name="ui_block_keywords" formatted="false">"屏蔽关键词"</string>
     <string name="ui_search_advanced_usage" formatted="false">"搜索高级用法"</string>
     <string name="ui_add_to" formatted="false">"添加"</string>
@@ -1373,4 +1370,9 @@
     <string name="cloud_group_queued">已提交 %1$d 部作品，正在同步</string>
     <string name="cloud_group_partial">已提交 %1$d 部作品，%2$d 部未匹配</string>
     <string name="cloud_group_no_match">未找到可同步的作品（%1$d 部未匹配）</string>
+    <string name="ui_subtitle_stamp" formatted="false">"字幕"</string>
+    <string name="ui_lyrics_area_full" formatted="false">"全屏"</string>
+    <string name="ui_lyrics_area_top" formatted="false">"上1/4"</string>
+    <string name="ui_lyrics_area_middle" formatted="false">"中1/4"</string>
+    <string name="ui_lyrics_area_bottom" formatted="false">"下1/4"</string>
 </resources>
