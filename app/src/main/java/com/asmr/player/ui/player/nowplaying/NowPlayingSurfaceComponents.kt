@@ -11,7 +11,7 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -126,7 +126,7 @@ internal fun PlayerSurfaceHeader(
             if (onShowQueue != null) {
                 IconButton(onClick = onShowQueue) {
                     Icon(
-                        Icons.AutoMirrored.Rounded.PlaylistPlay,
+                        Icons.AutoMirrored.Rounded.QueueMusic,
                         contentDescription = appString(R.string.ui_play_queue),
                         modifier = Modifier.size(if (isLandscape) 22.dp else 24.dp),
                         tint = colorScheme.onSurface

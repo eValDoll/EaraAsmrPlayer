@@ -12,7 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Label
 import androidx.compose.material.icons.automirrored.outlined.LabelOff
 import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
-import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -331,10 +331,10 @@ private fun PlaybackActionButtons(
         colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
     ) {
         Icon(
-            imageVector = Icons.AutoMirrored.Rounded.PlaylistPlay,
+            imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
             contentDescription = appString(R.string.ui_play_queue),
             tint = contentColor.copy(alpha = 0.8f),
-            modifier = Modifier.size(actionIconSize)
+            modifier = Modifier.size(actionIconSize + 4.dp)
         )
     }
 
