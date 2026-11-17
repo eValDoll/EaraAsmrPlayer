@@ -40,7 +40,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.border
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
+import androidx.compose.material.icons.rounded.FormatListNumbered
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Pause
@@ -413,7 +413,7 @@ fun MiniPlayer(
                                         modifier = Modifier.size(controlsButtonSize)
                                     ) {
                                         Icon(
-                                        imageVector = Icons.AutoMirrored.Rounded.PlaylistPlay,
+                                        imageVector = Icons.Rounded.FormatListNumbered,
                                         contentDescription = null,
                                         tint = colorScheme.onSurface,
                                         modifier = Modifier.size(queueIconSize)

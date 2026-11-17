@@ -1577,7 +1577,7 @@ internal fun NowPlayingScreen(
                 onNavigateUp = handleNavigateUp,
                 onShowSleepTimer = onShowSleepTimer,
                 onShowEqualizer = { showEqualizer = true },
-                onShowQueue = if (surfaceMode == NowPlayingSurfaceMode.LYRICS || (isLandscape && isVideo)) onShowQueue else null,
+                onShowQueue = if (surfaceMode == NowPlayingSurfaceMode.PLAYER && isLandscape && isVideo) onShowQueue else null,
                 onManualBindLyrics = if (surfaceMode == NowPlayingSurfaceMode.LYRICS) openManualLyricsAction else null,
                 navigationEnabled = !pendingRouteExit,
                 showTitle = showSharedHeaderTitle,
