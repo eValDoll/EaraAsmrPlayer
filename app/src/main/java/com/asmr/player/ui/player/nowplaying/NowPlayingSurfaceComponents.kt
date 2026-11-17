@@ -54,7 +54,8 @@ internal fun PlayerSurfaceHeader(
     isLandscape: Boolean,
     onNavigateUp: () -> Unit,
     onShowSleepTimer: () -> Unit,
-    onShowQueue: () -> Unit,
+    onShowEqualizer: () -> Unit,
+    onShowQueue: (() -> Unit)? = null,
     onManualBindLyrics: (() -> Unit)? = null,
     navigationEnabled: Boolean,
     showTitle: Boolean = true,
@@ -122,10 +123,20 @@ internal fun PlayerSurfaceHeader(
                     tint = colorScheme.onSurface
                 )
             }
-            IconButton(onClick = onShowQueue) {
+            if (onShowQueue != null) {
+                IconButton(onClick = onShowQueue) {
+                    Icon(
+                        Icons.AutoMirrored.Rounded.PlaylistPlay,
+                        contentDescription = appString(R.string.ui_play_queue),
+                        modifier = Modifier.size(if (isLandscape) 22.dp else 24.dp),
+                        tint = colorScheme.onSurface
+                    )
+                }
+            }
+            IconButton(onClick = onShowEqualizer) {
                 Icon(
-                    Icons.AutoMirrored.Rounded.PlaylistPlay,
-                    contentDescription = null,
+                    Icons.Rounded.Tune,
+                    contentDescription = appString(R.string.ui_sound_effects_panel),
                     modifier = Modifier.size(if (isLandscape) 22.dp else 24.dp),
                     tint = colorScheme.onSurface
                 )
