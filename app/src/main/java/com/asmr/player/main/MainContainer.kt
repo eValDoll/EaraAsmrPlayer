@@ -3,6 +3,9 @@ package com.asmr.player
 import com.asmr.player.i18n.appString
 import com.asmr.player.R
 
+import androidx.compose.ui.platform.testTag
+import com.asmr.player.ui.asmrone.AsmrOneAlbumSaveDialog
+import com.asmr.player.ui.library.resolveAlbumDetailRj
 import com.asmr.player.ui.common.LocalAlbumCoverShadowCache
 import com.asmr.player.ui.common.rememberAlbumCoverShadowCache
 
@@ -357,6 +360,7 @@ private fun AlbumDetailRouteFrame(
     onExitStateChanged: (Boolean) -> Unit,
     onLocalAlbumRemoved: (AlbumDetailUiState.Removed) -> Unit = {},
     onEditRj: (String) -> Unit,
+    onOpenAsmrOneLogin: () -> Unit,
     content: @Composable (AlbumDetailViewModel, AlbumHeroBlurLayerCache) -> Unit
 ) {
     val viewModel = hiltViewModel<AlbumDetailViewModel>(backStackEntry)
@@ -486,6 +490,7 @@ private fun AlbumDetailRouteFrame(
                 viewModel = viewModel,
                 onBack = closeAlbumDetail,
                 onEditRj = onEditRj,
+                onOpenAsmrOneLogin = onOpenAsmrOneLogin,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .zIndex(2f)
@@ -500,11 +505,20 @@ private fun AlbumDetailRouteTopBar(
     viewModel: AlbumDetailViewModel,
     onBack: () -> Unit,
     onEditRj: (String) -> Unit,
+    onOpenAsmrOneLogin: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val detailState by viewModel.uiState.collectAsStateWithLifecycle()
     val detailModel = (detailState as? AlbumDetailUiState.Success)?.model
     val showManualBind = detailModel?.localAlbum?.id?.let { it > 0L } == true
+    val cloudRj = remember(detailModel?.rjCode, detailModel?.baseRjCode, detailModel?.localAlbum) {
+        detailModel?.rjCode?.ifBlank {
+            resolveAlbumDetailRj(detailModel.baseRjCode, detailModel.localAlbum)
+        }.orEmpty()
+    }
+    val canSaveToCloud = detailModel != null &&
+        (detailModel.asmrOneWorkId?.toLongOrNull()?.let { it > 0 } == true || cloudRj.isNotBlank())
+    var showCloudSaveDialog by remember { mutableStateOf(false) }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Spacer(modifier = Modifier.windowInsetsTopHeight(StableWindowInsets.statusBars))
@@ -532,6 +546,21 @@ private fun AlbumDetailRouteTopBar(
                 }
             },
             actions = {
+                if (canSaveToCloud) {
+                    EaraTopBarIconButton(
+                        onClick = { showCloudSaveDialog = true },
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .albumDetailTopBarButtonSurface(true)
+                            .testTag("asmr_album_cloud_save")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.CloudQueue,
+                            contentDescription = appString(R.string.cloud_add_to_playlist),
+                            tint = Color.White
+                        )
+                    }
+                }
                 PageTranslationAction(
                     modifier = Modifier
                         .padding(end = 8.dp)
@@ -560,6 +589,14 @@ private fun AlbumDetailRouteTopBar(
                     }
                 }
             }
+        )
+    }
+    if (showCloudSaveDialog && canSaveToCloud && detailModel != null) {
+        AsmrOneAlbumSaveDialog(
+            album = detailModel.displayAlbum.copy(rjCode = cloudRj),
+            workId = detailModel.asmrOneWorkId?.toLongOrNull(),
+            onDismiss = { showCloudSaveDialog = false },
+            onOpenLogin = onOpenAsmrOneLogin,
         )
     }
 }
@@ -1024,6 +1061,7 @@ fun MainContainer(
     var downloadsScrollToTopSignal by remember { mutableLongStateOf(0L) }
     var settingsScrollToTopSignal by remember { mutableLongStateOf(0L) }
     var settingsDetailPageVisible by rememberSaveable { mutableStateOf(false) }
+    var cloudGroups by rememberSaveable { mutableStateOf(false) }
     var hotListeningScrollToTopSignal by remember { mutableLongStateOf(0L) }
     val appVolumeWarningSessionState = rememberAppVolumeWarningSessionState()
     val audioOutputRouteKind = rememberCurrentAudioOutputRouteKind()
@@ -1712,6 +1750,7 @@ fun MainContainer(
                                     resolvedTitleRoute == "downloads" -> appString(R.string.ui_tasks)
                                     resolvedTitleRoute == "listening_calendar" -> appString(R.string.ui_asmr_dashboard)
                                     resolvedTitleRoute == "dlsite_login" -> appString(R.string.ui_dlsite_login)
+                                    resolvedTitleRoute == "asmr_one_login" -> appString(R.string.cloud_account)
                                     resolvedTitleRoute?.startsWith("playlist_picker") == true -> appString(R.string.ui_add_to_my_lists)
                                     resolvedTitleRoute?.startsWith("album_detail") == true -> appString(R.string.ui_album_details)
                                     else -> appName
@@ -1783,6 +1822,12 @@ fun MainContainer(
                                     currentRoute
                                 }
                                 Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (headerActionRoute == "groups") {
+                                        com.asmr.player.ui.asmrone.CloudSourceToggle(
+                                            cloud = cloudGroups,
+                                            onToggle = { cloudGroups = !cloudGroups },
+                                        )
+                                    }
                                     if (headerActionRoute != null &&
                                         (isPrimaryRoute(headerActionRoute) || headerActionRoute == "playlist_system/{type}") &&
                                         !(headerActionRoute == "settings" && settingsDetailPageVisible)
@@ -2320,6 +2365,13 @@ fun MainContainer(
                                                 isActive = primaryRouteActive,
                                                 isDataActive = primaryRouteDataActive,
                                                 scrollToTopSignal = groupsScrollToTopSignal,
+                                                cloud = cloudGroups,
+                                                onOpenAsmrOneLogin = { navController.navigateSingleTop("asmr_one_login") },
+                                                onCloudAlbumClick = { album ->
+                                                    val workNo = album.rjCode.ifBlank { album.workId }.ifBlank { album.asmrOneWorkId?.toString().orEmpty() }
+                                                    AlbumCoverHintStore.record(album.id, workNo, album.title, album.circle, album.coverUrl)
+                                                    openAlbumDetailFromSearch(albumId = null, rj = workNo)
+                                                },
                                                 onGroupClick = { group ->
                                                     val encoded = encodeRouteArg(group.name)
                                                     navController.navigateSingleTop("group/${group.id}/$encoded")
@@ -2372,6 +2424,7 @@ fun MainContainer(
                                                 isActive = primaryRouteActive,
                                                 isDataActive = primaryRouteDataActive,
                                                 onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
+                                                onOpenAsmrOneLogin = { navController.navigateSingleTop("asmr_one_login") },
                                                 onOpenAlbum = { session ->
                                                     AlbumCoverHintStore.record(
                                                         albumId = session.albumId.takeIf { it > 0L },
@@ -2617,6 +2670,7 @@ fun MainContainer(
                             }
                         },
                         onExitStateChanged = { albumDetailExitInProgress = it },
+                        onOpenAsmrOneLogin = { navController.navigateSingleTop("asmr_one_login") },
                         onEditRj = { currentRj ->
                             manualRjInput = currentRj
                             showManualRjDialog = true
@@ -2709,6 +2763,7 @@ fun MainContainer(
                         onLocalAlbumRemoved = { removed ->
                             playerViewModel.removeAlbumFromQueue(removed.albumId, removed.mediaIds)
                         },
+                        onOpenAsmrOneLogin = { navController.navigateSingleTop("asmr_one_login") },
                         onEditRj = { currentRj ->
                             manualRjInput = currentRj
                             showManualRjDialog = true
@@ -2791,6 +2846,7 @@ fun MainContainer(
                             }
                         },
                         onExitStateChanged = { albumDetailExitInProgress = it },
+                        onOpenAsmrOneLogin = { navController.navigateSingleTop("asmr_one_login") },
                         onEditRj = { currentRj ->
                             manualRjInput = currentRj
                             showManualRjDialog = true
@@ -2971,6 +3027,14 @@ fun MainContainer(
                             windowSizeClass = windowSizeClass,
                             onDone = { navController.popBackStack() },
                             viewModel = dlsiteLoginViewModel
+                        )
+                    }
+                }
+                composable("asmr_one_login") {
+                    SecondaryPageBackground(topPadding = secondaryPageTopPadding) {
+                        com.asmr.player.ui.asmrone.AsmrOneLoginScreen(
+                            windowSizeClass = windowSizeClass,
+                            onDone = { navController.popBackStack() },
                         )
                     }
                 }

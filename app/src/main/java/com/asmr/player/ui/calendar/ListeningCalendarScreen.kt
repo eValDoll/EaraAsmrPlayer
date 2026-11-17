@@ -116,6 +116,7 @@ fun ListeningCalendarScreen(
     isActive: Boolean = true,
     isDataActive: Boolean = isActive,
     onOpenDlsiteLogin: () -> Unit,
+    onOpenAsmrOneLogin: () -> Unit = {},
     onOpenAlbum: (ListeningSessionEntity) -> Unit,
     viewModel: ListeningCalendarViewModel = hiltViewModel()
 ) {
@@ -129,6 +130,8 @@ fun ListeningCalendarScreen(
     val selectedDate by viewModel.selectedDate.collectAsStateWhileActive(isDataActive)
     val selectedSessions by viewModel.selectedSessions.collectAsStateWhileActive(isDataActive)
     val isDlsiteLoggedIn by viewModel.isDlsiteLoggedIn.collectAsStateWhileActive(isDataActive)
+    val asmrOneViewModel: com.asmr.player.ui.asmrone.AsmrOneViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+    val asmrOneAccount by asmrOneViewModel.account.collectAsStateWhileActive(isDataActive)
     val colorScheme = AsmrTheme.colorScheme
     val twoPane = LocalTabletLayout.current.twoPane
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
@@ -179,8 +182,16 @@ fun ListeningCalendarScreen(
                 ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            DlsiteAccountRow(
-                onOpenDlsiteLogin = onOpenDlsiteLogin,
+            DashboardAccountRow(
+                title = appString(R.string.cloud_account),
+                onClick = onOpenAsmrOneLogin,
+                isLoggedIn = asmrOneAccount.authenticated,
+                colorScheme = colorScheme,
+            )
+            DashboardAccountRow(
+                title = appString(R.string.ui_dlsite_account),
+                description = appString(R.string.ui_used_for_purchased_search_authentication),
+                onClick = onOpenDlsiteLogin,
                 isLoggedIn = isDlsiteLoggedIn,
                 colorScheme = colorScheme
             )
@@ -251,13 +262,15 @@ fun ListeningCalendarScreen(
 }
 
 @Composable
-private fun DlsiteAccountRow(
-    onOpenDlsiteLogin: () -> Unit,
+internal fun DashboardAccountRow(
+    title: String,
+    onClick: () -> Unit,
     isLoggedIn: Boolean,
-    colorScheme: AsmrColorScheme
+    colorScheme: AsmrColorScheme,
+    description: String? = null,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -273,15 +286,15 @@ private fun DlsiteAccountRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
-                    text = appString(R.string.ui_dlsite_account),
+                    text = title,
                     style = MaterialTheme.typography.bodyMedium,
                     color = colorScheme.textPrimary,
                     fontWeight = FontWeight.Medium
                 )
-                DlsiteLoginStatusTag(isLoggedIn = isLoggedIn, colorScheme = colorScheme)
+                DashboardLoginStatusTag(isLoggedIn = isLoggedIn, colorScheme = colorScheme)
             }
-            Text(
-                text = appString(R.string.ui_used_for_purchased_search_authentication),
+            if (description != null) Text(
+                text = description,
                 style = MaterialTheme.typography.labelSmall,
                 color = colorScheme.textSecondary
             )
@@ -290,13 +303,13 @@ private fun DlsiteAccountRow(
             label = if (isLoggedIn) appString(R.string.ui_manage) else appString(R.string.ui_log_in),
             colorScheme = colorScheme,
             minWidth = 58.dp,
-            onClick = onOpenDlsiteLogin
+            onClick = onClick
         )
     }
 }
 
 @Composable
-private fun DlsiteLoginStatusTag(
+private fun DashboardLoginStatusTag(
     isLoggedIn: Boolean,
     colorScheme: AsmrColorScheme
 ) {

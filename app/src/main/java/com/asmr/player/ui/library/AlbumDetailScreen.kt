@@ -1042,7 +1042,7 @@ fun AlbumDetailScreen(
                                         prepareIncrementalAlbumAction(
                                             action = IncrementalAlbumAction.Save,
                                             source = source,
-                                            tree = incrementalTree
+                                            tree = incrementalTree,
                                         )
                                     }
                                 },
