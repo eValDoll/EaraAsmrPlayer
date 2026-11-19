@@ -634,23 +634,15 @@ class SearchViewModel @Inject constructor(
             page == 1 &&
             normalizedWorkNo.isNotBlank()
         ) {
-            val preferred = resolveSearchDetailLocale(currentLocale)
-            val info = when {
-                !preferred.isNullOrBlank() -> {
-                    runCatching { dlsiteScraper.getWorkInfo(normalizedWorkNo, locale = preferred) }.getOrNull()
-                        ?: runCatching { dlsiteScraper.getWorkInfo(normalizedWorkNo, locale = "zh_CN") }.getOrNull()
-                        ?: runCatching { dlsiteScraper.getWorkInfo(normalizedWorkNo, locale = "ja_JP") }.getOrNull()
-                        ?: runCatching { dlsiteScraper.getWorkInfo(normalizedWorkNo) }.getOrNull()
-                }
-
-                else -> {
-                    runCatching { dlsiteScraper.getWorkInfo(normalizedWorkNo, locale = "zh_CN") }.getOrNull()
-                        ?: runCatching { dlsiteScraper.getWorkInfo(normalizedWorkNo, locale = "ja_JP") }.getOrNull()
-                        ?: runCatching { dlsiteScraper.getWorkInfo(normalizedWorkNo) }.getOrNull()
+            val locales = listOf(resolveSearchDetailLocale(currentLocale), "zh_CN", "ja_JP", null).distinct()
+            val album = locales.firstNotNullOfOrNull { locale ->
+                try {
+                    dlsiteScraper.getDetails(normalizedWorkNo, locale)
+                } catch (_: java.io.IOException) {
+                    null
                 }
             }
-            if (info != null) {
-                val album = info.album.copy(workId = normalizedWorkNo, rjCode = normalizedWorkNo)
+            if (album != null) {
                 return SearchPageResult(
                     items = listOf(album),
                     canGoNext = false,
@@ -682,10 +674,10 @@ class SearchViewModel @Inject constructor(
     ) {
         enrichJob?.cancel()
         enrichJob = viewModelScope.launch {
+            val resolved = (_uiState.value as? SearchUiState.Success)?.enrichedDetailRjCodes.orEmpty()
             val enrichTargets = baseItems
                 .mapNotNull { it.rjCode.ifBlank { it.workId }.trim().uppercase().takeIf(String::isNotBlank) }
-                .distinct()
-                .toSet()
+                .toSet() - resolved
             if (enrichTargets.isEmpty()) {
                 _uiState.update { state ->
                     val current = state as? SearchUiState.Success ?: return@update state
@@ -725,11 +717,11 @@ class SearchViewModel @Inject constructor(
                             val cacheKey = DlsiteDetailCacheKey(rjCode = rj, locale = detailLocale)
                             val cached = dlsiteDetailCache[cacheKey]
                             val detail = cached ?: try {
-                                dlsiteScraper.getWorkInfo(
+                                dlsiteScraper.getDetails(
                                     workId = rj,
                                     locale = detailLocale,
                                     allowJapaneseCvFallback = false
-                                )?.album
+                                )
                             } catch (error: CancellationException) {
                                 throw error
                             } catch (_: Throwable) {
