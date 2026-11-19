@@ -68,7 +68,8 @@ fun QueueSheetContent(
             .distinctUntilChanged()
     }.collectAsStateWithLifecycle(initialValue = "")
     val queue by viewModel.queue.collectAsStateWithLifecycle()
-    val currentDurationMs by viewModel.resolvedDurationMs.collectAsStateWithLifecycle()
+    val resolvedTrackDuration by viewModel.resolvedTrackDuration.collectAsStateWithLifecycle()
+    val currentDurationMs = resolvedTrackDuration?.takeIf { it.mediaId == currentMediaId }?.durationMs
     val colorScheme = AsmrTheme.colorScheme
     val listState = rememberLazyListState()
 
@@ -134,7 +135,7 @@ fun QueueSheetContent(
                                 text = details.cv,
                                 trailingText = remember(details.durationMs, selected, currentDurationMs, audioMetadata?.durationSeconds) {
                                     Formatting.formatTrackSeconds(
-                                        (details.durationMs ?: currentDurationMs.takeIf { selected && it > 0 })?.div(1000.0)
+                                        (currentDurationMs?.takeIf { selected && it > 0 } ?: details.durationMs)?.div(1000.0)
                                             ?: audioMetadata?.durationSeconds
                                     )
                                 },

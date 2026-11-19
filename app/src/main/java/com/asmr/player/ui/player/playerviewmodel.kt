@@ -38,9 +38,9 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.FlowPreview
@@ -91,6 +91,18 @@ private data class PlaylistPlaybackTarget(
     val playWhenReady: Boolean,
 )
 
+internal data class ResolvedTrackDuration(val mediaId: String, val durationMs: Long)
+
+internal fun progressDurationMs(
+    mediaId: String?,
+    playerDurationMs: Long,
+    resolved: ResolvedTrackDuration?,
+): Long = when {
+    playerDurationMs > 0L -> playerDurationMs
+    resolved != null && resolved.mediaId == mediaId -> resolved.durationMs
+    else -> 0L
+}
+
 internal fun resolveListenTogetherHeartbeatDelayMs(response: ListenTogetherPresenceResponse?): Long {
     val requestedInterval = response?.heartbeatIntervalMs
         ?.takeIf { it > 0L }
@@ -140,15 +152,17 @@ class PlayerViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PlaybackSnapshot())
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    val resolvedDurationMs: StateFlow<Long> = playback
+    internal val resolvedTrackDuration: StateFlow<ResolvedTrackDuration?> = playback
         .map { it.currentMediaItem to it.durationMs.coerceAtLeast(0L) }
         .distinctUntilChanged { old, new ->
             old.first?.mediaId == new.first?.mediaId && old.second == new.second
         }
-        .flatMapLatest { (item, durationMs) ->
-            flow { emit(resolveDurationMs(item, durationMs)) }
+        .mapLatest { (item, durationMs) ->
+            item?.let {
+                ResolvedTrackDuration(it.mediaId, if (durationMs > 0L) durationMs else readLibraryDurationMs(it))
+            }
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val queue: StateFlow<List<MediaItem>> = playerConnection.queue
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -878,9 +892,7 @@ class PlayerViewModel @Inject constructor(
         super.onCleared()
     }
 
-    private suspend fun resolveDurationMs(item: MediaItem?, fallback: Long): Long {
-        val safeFallback = fallback.coerceAtLeast(0L)
-        if (item == null) return safeFallback
+    private suspend fun readLibraryDurationMs(item: MediaItem): Long {
         return withContext(Dispatchers.IO) {
             val extras = item.mediaMetadata.extras
             val trackId = extras?.getLong("track_id") ?: 0L
@@ -901,7 +913,7 @@ class PlayerViewModel @Inject constructor(
                 val d = runCatching { trackDao.getTrackByPathOnce(path) }.getOrNull()?.duration ?: 0.0
                 if (d > 0.0) return@withContext (d * 1000.0).roundToLong()
             }
-            safeFallback
+            0L
         }
     }
 
