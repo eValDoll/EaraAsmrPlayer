@@ -17,7 +17,7 @@ class DLSiteScraperUrlBuilderTest {
 
         assertEquals(1, urls.size)
         assertEquals(
-            "https://www.dlsite.com/maniax/fsr/=/ana_flg/on/work_type%5B0%5D/SOU/" +
+            "https://www.dlsite.com/maniax/fsr/=/show_type/1/ana_flg/on/work_type%5B0%5D/SOU/" +
                 "keyword/%E8%80%B3/page/2/?locale=ja_JP",
             urls.first()
         )
@@ -37,7 +37,7 @@ class DLSiteScraperUrlBuilderTest {
         ).single()
 
         assertEquals(
-            "https://www.dlsite.com/maniax/fsr/=/ana_flg/on/work_type%5B0%5D/SOU/?locale=ja_JP",
+            "https://www.dlsite.com/maniax/fsr/=/show_type/1/ana_flg/on/work_type%5B0%5D/SOU/?locale=ja_JP",
             url
         )
         assertTrue(!url.contains("/order/"))
@@ -56,7 +56,7 @@ class DLSiteScraperUrlBuilderTest {
 
         assertEquals(1, urls.size)
         assertEquals(
-            "https://www.dlsite.com/maniax/fsr/=/work_category%5B0%5D/doujin/order/trend/" +
+            "https://www.dlsite.com/maniax/fsr/=/show_type/1/work_category%5B0%5D/doujin/order/trend/" +
                 "work_type%5B0%5D/SOU/keyword/%E8%80%B3/page/2/from/left_pain.work_type/?locale=ja_JP",
             urls.single()
         )
@@ -123,7 +123,7 @@ class DLSiteScraperUrlBuilderTest {
 
         assertEquals(1, urls.size)
         assertEquals(
-            "https://www.dlsite.com/maniax/fsr/=/work_category%5B0%5D/doujin/order/trend/work_type_category%5B0%5D/audio/options%5B0%5D/CHI/options%5B1%5D/CHI_HANS/options%5B2%5D/CHI_HANT/?locale=zh_CN",
+            "https://www.dlsite.com/maniax/fsr/=/show_type/1/work_category%5B0%5D/doujin/order/trend/work_type_category%5B0%5D/audio/options%5B0%5D/CHI/options%5B1%5D/CHI_HANS/options%5B2%5D/CHI_HANT/?locale=zh_CN",
             urls.first()
         )
     }
@@ -184,7 +184,7 @@ class DLSiteScraperUrlBuilderTest {
         )
 
         assertEquals(
-            "https://www.dlsite.com/maniax/fsr/=/work_category%5B0%5D/doujin/order/price_d/work_type_category%5B0%5D/audio/options%5B0%5D/CHI/options%5B1%5D/CHI_HANS/options%5B2%5D/CHI_HANT/keyword/%E8%80%B3/page/2/?locale=zh_CN",
+            "https://www.dlsite.com/maniax/fsr/=/show_type/1/work_category%5B0%5D/doujin/order/price_d/work_type_category%5B0%5D/audio/options%5B0%5D/CHI/options%5B1%5D/CHI_HANS/options%5B2%5D/CHI_HANT/keyword/%E8%80%B3/page/2/?locale=zh_CN",
             urls.single()
         )
     }

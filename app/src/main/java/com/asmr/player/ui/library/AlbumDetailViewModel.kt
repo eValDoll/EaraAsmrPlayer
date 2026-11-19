@@ -1206,7 +1206,7 @@ class AlbumDetailViewModel @Inject constructor(
             }
             val canonical = if (hasUnmappedLegacyTags) {
                 val workNo = before.rjCode.ifBlank { before.workId }
-                try { dlsiteScraper.getWorkInfo(workNo, locale = "zh_CN")?.album?.tagDetails }
+                try { dlsiteScraper.getDetails(workNo, locale = "zh_CN", allowJapaneseCvFallback = false)?.tagDetails }
                 catch (cancelled: CancellationException) { throw cancelled }
                 catch (_: Exception) { null }
             } else null

@@ -8,6 +8,7 @@ import android.util.Log
 import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.data.remote.auth.buildDlsiteCookieHeader
 import com.asmr.player.data.remote.NetworkHeaders
+import com.asmr.player.data.remote.dlsite.DlsiteTranslationProduct
 import com.asmr.player.data.remote.dlsite.DlsiteProductInfoClient
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
@@ -24,6 +25,7 @@ import org.jsoup.Jsoup
 import org.jsoup.Connection
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import java.io.IOException
 import java.net.URI
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -37,7 +39,7 @@ internal fun storeSegment(): String = String.format("%s%s", "ma", "niax")
 internal const val DLSITE_DOMAIN = "https://www.dlsite.com/"
 
 internal fun hasDlsiteWorkMetadata(doc: Document): Boolean =
-    doc.selectFirst("#work_name") != null && doc.selectFirst("#work_outline") != null
+    doc.selectFirst("#work_name") != null && doc.selectFirst("#work_outline, .c-productInfoPc__list--outline .c-productInfo__key") != null
 
 private val DLSITE_WORK_URL_NUMBER_REGEX = Regex(
     """(?:^|/)product_id/((?:RJ|BJ|VJ)\d+)(?:\.html)?(?:/|$)""",
@@ -152,7 +154,7 @@ internal fun buildDlsiteSearchUrls(
 
     if (chineseTranslatedOnly) {
         val chineseWorksBase =
-            "$DLSITE_DOMAIN${storeSegment()}/fsr/=/work_category%5B0%5D/doujin/order/$encodedOrder/" +
+            "$DLSITE_DOMAIN${storeSegment()}/fsr/=/show_type/1/work_category%5B0%5D/doujin/order/$encodedOrder/" +
                 "work_type_category%5B0%5D/audio/options%5B0%5D/CHI/options%5B1%5D/CHI_HANS/options%5B2%5D/CHI_HANT"
         val chineseWorks = buildString {
             append(chineseWorksBase)
@@ -173,7 +175,7 @@ internal fun buildDlsiteSearchUrls(
         val presaleUrl = buildString {
             append(DLSITE_DOMAIN)
             append(storeSegment())
-            append("/fsr/=/ana_flg/on/work_type%5B0%5D/SOU")
+            append("/fsr/=/show_type/1/ana_flg/on/work_type%5B0%5D/SOU")
             if (normalizedKeyword.isNotBlank()) {
                 append("/keyword/")
                 append(encodedKeyword)
@@ -200,7 +202,7 @@ internal fun buildDlsiteSearchUrls(
     val searchUrl = buildString {
         append(DLSITE_DOMAIN)
         append(storeSegment())
-        append("/fsr/=/")
+        append("/fsr/=/show_type/1/")
         append(ageFilterSegment)
         append("work_category%5B0%5D/doujin/order/")
         append(encodedOrder)
@@ -248,35 +250,6 @@ data class DlsiteSearchResult(
     val canGoNext: Boolean
 )
 
-internal fun parseCvNames(doc: Document): List<String> {
-    val outline = doc.selectFirst("#work_outline") ?: return emptyList()
-    return outline.select("tr")
-        .filter { row ->
-            val th = row.selectFirst("th")?.text()?.trim().orEmpty()
-            th.contains("声优") ||
-                th.contains("声優") ||
-                th.contains("聲優") ||
-                th.contains("CV", ignoreCase = true) ||
-                th.contains("Voice Actor", ignoreCase = true)
-        }
-        .flatMap { row ->
-            val anchors = row.select("td a")
-                .map { it.text().trim() }
-                .filter { it.isNotBlank() }
-            if (anchors.isNotEmpty()) {
-                anchors
-            } else {
-                row.selectFirst("td")
-                    ?.text()
-                    .orEmpty()
-                    .split("/", "／", ",", "，", "、")
-                    .map { it.trim() }
-            }
-        }
-        .filter { it.isNotBlank() }
-        .distinct()
-}
-
 @Singleton
 class DLSiteScraper @Inject constructor(
     @ApplicationContext context: Context,
@@ -287,9 +260,7 @@ class DLSiteScraper @Inject constructor(
     
     private val authStore = DlsiteAuthStore(context)
     private val gson = Gson()
-    private val verifiedTranslationParents = object : LinkedHashMap<String, String>(64, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean = size > 64
-    }
+    private data class WorkPage(val doc: Document, val translation: DlsiteTranslationProduct? = null)
 
     private fun normalizeUrl(src: String, baseUrl: String): String {
         val trimmed = src.trim()
@@ -306,7 +277,7 @@ class DLSiteScraper @Inject constructor(
         return DlsiteRecommendHtmlParser.parse(doc)
     }
 
-    private suspend fun fetchWorkDocument(workId: String, locale: String? = null): Document? {
+    private suspend fun fetchWorkPage(workId: String, locale: String? = null): WorkPage? {
         val clean = workId.trim().uppercase()
         if (clean.isBlank()) return null
         val candidates = listOf(
@@ -316,16 +287,16 @@ class DLSiteScraper @Inject constructor(
         for (url in candidates) {
             val doc = runCatching { runInterruptible { connect(url, locale = locale).get() } }.getOrNull() ?: continue
             if (!hasDlsiteWorkMetadata(doc)) continue
-            if (matchesDlsiteWorkDocument(clean, doc)) return doc
+            if (matchesDlsiteWorkDocument(clean, doc)) return WorkPage(doc)
             val parentCandidate = dlsiteTranslationParentWorkNo(clean, doc) ?: continue
-            val cachedParent = synchronized(verifiedTranslationParents) { verifiedTranslationParents[clean] }
-            val verifiedParent = cachedParent?.takeIf { it == parentCandidate }
-                ?: runCatching { productInfoClient.fetchTranslationParentWorkNo(clean) }.getOrNull()
-                    ?.takeIf { it == parentCandidate }
-                    ?.also { parent ->
-                        synchronized(verifiedTranslationParents) { verifiedTranslationParents[clean] = parent }
-                    }
-            if (matchesDlsiteWorkDocument(clean, doc, verifiedParent)) return doc
+            val translation = try {
+                productInfoClient.fetchTranslationProduct(clean)
+            } catch (_: IOException) {
+                null
+            } ?: continue
+            if (translation.parentWorkNo == parentCandidate && matchesDlsiteWorkDocument(clean, doc, translation.parentWorkNo)) {
+                return WorkPage(doc, translation)
+            }
         }
         return null
     }
@@ -433,139 +404,6 @@ class DLSiteScraper @Inject constructor(
         hasSubtitle: Boolean = false,
         allAges: Boolean = false
     ): DlsiteSearchResult = withContext(Dispatchers.IO) {
-        fun parseItems(items: List<Element>, doc: Document): List<Album> {
-            val results = mutableListOf<Album>()
-
-            for (item in items) {
-                val titleTag = item.selectFirst(".work_name a") ?: continue
-                val title = titleTag.text().trim()
-                val link = titleTag.attr("href")
-                val workNo = DlsiteWorkNo.extractWorkNo(link)
-                if (workNo.isBlank()) continue
-
-                val circle = item.selectFirst(".maker_name a")?.text()?.trim() ?: ""
-                val tags = item.select(".search_tag a").map { it.text().trim() }
-                val cv = item.select(".author a")
-                    .map { it.text().trim() }
-                    .filter { it.isNotBlank() }
-                    .distinct()
-                    .joinToString(", ")
-
-                fun firstFromSrcset(srcset: String): String {
-                    val first = srcset.split(",").firstOrNull().orEmpty().trim()
-                    return first.split(Regex("\\s+")).firstOrNull().orEmpty().trim()
-                }
-
-                fun extractVueBoundImageSrc(expr: String): String {
-                    val trimmed = expr.trim()
-                    if (trimmed.isEmpty()) return ""
-                    val direct = Regex("""['\"](//[^'\"]+|https?://[^'\"]+|/[^'\"]+)['\"]""")
-                        .findAll(trimmed)
-                        .map { it.groupValues.getOrNull(1).orEmpty().trim() }
-                        .firstOrNull { candidate ->
-                            candidate.isNotBlank() && !candidate.startsWith("data:", ignoreCase = true)
-                        }
-                    return direct.orEmpty()
-                }
-
-                fun pickBestImageUrl(img: Element): String {
-                    val candidates = sequenceOf(
-                        extractVueBoundImageSrc(img.attr(":src")),
-                        img.attr("data-src"),
-                        img.attr("data-original"),
-                        img.attr("data-lazy"),
-                        img.attr("data-lazy-src"),
-                        img.attr("data-srcset").let { firstFromSrcset(it) },
-                        img.attr("srcset").let { firstFromSrcset(it) },
-                        img.attr("src")
-                    )
-                        .map { it.trim() }
-                        .filter { it.isNotBlank() && !it.startsWith("data:", ignoreCase = true) }
-                        .map { raw -> normalizeUrl(raw, doc.baseUri()) }
-                        .toList()
-
-                    return candidates.firstOrNull().orEmpty()
-                }
-
-                fun scoreUrl(url: String): Int {
-                    val u = url.lowercase()
-                    var s = 0
-                    if (u.contains("/resize/images2/work/")) s += 30
-                    if (u.contains("/modpub/images2/work/") || u.contains("/images2/work/")) s += 20
-                    if (u.contains("img.dlsite.jp")) s += 10
-                    if (u.contains("dlsite")) s += 5
-                    if (u.endsWith(".jpg") || u.endsWith(".jpeg") || u.endsWith(".png") || u.endsWith(".webp")) s += 2
-                    return s
-                }
-
-                val imgs = item.select("img").toList()
-                val coverUrl = imgs.asSequence()
-                    .map { pickBestImageUrl(it) }
-                    .filter { it.isNotBlank() }
-                    .sortedByDescending { scoreUrl(it) }
-                    .firstOrNull()
-                    .orEmpty()
-
-                results.add(
-                    Album(
-                        title = title,
-                        path = "",
-                        workId = workNo,
-                        rjCode = workNo,
-                        circle = circle,
-                        cv = cv,
-                        tags = tags,
-                        metadataLocale = locale?.takeIf(String::isNotBlank),
-                        tagDetails = parseDlsiteTags(item.select(".search_tag a")),
-                        coverUrl = coverUrl
-                    )
-                )
-            }
-
-            return results
-        }
-
-        fun parseCanGoNext(doc: Document, itemCount: Int): Boolean {
-            val infoScript = doc.select("script")
-                .firstOrNull { it.data().contains("\"page_info\"") }
-                ?.data()
-                .orEmpty()
-            val pageInfo = Regex("""\"page_info\":\{\"count\":(\d+),\"first_indice\":(\d+),\"last_indice\":(\d+)\}""")
-                .find(infoScript)
-            if (pageInfo != null) {
-                val total = pageInfo.groupValues.getOrNull(1)?.toIntOrNull() ?: 0
-                val lastIndex = pageInfo.groupValues.getOrNull(3)?.toIntOrNull() ?: 0
-                if (total > 0 && lastIndex > 0) {
-                    return lastIndex < total
-                }
-            }
-            return itemCount >= 30
-        }
-
-        fun parseDoc(doc: Document): DlsiteSearchResult {
-            val container = doc.selectFirst("#search_result_list.loading_display_open")
-                ?: doc.select("#search_result_list").lastOrNull()
-
-            val candidates = listOf(
-                container?.select("li")?.toList().orEmpty(),
-                doc.select("#search_result_img_box li").toList(),
-                container?.select("table tr")?.toList().orEmpty().filter { it.select("th").isEmpty() }
-            )
-
-            for (items in candidates) {
-                if (items.isEmpty()) continue
-                val parsed = parseItems(items, doc)
-                if (parsed.isNotEmpty()) {
-                    return DlsiteSearchResult(
-                        items = parsed,
-                        canGoNext = parseCanGoNext(doc, parsed.size)
-                    )
-                }
-            }
-
-            return DlsiteSearchResult(items = emptyList(), canGoNext = false)
-        }
-
         val urls = buildDlsiteSearchUrls(
             keyword = keyword,
             page = page,
@@ -580,144 +418,61 @@ class DLSiteScraper @Inject constructor(
         for (u in urls) {
             Log.d("DLSiteScraper", "Searching URL: $u")
             val doc = runInterruptible { connect(u, locale = locale).get() }
-            val parsed = parseDoc(doc)
+            val parsed = parseDlsiteSearchPage(doc, locale, page)
             if (parsed.items.isNotEmpty()) return@withContext parsed
             lastEmpty = parsed
         }
         lastEmpty
     }
 
-    suspend fun getDetails(workId: String): Album? = withContext(Dispatchers.IO) {
-        getWorkInfo(workId)?.album
-    }
-
-    suspend fun getDetails(workId: String, locale: String?): Album? = withContext(Dispatchers.IO) {
-        getWorkInfo(workId, locale = locale)?.album
-    }
-
-    suspend fun getWorkInfo(
+    suspend fun getDetails(
         workId: String,
         locale: String? = null,
         allowJapaneseCvFallback: Boolean = true
-    ): DlsiteWorkInfo? = withContext(Dispatchers.IO) {
-        val clean = workId.trim().uppercase()
-        val doc = fetchWorkDocument(clean, locale = locale) ?: return@withContext null
-        val parsed = parseWorkInfo(clean, doc, locale) ?: return@withContext null
-        if (allowJapaneseCvFallback) {
-            withJapaneseCvFallback(clean, locale, parsed)
-        } else {
-            parsed
-        }
+    ): Album? = withContext(Dispatchers.IO) {
+        val page = fetchWorkPage(workId, locale) ?: return@withContext null
+        val album = parseDlsiteAlbum(workId.trim().uppercase(), page.doc, locale, page.translation) ?: return@withContext null
+        if (allowJapaneseCvFallback) withJapaneseCvFallback(workId, locale, album) else album
     }
 
     private suspend fun withJapaneseCvFallback(
         workId: String,
         locale: String?,
-        parsed: DlsiteWorkInfo
-    ): DlsiteWorkInfo {
-        if (parsed.album.cv.isNotBlank() || locale?.startsWith("ja", ignoreCase = true) == true) {
-            return parsed
+        album: Album
+    ): Album {
+        if (album.cv.isNotBlank() || locale?.startsWith("ja", ignoreCase = true) == true) {
+            return album
         }
 
-        val japaneseCv = fetchWorkDocument(workId, locale = "ja_JP")
+        val japaneseCv = fetchWorkPage(workId, locale = "ja_JP")?.doc
             ?.let { japaneseDoc -> parseCvNames(japaneseDoc).joinToString(", ") }
             .orEmpty()
-        return if (japaneseCv.isBlank()) {
-            parsed
-        } else {
-            parsed.copy(album = parsed.album.copy(cv = japaneseCv))
-        }
+        return if (japaneseCv.isBlank()) album else album.copy(cv = japaneseCv)
     }
 
     suspend fun getInitialWorkDetail(workId: String, locale: String? = null): DlsiteWorkInitialDetail = withContext(Dispatchers.IO) {
         val clean = workId.trim().uppercase()
         if (clean.isBlank()) return@withContext DlsiteWorkInitialDetail(workInfo = null)
-        val doc = fetchWorkDocument(clean, locale = locale) ?: return@withContext DlsiteWorkInitialDetail(workInfo = null)
-        val workInfo = parseWorkInfo(clean, doc, locale)
-            ?.let { withJapaneseCvFallback(clean, locale, it) }
+        val page = fetchWorkPage(clean, locale = locale) ?: return@withContext DlsiteWorkInitialDetail(workInfo = null)
+        val workInfo = parseWorkInfo(clean, page, locale)
         DlsiteWorkInitialDetail(
             workInfo = workInfo,
-            trialTracks = parseTracksFromWorkDocument(clean, locale, doc, allowFallback = true)
+            trialTracks = parseTracksFromWorkDocument(clean, locale, page.doc, allowFallback = true)
         )
     }
 
-    private fun parseWorkInfo(workId: String, doc: Document, locale: String? = null): DlsiteWorkInfo? {
-        val title = doc.selectFirst("#work_name")?.text()?.trim() ?: return null
-        val circle = doc.selectFirst(".maker_name a")?.text()?.trim() ?: ""
-        
-        val cvNames = parseCvNames(doc)
-        val outline = doc.selectFirst("#work_outline")
-        var releaseDate = ""
-        outline?.select("tr")?.forEach { row ->
-            val th = row.selectFirst("th")?.text() ?: ""
-            if (releaseDate.isBlank() && (th.contains("販売日") || th.contains("発売日") || th.contains("发售日") || th.contains("發售日") || th.contains("Release", ignoreCase = true))) {
-                val txt = row.selectFirst("td")?.text()?.trim().orEmpty()
-                val m = Regex("""(\d{4})\D+(\d{1,2})\D+(\d{1,2})""").find(txt)
-                if (m != null) {
-                    val y = m.groupValues.getOrNull(1).orEmpty()
-                    val mo = m.groupValues.getOrNull(2).orEmpty().padStart(2, '0')
-                    val d = m.groupValues.getOrNull(3).orEmpty().padStart(2, '0')
-                    if (y.isNotBlank()) releaseDate = "$y-$mo-$d"
-                } else {
-                    releaseDate = parseEnglishReleaseDate(txt).orEmpty()
-                }
-            }
-        }
-
-        val ratingValue = doc.selectFirst("[itemprop=aggregateRating] meta[itemprop=ratingValue]")?.attr("content")?.trim()?.toDoubleOrNull()
-        val ratingCount = doc.selectFirst("[itemprop=aggregateRating] meta[itemprop=ratingCount]")?.attr("content")?.trim()?.toIntOrNull() ?: 0
-        val priceJpy = doc.selectFirst("[itemprop=offers] meta[itemprop=price]")?.attr("content")?.trim()?.toIntOrNull() ?: 0
-
-        fun pickInt(text: String): Int {
-            val m = Regex("""([\d,]+)""").find(text)
-            return m?.groupValues?.getOrNull(1)?.replace(",", "")?.toIntOrNull() ?: 0
-        }
-
-        var dlCount = 0
-        doc.select(".work_right_info_item dt").forEach { dt ->
-            val label = dt.text().trim().replace("：", "")
-            val dd = dt.nextElementSibling() ?: return@forEach
-            val v = dd.text().trim()
-            if (label in listOf("售出数", "販売数", "DL数", "売上数", "Sales", "Downloads")) {
-                dlCount = pickInt(v)
-            }
-        }
-
-        val tags = doc.select(".main_genre a").map { it.text().trim() }
-        val coverUrl = doc.selectFirst("meta[property=og:image]")?.attr("content") ?: ""
-        
-        // Parse description/story
-        val description = doc.selectFirst("#work_outline")?.html() ?: doc.selectFirst(".work_parts_area")?.html() ?: ""
-
-        val galleryUrls = runCatching { extractGalleryUrls(doc, doc.baseUri()) }.getOrDefault(emptyList())
-        val recommendations = runCatching { extractRecommendations(doc, doc.baseUri()) }.getOrDefault(DlsiteRecommendations())
-
+    private suspend fun parseWorkInfo(workId: String, page: WorkPage, locale: String?): DlsiteWorkInfo? {
+        val doc = page.doc
+        val album = parseDlsiteAlbum(workId, doc, locale, page.translation) ?: return null
         return DlsiteWorkInfo(
-            album = Album(
-                title = title,
-                path = "",
-                workId = workId,
-                rjCode = workId,
-                circle = circle,
-                cv = cvNames.joinToString(", "),
-                tags = tags,
-                        metadataLocale = locale?.takeIf(String::isNotBlank),
-                        tagDetails = parseDlsiteTags(doc.select(".main_genre a")),
-                coverUrl = if (coverUrl.startsWith("http")) coverUrl else "https:$coverUrl",
-                ratingValue = ratingValue,
-                ratingCount = ratingCount,
-                releaseDate = releaseDate,
-                dlCount = dlCount,
-                priceJpy = priceJpy,
-                description = description
-            ),
-            galleryUrls = galleryUrls,
-            recommendations = recommendations
+            album = withJapaneseCvFallback(workId, locale, album),
+            galleryUrls = runCatching { extractGalleryUrls(doc, doc.baseUri()) }.getOrDefault(emptyList()),
+            recommendations = runCatching { extractRecommendations(doc, doc.baseUri()) }.getOrDefault(DlsiteRecommendations())
         )
     }
 
     suspend fun getTracks(workId: String, locale: String? = null): List<Track> = withContext(Dispatchers.IO) {
-        val doc = fetchWorkDocument(workId, locale = locale) ?: return@withContext emptyList()
+        val doc = fetchWorkPage(workId, locale = locale)?.doc ?: return@withContext emptyList()
         parseTracksFromWorkDocument(workId, locale, doc, allowFallback = true)
     }
 
@@ -840,7 +595,7 @@ class DLSiteScraper @Inject constructor(
                 val href = jpLink?.attr("href").orEmpty()
                 val jpId = DlsiteWorkNo.extractWorkNo(href)
                 if (jpId.isNotBlank() && jpId != workId0.uppercase()) {
-                    val jpDoc = fetchWorkDocument(jpId, locale = locale)
+                    val jpDoc = fetchWorkPage(jpId, locale = locale)?.doc
                     val fallback = if (jpDoc != null) internal(jpId, jpDoc, allowFallback0 = false) else emptyList()
                     if (fallback.isNotEmpty()) return fallback
                 }

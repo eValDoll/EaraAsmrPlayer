@@ -157,7 +157,7 @@ class DlsiteProductInfoClientTest {
     }
 
     @Test
-    fun parseTranslationParentWorkNo_returnsDirectParentInsteadOfOriginalWork() {
+    fun parseTranslationProduct_returnsDirectParentInsteadOfOriginalWork() {
         val client = DlsiteProductInfoClient(OkHttpClient())
         val json = translationChildJson(
             translationInfo = """
@@ -170,11 +170,11 @@ class DlsiteProductInfoClientTest {
             """.trimIndent(),
         )
 
-        assertEquals("RJ01287594", client.parseTranslationParentWorkNo("RJ01287595", json))
+        assertEquals("RJ01287594", client.parseTranslationProduct("RJ01287595", json)?.parentWorkNo)
     }
 
     @Test
-    fun parseTranslationParentWorkNo_acceptsCaseAndOuterWhitespace() {
+    fun parseTranslationProduct_acceptsCaseAndOuterWhitespace() {
         val client = DlsiteProductInfoClient(OkHttpClient())
         val json = translationChildJson(
             responseKey = " rj01287595 ",
@@ -182,11 +182,11 @@ class DlsiteProductInfoClientTest {
             translationInfo = """{"is_child": true, "parent_workno": " rj01287594 "}""",
         )
 
-        assertEquals("RJ01287594", client.parseTranslationParentWorkNo(" rj01287595 ", json))
+        assertEquals("RJ01287594", client.parseTranslationProduct(" rj01287595 ", json)?.parentWorkNo)
     }
 
     @Test
-    fun parseTranslationParentWorkNo_rejectsMismatchedResponseIdentity() {
+    fun parseTranslationProduct_rejectsMismatchedResponseIdentity() {
         val client = DlsiteProductInfoClient(OkHttpClient())
         val responses = listOf(
             translationChildJson(responseKey = "RJ01287594"),
@@ -195,12 +195,12 @@ class DlsiteProductInfoClientTest {
         )
 
         responses.forEach { json ->
-            assertNull(client.parseTranslationParentWorkNo("RJ01287595", json))
+            assertNull(client.parseTranslationProduct("RJ01287595", json))
         }
     }
 
     @Test
-    fun parseTranslationParentWorkNo_requiresExplicitChildFlag() {
+    fun parseTranslationProduct_requiresExplicitChildFlag() {
         val client = DlsiteProductInfoClient(OkHttpClient())
         val translationInfos = listOf(
             """{"is_child": false, "parent_workno": "RJ01287594"}""",
@@ -210,12 +210,12 @@ class DlsiteProductInfoClientTest {
         )
 
         translationInfos.forEach { translationInfo ->
-            assertNull(client.parseTranslationParentWorkNo("RJ01287595", translationChildJson(translationInfo = translationInfo)))
+            assertNull(client.parseTranslationProduct("RJ01287595", translationChildJson(translationInfo = translationInfo)))
         }
     }
 
     @Test
-    fun parseTranslationParentWorkNo_rejectsMissingInvalidAndSelfParent() {
+    fun parseTranslationProduct_rejectsMissingInvalidAndSelfParent() {
         val client = DlsiteProductInfoClient(OkHttpClient())
         val translationInfos = listOf(
             """{"is_child": true, "original_workno": "RJ01279210"}""",
@@ -227,22 +227,22 @@ class DlsiteProductInfoClientTest {
         )
 
         translationInfos.forEach { translationInfo ->
-            assertNull(client.parseTranslationParentWorkNo("RJ01287595", translationChildJson(translationInfo = translationInfo)))
+            assertNull(client.parseTranslationProduct("RJ01287595", translationChildJson(translationInfo = translationInfo)))
         }
     }
 
     @Test
-    fun parseTranslationParentWorkNo_rejectsInvalidInputAndJson() {
+    fun parseTranslationProduct_rejectsInvalidInputAndJson() {
         val client = DlsiteProductInfoClient(OkHttpClient())
 
-        assertNull(client.parseTranslationParentWorkNo("", translationChildJson()))
-        assertNull(client.parseTranslationParentWorkNo("invalid", translationChildJson(responseKey = "invalid", responseProductId = "invalid")))
-        assertNull(client.parseTranslationParentWorkNo("RJ01287595", "not json"))
-        assertNull(client.parseTranslationParentWorkNo("RJ01287595", "null"))
+        assertNull(client.parseTranslationProduct("", translationChildJson()))
+        assertNull(client.parseTranslationProduct("invalid", translationChildJson(responseKey = "invalid", responseProductId = "invalid")))
+        assertNull(client.parseTranslationProduct("RJ01287595", "not json"))
+        assertNull(client.parseTranslationProduct("RJ01287595", "null"))
     }
 
     @Test
-    fun fetchTranslationParentWorkNo_requestsExactProductAndRejectsUnsuccessfulResponse() = runBlocking {
+    fun fetchTranslationProduct_requestsExactProductAndRejectsUnsuccessfulResponse() = runBlocking {
         val requests = mutableListOf<Request>()
         val httpClient = OkHttpClient.Builder()
             .addInterceptor { chain ->
@@ -258,8 +258,8 @@ class DlsiteProductInfoClientTest {
             .build()
         val client = DlsiteProductInfoClient(httpClient)
 
-        assertEquals("RJ01287594", client.fetchTranslationParentWorkNo(" rj01287595 "))
-        assertNull(client.fetchTranslationParentWorkNo("RJ01287595"))
+        assertEquals("RJ01287594", client.fetchTranslationProduct(" rj01287595 ")?.parentWorkNo)
+        assertNull(client.fetchTranslationProduct("RJ01287595"))
         assertEquals(2, requests.size)
         requests.forEach { request ->
             assertEquals("www.dlsite.com", request.url.host)

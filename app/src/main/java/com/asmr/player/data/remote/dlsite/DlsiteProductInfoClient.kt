@@ -21,6 +21,15 @@ data class DlsiteLanguageEdition(
     val displayOrder: Int
 )
 
+internal data class DlsiteTranslationProduct(
+    val parentWorkNo: String,
+    val priceJpy: Int,
+    val releaseDate: String,
+    val dlCount: Int,
+    val ratingValue: Double?,
+    val ratingCount: Int
+)
+
 @Singleton
 class DlsiteProductInfoClient @Inject constructor(
     private val okHttpClient: OkHttpClient
@@ -73,19 +82,27 @@ class DlsiteProductInfoClient @Inject constructor(
             .sortedWith(compareBy({ it.displayOrder }, { it.lang }))
     }
 
-    internal fun parseTranslationParentWorkNo(productId: String, json: String): String? {
+    internal fun parseTranslationProduct(productId: String, json: String): DlsiteTranslationProduct? {
         val clean = productId.trim().uppercase()
         val workObj = parseProductInfo(clean, json) ?: return null
-        return parseTranslationParentWorkNo(clean, workObj)
+        return parseTranslationProduct(clean, workObj)
     }
 
-    private fun parseTranslationParentWorkNo(clean: String, workObj: Map<*, *>): String? {
+    private fun parseTranslationProduct(clean: String, workObj: Map<*, *>): DlsiteTranslationProduct? {
         if (clean.isBlank() || DlsiteWorkNo.normalizeWorkNo(clean) != clean) return null
         if ((workObj["product_id"] as? String)?.trim()?.uppercase() != clean) return null
         val translationInfo = workObj["translation_info"] as? Map<*, *> ?: return null
         if (translationInfo["is_child"] != true) return null
         val parent = DlsiteWorkNo.normalizeWorkNo((translationInfo["parent_workno"] as? String).orEmpty())
-        return parent.takeIf { it.isNotBlank() && it != clean }
+        if (parent.isBlank() || parent == clean) return null
+        return DlsiteTranslationProduct(
+            parentWorkNo = parent,
+            priceJpy = (workObj["price"] as? Number)?.toInt() ?: 0,
+            releaseDate = (workObj["regist_date"] as? String).orEmpty().substringBefore(' '),
+            dlCount = (workObj["dl_count"] as? Number)?.toInt() ?: 0,
+            ratingValue = (workObj["rate_average_2dp"] as? Number)?.toDouble()?.takeIf { it > 0 },
+            ratingCount = (workObj["rate_count"] as? Number)?.toInt() ?: 0
+        )
     }
 
     private fun parseProductInfo(productId: String, json: String): Map<*, *>? {
@@ -121,11 +138,11 @@ class DlsiteProductInfoClient @Inject constructor(
         parseLanguageEditions(clean, workObj)
     }
 
-    suspend fun fetchTranslationParentWorkNo(productId: String): String? = withContext(Dispatchers.IO) {
+    internal suspend fun fetchTranslationProduct(productId: String): DlsiteTranslationProduct? = withContext(Dispatchers.IO) {
         val clean = productId.trim().uppercase()
         if (clean.isBlank() || DlsiteWorkNo.normalizeWorkNo(clean) != clean) return@withContext null
         val workObj = fetchProductInfo(clean) ?: return@withContext null
-        parseTranslationParentWorkNo(clean, workObj)
+        parseTranslationProduct(clean, workObj)
     }
 
     private suspend fun fetchProductInfo(productId: String): Map<*, *>? {

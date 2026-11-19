@@ -259,7 +259,15 @@ private fun onlineDetailLoadingFor(album: Album, state: SearchUiState.Success): 
 internal enum class SearchResultSkeletonMode {
     None,
     DetailMetadata,
-    LocalizedText
+    LocalizedText;
+
+    fun hideStats(album: Album, collectedOnly: Boolean) = this == DetailMetadata &&
+        (collectedOnly || (album.releaseDate.isBlank() && album.priceJpy == 0 && album.ratingValue == null))
+
+    fun hideCv(album: Album, collectedOnly: Boolean) = this == DetailMetadata && (collectedOnly || album.cv.isBlank())
+
+    fun hideTags(album: Album, collectedOnly: Boolean) = this == LocalizedText ||
+        (this == DetailMetadata && (collectedOnly || (album.tagDetails.isNullOrEmpty() && album.tags.isEmpty())))
 }
 
 internal fun searchResultSkeletonMode(
@@ -1202,13 +1210,11 @@ private fun SearchScreenContent(
                                                                 placementSpec = if (LocalPageAnimationsActive.current) SearchResultPlacementSpring else null,
                                                                 fadeOutSpec = null,
                                                             ),
-                                                            onlineDetailLoading =
-                                                                skeletonMode == SearchResultSkeletonMode.DetailMetadata,
+                                                            onlineDetailLoading = skeletonMode.hideStats(album, state.collectedOnly),
                                                             onlineTitleLoading =
                                                                 skeletonMode == SearchResultSkeletonMode.LocalizedText,
-                                                            onlineCvLoading =
-                                                                skeletonMode == SearchResultSkeletonMode.DetailMetadata,
-                                                            onlineTagsLoading = skeletonMode != SearchResultSkeletonMode.None,
+                                                            onlineCvLoading = skeletonMode.hideCv(album, state.collectedOnly),
+                                                            onlineTagsLoading = skeletonMode.hideTags(album, state.collectedOnly),
                                                             showCollectedIndicator = !state.collectedOnly,
                                                             showStatsPlaceholders = true,
                                                             coverFadeInState = coverFadeInState,
@@ -1295,13 +1301,11 @@ private fun SearchScreenContent(
                                                     placementSpec = if (LocalPageAnimationsActive.current) SearchResultPlacementSpring else null,
                                                     fadeOutSpec = null,
                                                 ),
-                                                onlineDetailLoading =
-                                                    skeletonMode == SearchResultSkeletonMode.DetailMetadata,
+                                                onlineDetailLoading = skeletonMode.hideStats(album, state.collectedOnly),
                                                 onlineTitleLoading =
                                                     skeletonMode == SearchResultSkeletonMode.LocalizedText,
-                                                onlineCvLoading =
-                                                    skeletonMode == SearchResultSkeletonMode.DetailMetadata,
-                                                onlineTagsLoading = skeletonMode != SearchResultSkeletonMode.None,
+                                                onlineCvLoading = skeletonMode.hideCv(album, state.collectedOnly),
+                                                onlineTagsLoading = skeletonMode.hideTags(album, state.collectedOnly),
                                                 showCollectedIndicator = !state.collectedOnly,
                                                 showStatsPlaceholders = true,
                                                 coverFadeInState = coverFadeInState,
