@@ -1149,7 +1149,7 @@ internal fun NowPlayingScreen(
             .distinctUntilChanged()
     }.collectAsStateWithLifecycle(initialValue = PlaybackSnapshot().toStaticPlayback())
     val playback = staticPlayback.toSnapshot(positionMs = 0L)
-    val resolvedDurationMs by viewModel.resolvedDurationMs.collectAsStateWithLifecycle()
+    val resolvedTrackDuration by viewModel.resolvedTrackDuration.collectAsStateWithLifecycle()
     val sliceUiState by viewModel.sliceUiState.collectAsStateWithLifecycle()
     val isFavorite by viewModel.isFavorite.collectAsStateWithLifecycle()
     val listenTogetherUiState by viewModel.listenTogetherUiState.collectAsStateWithLifecycle()
@@ -1194,11 +1194,7 @@ internal fun NowPlayingScreen(
         colorScheme = playerContentColors
     )
     val videoBackdropColor = if (isVideo) playerContentColors.background else Color.Transparent
-    val progressDurationMs = when {
-        playback.durationMs > 0L && resolvedDurationMs > 0L -> maxOf(playback.durationMs, resolvedDurationMs)
-        playback.durationMs > 0L -> playback.durationMs
-        else -> resolvedDurationMs
-    }
+    val progressDurationMs = progressDurationMs(item?.mediaId, playback.durationMs, resolvedTrackDuration)
 
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
