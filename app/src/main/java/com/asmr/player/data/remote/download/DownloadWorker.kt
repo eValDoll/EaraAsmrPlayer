@@ -2,13 +2,11 @@ package com.asmr.player.data.remote.download
 
 import com.asmr.player.i18n.appString
 import com.asmr.player.R
-
+import com.asmr.player.nas.LibraryWorkspace
 import com.asmr.player.util.ChapterMediaReference
-
 import com.asmr.player.util.LocalFileOperation
 import com.asmr.player.util.LocalFileScopes
 import com.asmr.player.util.LocalFileOperationCoordinator
-
 import android.content.Context
 import android.util.Log
 import androidx.work.*
@@ -162,7 +160,7 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                 if (usesDocumentTree) {
                     storage.ensureFile(targetDir, ".nomedia", "application/octet-stream")
                 } else {
-                    val albumsRoot = File(applicationContext.getExternalFilesDir(null), "albums")
+                    val albumsRoot = File(applicationContext.getExternalFilesDir(null), LibraryWorkspace.name("albums"))
                     if (!albumsRoot.exists()) albumsRoot.mkdirs()
                     val rootMarker = File(albumsRoot, ".nomedia")
                     if (!rootMarker.exists()) rootMarker.createNewFile()
@@ -389,7 +387,7 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                     name = fileName,
                     mimeType = downloadMimeType(fileName),
                 )
-                storage.openOutput(destinationReference).use { output ->
+                storage.write(destinationReference, file.length()) { output ->
                     file.inputStream().use { input -> input.copyTo(output) }
                 }
                 dao.updateItemDestination(

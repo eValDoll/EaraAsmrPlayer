@@ -1,9 +1,10 @@
 package com.asmr.player.util
 
 import android.content.Context
+import com.asmr.player.nas.LibraryWorkspace
 
 class ScanRootsStore(context: Context) {
-    private val prefs = context.getSharedPreferences("scan_roots", Context.MODE_PRIVATE)
+    private val prefs = context.getSharedPreferences(LibraryWorkspace.name("scan_roots"), Context.MODE_PRIVATE)
 
     fun getRoots(): Set<String> {
         return prefs.getStringSet("roots", emptySet()) ?: emptySet()

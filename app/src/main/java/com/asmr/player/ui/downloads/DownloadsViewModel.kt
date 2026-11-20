@@ -2,19 +2,18 @@ package com.asmr.player.ui.downloads
 
 import com.asmr.player.i18n.appString
 import com.asmr.player.R
-
+import com.asmr.player.nas.LibraryWorkspace
+import com.asmr.player.nas.libraryWorkRequest
 import com.asmr.player.util.LocalFileScopes
 import com.asmr.player.util.LocalFileOperation
 import com.asmr.player.util.tryBeginFileMutation
 import com.asmr.player.util.withDownloadDeletion
 import com.asmr.player.util.LocalFileOperationCoordinator
-
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.room.withTransaction
 import androidx.work.WorkInfo
-import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.ExistingWorkPolicy
 import androidx.work.WorkManager
 import com.asmr.player.data.local.db.AppDatabaseProvider
@@ -556,7 +555,7 @@ class DownloadsViewModel @Inject constructor(
                 workIds.forEach { workId ->
                     runCatching { UUID.fromString(workId) }.getOrNull()?.let { workManager.cancelWorkById(it).result.get() }
                 }
-                workManager.cancelAllWorkByTag(candidate.taskKey).result.get()
+                workManager.cancelAllWorkByTag(LibraryWorkspace.name(candidate.taskKey)).result.get()
             }) {
                 val task = downloadDao.getTaskById(taskId) ?: return@withDownloadDeletion
                 val items = downloadDao.getItemsForTask(taskId)
@@ -626,13 +625,13 @@ class DownloadsViewModel @Inject constructor(
                             "taskRootDir" to task.rootDir,
                             "albumRootDir" to task.albumRootDir,
                         )
-                        val request = OneTimeWorkRequestBuilder<FinalizeDownloadTaskWorker>()
+                        val request = libraryWorkRequest<FinalizeDownloadTaskWorker>()
                             .setInputData(finalizeInput)
                             .addTag("download_finalize")
-                            .addTag(task.taskKey)
+                            .addTag(LibraryWorkspace.name(task.taskKey))
                             .build()
                         workManager.enqueueUniqueWork(
-                            "download_finalize_${task.taskKey.hashCode()}",
+                            LibraryWorkspace.name("download_finalize_${task.taskKey.hashCode()}"),
                             ExistingWorkPolicy.REPLACE,
                             request
                         )

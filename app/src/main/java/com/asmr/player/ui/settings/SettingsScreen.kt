@@ -2,11 +2,10 @@ package com.asmr.player.ui.settings
 
 import com.asmr.player.i18n.appString
 import com.asmr.player.R
-
+import com.asmr.player.nas.LibraryWorkspace
 import com.asmr.player.ui.common.LocalTabletLayout
 import com.asmr.player.ui.common.LocalMainHeaderPadding
 import com.asmr.player.ui.common.DeferredPageItem
-
 import android.content.Intent
 import android.net.Uri
 import android.provider.DocumentsContract
@@ -438,6 +437,9 @@ fun SettingsScreen(
                     }
 
                 if (currentSection == SettingsSection.LocalLibrary) {
+                    item(key = "storage_mode") {
+                        SettingsDetailCard { WebDavStorageSection(viewModel::switchLibrary) }
+                    }
                     item(key = "group:local") {
                         SettingsDetailCard {
                 val isDark = AsmrTheme.colorScheme.isDark
@@ -465,7 +467,7 @@ fun SettingsScreen(
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        Row(
+                        if (!LibraryWorkspace.nas) Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
@@ -487,7 +489,7 @@ fun SettingsScreen(
                                 onClick = {
                                     viewModel.requestDownloadDirectoryChange {
                                         pendingDownloadDestination = DownloadDestination.Default(
-                                            root = File(context.getExternalFilesDir(null), "albums").absolutePath,
+                                            root = File(context.getExternalFilesDir(null), LibraryWorkspace.name("albums")).absolutePath,
                                         )
                                     }
                                 },
@@ -525,7 +527,7 @@ fun SettingsScreen(
                     }
                 }
 
-                FilledTonalButton(
+                if (!LibraryWorkspace.nas) FilledTonalButton(
                     onClick = { pickRootLauncher.launch(null) },
                     modifier = Modifier.fillMaxWidth(),
                     colors = buttonColors
@@ -591,7 +593,7 @@ fun SettingsScreen(
                     }
                 }
 
-                Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (!LibraryWorkspace.nas) Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(androidx.compose.ui.res.stringResource(R.string.ui_directory_added), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                     if (scanRoots.isEmpty()) {
                         Text(androidx.compose.ui.res.stringResource(R.string.ui_none_yet), style = MaterialTheme.typography.bodySmall, color = colorScheme.textSecondary)

@@ -14,6 +14,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.asmr.player.nas.LibraryWorkspace
 
 class AsmrOneCredentials(val name: String, val token: String)
 
@@ -25,7 +26,7 @@ interface AsmrOneCredentialStorage {
 
 @Singleton
 class AsmrOneAuthStore @Inject constructor(@ApplicationContext context: Context) : AsmrOneCredentialStorage {
-    private val preferences = context.getSharedPreferences("asmr_one_auth", Context.MODE_PRIVATE)
+    private val preferences = context.getSharedPreferences(LibraryWorkspace.name("asmr_one_auth"), Context.MODE_PRIVATE)
 
     override suspend fun read(): AsmrOneCredentials? = withContext(Dispatchers.IO) {
         val name = preferences.getString("name", null) ?: return@withContext null

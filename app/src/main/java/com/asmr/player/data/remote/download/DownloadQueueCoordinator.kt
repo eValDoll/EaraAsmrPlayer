@@ -16,6 +16,8 @@ import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.util.UUID
 import kotlin.math.max
+import com.asmr.player.nas.LibraryWorkspace
+import com.asmr.player.nas.libraryWorkRequest
 
 /** Process-wide scheduler; WorkManager owns transfer execution and persisted tasks survive process death. */
 object DownloadQueueCoordinator {
@@ -79,7 +81,7 @@ object DownloadQueueCoordinator {
         val recoverableItems = dao.getAllActiveOrPausedItems()
         if (recoverableItems.isEmpty()) return
         val wm = WorkManager.getInstance(appContext)
-        runCatching { wm.cancelAllWorkByTag("download") }
+        runCatching { wm.cancelAllWorkByTag(LibraryWorkspace.name("download")) }
         val now = System.currentTimeMillis()
         recoverableItems.forEach { item ->
             dao.stopInterruptibleItem(item.workId, "PAUSED", now)
@@ -125,7 +127,7 @@ object DownloadQueueCoordinator {
                     dao.updateItemState(item.workId, WorkInfo.State.FAILED.name, System.currentTimeMillis())
                     return@forEach
                 }
-                val request = OneTimeWorkRequestBuilder<DownloadWorker>()
+                val request = libraryWorkRequest<DownloadWorker>()
                     .setInputData(
                         workDataOf(
                             "url" to item.url,
@@ -150,8 +152,8 @@ object DownloadQueueCoordinator {
                             "dlsitePlayImageHeight" to (item.dlsitePlayImageHeight ?: -1)
                         )
                     )
-                    .addTag("download")
-                    .addTag(task.taskKey)
+                    .addTag(LibraryWorkspace.name("download"))
+                    .addTag(LibraryWorkspace.name(task.taskKey))
                     .setConstraints(
                         Constraints.Builder()
                             .setRequiredNetworkType(NetworkType.CONNECTED)

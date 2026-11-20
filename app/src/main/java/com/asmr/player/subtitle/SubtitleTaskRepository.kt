@@ -516,14 +516,16 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
         startupMutex.withLock {
             if (startupReconciled) return
             withContext(Dispatchers.IO) {
-                val workManager = WorkManager.getInstance(appContext)
-                runCatching { workManager.cancelUniqueWork(LEGACY_GENERATION_WORK).result.get() }
-                runCatching { workManager.cancelUniqueWork(LEGACY_TRANSLATION_WORK).result.get() }
-                runCatching { workManager.cancelAllWorkByTag(LEGACY_GENERATION_WORK).result.get() }
-                runCatching { workManager.cancelAllWorkByTag(LEGACY_TRANSLATION_WORK).result.get() }
-                val requestDir = File(appContext.noBackupFilesDir, LEGACY_REQUEST_DIRECTORY)
-                requestDir.listFiles()?.forEach { file -> if (file.isFile) file.delete() }
-                requestDir.delete()
+                if (!com.asmr.player.nas.LibraryWorkspace.nas) {
+                    val workManager = WorkManager.getInstance(appContext)
+                    runCatching { workManager.cancelUniqueWork(LEGACY_GENERATION_WORK).result.get() }
+                    runCatching { workManager.cancelUniqueWork(LEGACY_TRANSLATION_WORK).result.get() }
+                    runCatching { workManager.cancelAllWorkByTag(LEGACY_GENERATION_WORK).result.get() }
+                    runCatching { workManager.cancelAllWorkByTag(LEGACY_TRANSLATION_WORK).result.get() }
+                    val requestDir = File(appContext.noBackupFilesDir, LEGACY_REQUEST_DIRECTORY)
+                    requestDir.listFiles()?.forEach { file -> if (file.isFile) file.delete() }
+                    requestDir.delete()
+                }
                 val now = System.currentTimeMillis()
                 dao.getAllItems()
                     .filter { it.state == SubtitleItemState.CANCEL_REQUESTED }

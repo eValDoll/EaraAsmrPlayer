@@ -9,16 +9,18 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.asmr.player.data.repository.AudioMetadataCache
+import com.asmr.player.nas.LibraryWorkspace
 import com.asmr.player.util.AudioTechnicalMetadata
 import kotlinx.coroutines.delay
 
-internal enum class AudioSource { Local, Online }
+internal enum class AudioSource { Local, Nas, Online }
 
 internal fun audioSource(path: String): AudioSource? {
     val value = path.trim()
     return when {
         value.isBlank() -> null
         value.startsWith("https://", ignoreCase = true) || value.startsWith("http://", ignoreCase = true) -> AudioSource.Online
+        value.startsWith("content://${LibraryWorkspace.authority}/") -> AudioSource.Nas
         else -> AudioSource.Local
     }
 }
@@ -40,7 +42,7 @@ internal fun rememberAudioMetadata(path: String, loadMetadata: Boolean = true): 
         if (loadMetadata) {
             lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 when (audioSource(path)) {
-                    AudioSource.Online -> AudioMetadataCache.restoreOnline(context, path, entry)
+                    AudioSource.Online, AudioSource.Nas -> AudioMetadataCache.restoreOnline(context, path, entry)
                     AudioSource.Local -> {
                         delay(200)
                         AudioMetadataCache.loadLocal(context, path, entry)

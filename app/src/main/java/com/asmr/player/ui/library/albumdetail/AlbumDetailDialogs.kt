@@ -2,9 +2,8 @@ package com.asmr.player.ui.library
 
 import com.asmr.player.i18n.appString
 import com.asmr.player.R
-
+import com.asmr.player.nas.setLibrarySource
 import com.asmr.player.util.sanitizeFolderName
-
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.clickable
@@ -47,7 +46,6 @@ import com.asmr.player.util.SmartSortKey
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-
 import androidx.compose.ui.draw.clip
 import com.asmr.player.ui.common.RoundedTopSheet
 import com.asmr.player.ui.common.LocalVisibleAppMessages
@@ -828,7 +826,7 @@ internal fun FilePreviewDialog(
                     val retriever = android.media.MediaMetadataRetriever()
                     try {
                         if (currentPath.startsWith("content://")) {
-                            retriever.setDataSource(context, Uri.parse(currentPath))
+                            retriever.setLibrarySource(context, Uri.parse(currentPath))
                         } else {
                             retriever.setDataSource(currentPath)
                         }

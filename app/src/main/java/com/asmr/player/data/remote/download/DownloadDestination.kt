@@ -2,7 +2,6 @@ package com.asmr.player.data.remote.download
 
 import com.asmr.player.i18n.appString
 import com.asmr.player.R
-
 import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
@@ -10,6 +9,8 @@ import android.provider.DocumentsContract
 import androidx.datastore.preferences.core.edit
 import com.asmr.player.data.settings.SettingsKeys
 import com.asmr.player.data.settings.settingsDataStore
+import com.asmr.player.nas.ActiveWebDav
+import com.asmr.player.nas.LibraryWorkspace
 import com.asmr.player.util.documentTreeDisplayPath
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
@@ -55,6 +56,12 @@ class DownloadDestinationStore @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
     val destination: Flow<DownloadDestination> = context.settingsDataStore.data.map { preferences ->
+        LibraryWorkspace.location?.let { location ->
+            return@map DownloadDestination.DocumentTree(
+                LibraryWorkspace.tree(LibraryWorkspace.DOWNLOADS).toString(), "WebDAV",
+                location.url(LibraryWorkspace.DOWNLOADS).toString(),
+            )
+        }
         val treeUri = preferences[SettingsKeys.DOWNLOAD_DIRECTORY_TREE_URI].orEmpty().trim()
         if (treeUri.isBlank()) {
             defaultDestination()
@@ -70,7 +77,7 @@ class DownloadDestinationStore @Inject constructor(
     }
 
     fun defaultDestination(): DownloadDestination.Default = DownloadDestination.Default(
-        root = File(context.getExternalFilesDir(null), "albums").absolutePath,
+        root = File(context.getExternalFilesDir(null), LibraryWorkspace.name("albums")).absolutePath,
     )
 
     suspend fun current(): DownloadDestination = destination.first()
@@ -103,6 +110,7 @@ class DownloadStorageGateway @Inject constructor(
 
     fun hasPersistedWritePermission(treeUri: String): Boolean {
         val uri = runCatching { Uri.parse(treeUri) }.getOrNull() ?: return false
+        if (LibraryWorkspace.owns(uri)) return LibraryWorkspace.nas
         return resolver.persistedUriPermissions.any { permission ->
             permission.uri == uri && permission.isReadPermission && permission.isWritePermission
         }
@@ -129,6 +137,9 @@ class DownloadStorageGateway @Inject constructor(
             return@withContext current.absolutePath
         }
 
+        if (LibraryWorkspace.nas && root == LibraryWorkspace.tree(LibraryWorkspace.DOWNLOADS).toString()) {
+            ActiveWebDav.client(context).ensureDownloadDirectory()
+        }
         var current = normalizeDocumentReference(root)
         segments.forEach { segment ->
             current = findChild(current, segment, directoryOnly = true)
@@ -219,12 +230,23 @@ class DownloadStorageGateway @Inject constructor(
         }
     }
 
-    fun openOutput(reference: String): OutputStream {
-        return if (isDocumentReference(reference)) {
+    fun write(reference: String, size: Long = -1L, writer: (OutputStream) -> Unit) {
+        val uri = Uri.parse(reference)
+        if (LibraryWorkspace.owns(uri)) {
+            ActiveWebDav.client(context).put(LibraryWorkspace.path(uri), object : okhttp3.RequestBody() {
+                override fun contentType() = null
+                override fun contentLength() = size
+                override fun isOneShot() = true
+                override fun writeTo(sink: okio.BufferedSink) = writer(sink.outputStream())
+            })
+            return
+        }
+        val output = if (isDocumentReference(reference)) {
             resolver.openOutputStream(Uri.parse(reference), "wt") ?: error(appString(R.string.ui_unable_to_write_download_file))
         } else {
             File(reference).outputStream()
         }
+        output.use(writer)
     }
 
     fun walk(root: String): List<DownloadStorageEntry> {

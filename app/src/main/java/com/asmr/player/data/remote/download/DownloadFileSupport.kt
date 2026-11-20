@@ -3,6 +3,7 @@ package com.asmr.player.data.remote.download
 import android.content.Context
 import com.asmr.player.data.local.db.entities.DownloadItemEntity
 import java.io.File
+import com.asmr.player.nas.LibraryWorkspace
 
 const val DOWNLOAD_STATE_FINALIZING = "FINALIZING"
 
@@ -13,7 +14,7 @@ internal fun dlsitePlayImagePartFile(outputFile: File): File {
 }
 
 internal fun downloadStagingFile(context: Context, item: DownloadItemEntity): File {
-    val root = File(context.getExternalFilesDir(null), "download-staging")
+    val root = File(context.getExternalFilesDir(null), LibraryWorkspace.name("download-staging"))
     return File(root, "${item.id}_${item.fileName}")
 }
 

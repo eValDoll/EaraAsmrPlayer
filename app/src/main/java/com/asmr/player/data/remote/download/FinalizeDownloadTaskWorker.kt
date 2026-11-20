@@ -1,9 +1,10 @@
 package com.asmr.player.data.remote.download
 
+import com.asmr.player.nas.LibraryWorkspace
+import com.asmr.player.nas.libraryWorkRequest
 import com.asmr.player.util.LocalFileOperation
 import com.asmr.player.util.LocalFileScopes
 import com.asmr.player.util.LocalFileOperationCoordinator
-
 import android.content.Context
 import android.util.Log
 import androidx.room.withTransaction
@@ -17,13 +18,13 @@ import java.io.File
 
 internal suspend fun enqueueDownloadFinalization(context: Context, task: DownloadTaskEntity) {
     if (!AppDatabaseProvider.get(context).downloadDao().isReadyForFinalization(task.id)) return
-    val request = OneTimeWorkRequestBuilder<FinalizeDownloadTaskWorker>()
+    val request = libraryWorkRequest<FinalizeDownloadTaskWorker>()
         .setInputData(workDataOf("taskKey" to task.taskKey, "taskRootDir" to task.rootDir))
         .addTag("download_finalize")
-        .addTag(task.taskKey)
+        .addTag(LibraryWorkspace.name(task.taskKey))
         .build()
     WorkManager.getInstance(context).enqueueUniqueWork(
-        "download_finalize_${task.taskKey.hashCode()}", ExistingWorkPolicy.APPEND_OR_REPLACE, request
+        LibraryWorkspace.name("download_finalize_${task.taskKey.hashCode()}"), ExistingWorkPolicy.APPEND_OR_REPLACE, request
     )
 }
 
@@ -128,7 +129,7 @@ class FinalizeDownloadTaskWorker(context: Context, parameters: WorkerParameters)
                         if (!marker.exists()) marker.createNewFile()
                     }
                     Unit
-                }
+                }.onFailure { if (LibraryWorkspace.nas) throw it }
                 dao.finishFinalizingItems(task.id, System.currentTimeMillis())
             }
             ListenableWorker.Result.success()

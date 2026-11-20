@@ -2,6 +2,7 @@ package com.asmr.player.data.local.db
 
 import android.content.Context
 import androidx.room.Room
+import com.asmr.player.nas.LibraryWorkspace
 
 object AppDatabaseProvider {
     @Volatile
@@ -13,12 +14,12 @@ object AppDatabaseProvider {
         }
     }
 
-    private fun buildDatabase(context: Context): AppDatabase {
+    internal fun buildDatabase(context: Context): AppDatabase {
         val appContext = context.applicationContext
         return Room.databaseBuilder(
             appContext,
             AppDatabase::class.java,
-            AppDatabase.DATABASE_NAME
+            LibraryWorkspace.name(AppDatabase.DATABASE_NAME)
         )
             .addMigrations(
                 AppDatabaseMigrations.MIGRATION_4_5,

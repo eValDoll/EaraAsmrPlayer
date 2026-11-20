@@ -2,9 +2,7 @@ package com.asmr.player.service
 
 import com.asmr.player.i18n.appString
 import com.asmr.player.R
-
 import com.asmr.player.data.repository.AudioMetadataCache
-
 import android.app.PendingIntent
 import android.bluetooth.BluetoothAdapter
 import android.content.BroadcastReceiver
@@ -56,6 +54,9 @@ import com.asmr.player.data.repository.StatisticsRepository
 import com.asmr.player.data.repository.ListeningRecordRepository
 import com.asmr.player.data.repository.ListeningTrackContext
 import com.asmr.player.data.repository.PlaylistPlaybackRepository
+import com.asmr.player.nas.ActiveWebDav
+import com.asmr.player.nas.LibraryWorkspace
+import com.asmr.player.nas.WebDavClient
 import com.asmr.player.playback.AsmrRenderersFactory
 import com.asmr.player.playback.BalanceAudioProcessor
 import com.asmr.player.playback.ChannelModeAudioProcessor
@@ -413,6 +414,15 @@ class PlaybackService : MediaSessionService() {
 
         val dataSourceFactory = RoutingPlaybackDataSource.Factory(
             upstreamFactory = upstreamDataSourceFactory,
+            webDavFactory = if (LibraryWorkspace.nas) ResolvingDataSource.Factory(
+                OkHttpDataSource.Factory(WebDavClient.http)
+            ) { spec ->
+                val client = ActiveWebDav.client(applicationContext)
+                val path = LibraryWorkspace.path(spec.uri)
+                spec.buildUpon().setUri(client.location.url(path).toString())
+                    .setHttpRequestHeaders(client.authorization?.let { mapOf("Authorization" to it) }.orEmpty())
+                    .build()
+            } else null,
             cachedFactory = cacheDataSourceFactory
         )
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)

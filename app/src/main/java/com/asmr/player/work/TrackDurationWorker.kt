@@ -7,6 +7,7 @@ import android.os.SystemClock
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.asmr.player.data.local.db.AppDatabaseProvider
+import com.asmr.player.nas.setLibrarySource
 
 class TrackDurationWorker(
     appContext: Context,
@@ -45,7 +46,7 @@ class TrackDurationWorker(
         val retriever = MediaMetadataRetriever()
         return try {
             if (path.startsWith("content://", ignoreCase = true)) {
-                retriever.setDataSource(context, Uri.parse(path))
+                retriever.setLibrarySource(context, Uri.parse(path))
             } else {
                 retriever.setDataSource(path)
             }

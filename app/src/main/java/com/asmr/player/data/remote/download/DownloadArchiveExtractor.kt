@@ -146,7 +146,7 @@ internal suspend fun finalizeDlsiteLosslessArchiveInStorageIfNeeded(
                     mimeType = downloadMimeType(segments.last()),
                 )
                 archive.getInputStream(entry).use { input ->
-                    storage.openOutput(outputReference).use { output -> input.copyTo(output) }
+                    storage.write(outputReference) { output -> input.copyTo(output) }
                 }
             }
         }

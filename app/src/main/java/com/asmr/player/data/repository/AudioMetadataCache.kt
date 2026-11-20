@@ -1,5 +1,7 @@
 package com.asmr.player.data.repository
 
+import com.asmr.player.nas.LibraryWorkspace
+
 import android.content.Context
 import android.database.sqlite.SQLiteException
 import android.media.AudioFormat
@@ -144,7 +146,8 @@ internal object AudioMetadataCache {
     }
 
     private fun isOnlinePath(path: String) =
-        path.startsWith("https://", ignoreCase = true) || path.startsWith("http://", ignoreCase = true)
+        path.startsWith("https://", ignoreCase = true) || path.startsWith("http://", ignoreCase = true) ||
+            path.startsWith("content://${LibraryWorkspace.authority}/")
 
     private fun AudioTechnicalMetadata.hasKnownFormat() =
         sampleRate > 0 && (bitrate > 0 || bitsPerSample > 0)
