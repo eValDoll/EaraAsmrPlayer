@@ -92,6 +92,9 @@ interface AlbumDao {
     )
     suspend fun updateAlbumAudioAggregate(albumId: Long, trackCount: Int, totalDuration: Double, totalSizeBytes: Long)
 
+    @Query("UPDATE albums SET audioTotalDuration = (SELECT TOTAL(duration) FROM tracks WHERE albumId = :albumId) WHERE id = :albumId")
+    suspend fun refreshTotalDuration(albumId: Long)
+
     @Query("UPDATE albums SET manualCoverPath = :manualCoverPath, coverThumbPath = '' WHERE id = :albumId")
     suspend fun setManualCoverPath(albumId: Long, manualCoverPath: String)
 

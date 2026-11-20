@@ -16,6 +16,8 @@ import com.asmr.player.data.remote.auth.mergeDlsiteCookieHeaders
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.remote.dlsite.descrambleDlsitePlayImageFile
 import com.asmr.player.data.local.db.AppDatabaseProvider
+import com.asmr.player.data.repository.AudioMetadataCache
+import com.asmr.player.util.SubtitleMatchSupport
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -396,6 +398,9 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                     targetDir = targetDir,
                     updatedAt = System.currentTimeMillis(),
                 )
+                if (LibraryWorkspace.nas && file.extension.lowercase() in SubtitleMatchSupport.AudioExtensions) {
+                    AudioMetadataCache.recordNasDownload(applicationContext, destinationReference, file.absolutePath)
+                }
                 if (!fileName.equals("dlsite_lossless_archive.zip", ignoreCase = true)) {
                     file.delete()
                 }

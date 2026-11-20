@@ -404,6 +404,8 @@ private suspend fun upsertDownloadedDocumentAlbumToLibrary(
         )
     )
     if (LibraryWorkspace.owns(android.net.Uri.parse(rootDir))) {
+        trackDao.applyCachedDurations(albumId, "content://${LibraryWorkspace.authority}/*")
+        albumDao.refreshTotalDuration(albumId)
         db.localTreeCacheDao().storeWebDavFiles(albumId, rootDir, entries.filterNot { it.isDirectory }.map {
             WebDavFile(it.relativePath, it.reference, it.sizeBytes)
         })

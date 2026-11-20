@@ -42,7 +42,11 @@ internal fun rememberAudioMetadata(path: String, loadMetadata: Boolean = true): 
         if (loadMetadata) {
             lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 when (audioSource(path)) {
-                    AudioSource.Online, AudioSource.Nas -> AudioMetadataCache.restoreOnline(context, path, entry)
+                    AudioSource.Online -> AudioMetadataCache.restoreOnline(context, path, entry)
+                    AudioSource.Nas -> {
+                        delay(200)
+                        AudioMetadataCache.loadNas(context, path, entry)
+                    }
                     AudioSource.Local -> {
                         delay(200)
                         AudioMetadataCache.loadLocal(context, path, entry)
