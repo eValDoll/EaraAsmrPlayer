@@ -133,20 +133,19 @@ internal suspend fun finalizeDlsiteLosslessArchiveInStorageIfNeeded(
     if (!stagingArchive.isFile) return
 
     useBestEffortZipFile(stagingArchive) { archive ->
-        archive.entries().asSequence().forEach { entry ->
-            val normalized = entry.name.replace('\\', '/').trimStart('/')
-            val segments = normalized.split('/').filter { it.isNotBlank() }
-            if (segments.isEmpty() || segments.any { it == "." || it == ".." }) return@forEach
-            val parentPath = segments.dropLast(1).joinToString("/")
-            val parent = storage.resolveDirectory(rootDir, parentPath)
-            if (!entry.isDirectory) {
-                val outputReference = storage.ensureFile(
-                    directory = parent,
-                    name = segments.last(),
-                    mimeType = downloadMimeType(segments.last()),
-                )
-                archive.getInputStream(entry).use { input ->
-                    storage.write(outputReference) { output -> input.copyTo(output) }
+        fun entries() = archive.entries().asSequence().mapNotNull { entry ->
+            val segments = entry.name.replace('\\', '/').split('/').filter { it.isNotBlank() }
+            if (segments.isEmpty() || segments.any { it == "." || it == ".." }) null else entry to segments
+        }
+        publishDownloadFiles(rootDir, archiveItem.workId, { entries().filterNot { it.first.isDirectory }.sumOf { it.first.size } }) { copy ->
+            for ((entry, segments) in entries()) {
+                val parent = storage.resolveDirectory(rootDir, segments.dropLast(1).joinToString("/"))
+                if (!entry.isDirectory) {
+                    val name = segments.last()
+                    val reference = storage.ensureFile(parent, name, downloadMimeType(name))
+                    storage.write(reference, entry.size) { output ->
+                        archive.getInputStream(entry).use { input -> copy(input, output) }
+                    }
                 }
             }
         }

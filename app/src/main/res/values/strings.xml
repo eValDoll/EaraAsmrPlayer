@@ -601,6 +601,9 @@
     <string name="ui_canceled" formatted="false">"Canceled"</string>
     <string name="ui_exception" formatted="false">"Exception"</string>
     <string name="ui_processing" formatted="false">"Processing"</string>
+    <string name="ui_nas_upload_progress">NAS upload %1$d%%</string>
+    <string name="ui_finalizing_download">Finalizing</string>
+    <string name="ui_awaiting_nas">Awaiting NAS</string>
     <string name="ui_downloading" formatted="false">"Downloading"</string>
     <string name="ui_waiting" formatted="false">"Waiting"</string>
     <string name="ui_local_subtitles" formatted="false">"local subtitles"</string>

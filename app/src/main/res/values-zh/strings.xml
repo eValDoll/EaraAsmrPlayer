@@ -601,6 +601,9 @@
     <string name="ui_canceled" formatted="false">"已取消"</string>
     <string name="ui_exception" formatted="false">"异常中断"</string>
     <string name="ui_processing" formatted="false">"处理中"</string>
+    <string name="ui_nas_upload_progress">上传至 NAS %1$d%%</string>
+    <string name="ui_finalizing_download">正在入库</string>
+    <string name="ui_awaiting_nas">等待 NAS 确认</string>
     <string name="ui_downloading" formatted="false">"下载中"</string>
     <string name="ui_waiting" formatted="false">"等待中"</string>
     <string name="ui_local_subtitles" formatted="false">"本地字幕"</string>

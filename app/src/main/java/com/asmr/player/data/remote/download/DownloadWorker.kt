@@ -383,14 +383,18 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                     throw IOException("Unable to remove scrambled DLsite Play image")
                 }
             }
+            val finalTotal = if (total > 0) total else downloaded
             val publishedReference = if (usesDocumentTree) {
-                val destinationReference = storage.ensureFile(
-                    directory = targetDir,
-                    name = fileName,
-                    mimeType = downloadMimeType(fileName),
-                )
-                storage.write(destinationReference, file.length()) { output ->
-                    file.inputStream().use { input -> input.copyTo(output) }
+                if (dao.updateRunningItemProgress(
+                        workId, WorkInfo.State.RUNNING.name, downloaded, finalTotal, 0L, System.currentTimeMillis()
+                    ) == 0) throw kotlinx.coroutines.CancellationException(appString(R.string.ui_download_paused_or_canceled))
+                val size = file.length()
+                val destinationReference = publishDownloadFiles(targetDir, workId, { size }) { copy ->
+                    val reference = storage.ensureFile(targetDir, fileName, downloadMimeType(fileName))
+                    storage.write(reference, size) { output ->
+                        file.inputStream().use { input -> copy(input, output) }
+                    }
+                    reference
                 }
                 dao.updateItemDestination(
                     workId = workId,
@@ -421,7 +425,6 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
             } catch (failure: Exception) {
                 Log.w(TAG, "Unable to flush download traffic for work $id", failure)
             }
-            val finalTotal = if (total > 0) total else downloaded
             withContext(NonCancellable) {
                 dao.updateRunningItemProgress(
                     workId = workId,

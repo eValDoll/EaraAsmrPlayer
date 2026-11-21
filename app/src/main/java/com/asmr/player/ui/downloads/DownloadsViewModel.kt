@@ -2,6 +2,7 @@ package com.asmr.player.ui.downloads
 
 import com.asmr.player.i18n.appString
 import com.asmr.player.R
+import com.asmr.player.data.remote.download.NasUploadProgress
 import com.asmr.player.nas.LibraryWorkspace
 import com.asmr.player.nas.libraryWorkRequest
 import com.asmr.player.util.LocalFileScopes
@@ -95,6 +96,31 @@ data class DownloadTaskUi(
     val albumCover: TaskAlbumCoverUi,
     val items: List<DownloadItemUi>
 )
+
+internal fun albumUploadFraction(items: List<DownloadItemUi>, uploads: Map<String, NasUploadProgress>): Float? {
+    if (uploads.isEmpty()) return null
+    var totalBytes = 0L
+    var sentBytes = 0L
+    var fileFractions = 0.0
+    var allSizesKnown = true
+    for (item in items) {
+        val upload = uploads[item.workId]
+        val published = item.state == DownloadItemState.FINALIZING || item.state == DownloadItemState.SUCCEEDED
+        val size = upload?.total ?: item.total
+        val sent = upload?.sent ?: if (published) size else 0L
+        if (size > 0) {
+            totalBytes += size
+            sentBytes += sent
+            fileFractions += sent.toDouble() / size
+        } else if (published) {
+            fileFractions += 1.0
+        } else {
+            allSizesKnown = false
+        }
+    }
+    return if (allSizesKnown && totalBytes > 0) (sentBytes.toDouble() / totalBytes).toFloat()
+    else (fileFractions / items.size).toFloat()
+}
 
 internal fun resolveDownloadTaskState(items: List<DownloadItemUi>): DownloadItemState = when {
     items.any { it.state == DownloadItemState.RUNNING || it.state == DownloadItemState.ENQUEUED } -> DownloadItemState.RUNNING
