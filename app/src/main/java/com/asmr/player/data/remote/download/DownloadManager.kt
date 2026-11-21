@@ -195,6 +195,12 @@ class DownloadManager @Inject constructor(
             )
 
             val existingItem = downloadDao.getItemByTaskAndRelativePath(taskId, safeRelativePath)
+            if (existingItem?.state == DOWNLOAD_STATE_IMPORT_FAILED) {
+                downloadDao.retryAlbumImport(taskId, now)
+                downloadDao.getTaskById(taskId)?.let { enqueueDownloadFinalization(context, it) }
+                return
+            }
+            if (existingItem?.state == DOWNLOAD_STATE_FINALIZING) return
             if (existingDestinationFile != null && storage.exists(existingDestinationFile) &&
                 (existingItem == null || existingItem.state == WorkInfo.State.SUCCEEDED.name) &&
                 storage.size(existingDestinationFile) > 0L &&
@@ -248,12 +254,13 @@ class DownloadManager @Inject constructor(
                     existingItem.state == WorkInfo.State.RUNNING.name ||
                     existingItem.state == WorkInfo.State.ENQUEUED.name ||
                     existingItem.state == WorkInfo.State.BLOCKED.name ||
-                    existingItem.state == DOWNLOAD_STATE_QUEUED || existingItem.state == DOWNLOAD_STATE_FINALIZING
+                    existingItem.state == DOWNLOAD_STATE_QUEUED
                 ) {
                     throw DownloadTaskBlockedException()
                 }
                 downloadDao.upsertItem(
                     existingItem.copy(
+                        url = url,
                         state = DOWNLOAD_STATE_QUEUED,
                         downloaded = existingBytes,
                         speed = 0L,

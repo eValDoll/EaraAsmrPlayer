@@ -33,6 +33,36 @@ import org.robolectric.annotation.Config
 @Config(application = com.asmr.player.LocalizedTestApplication::class, sdk = [34])
 class DownloadDirectoryBlockingTest {
     @Test
+    fun failedNasImportRetriesOnlyTheImportAndSurvivesLaunchWithNoActiveTransfers() = runBlocking {
+        val database = Room.inMemoryDatabaseBuilder(RuntimeEnvironment.getApplication(), AppDatabase::class.java)
+            .allowMainThreadQueries().build()
+        try {
+            val dao = database.downloadDao()
+            val task = DownloadTaskEntity(taskKey = "nas", title = "album", rootDir = "/album", createdAt = 1, updatedAt = 1)
+            val taskId = dao.insertTask(task)
+            val file = item(taskId, "sent", DOWNLOAD_STATE_FINALIZING).copy(downloaded = 203, total = 203)
+            dao.upsertItem(file)
+            dao.upsertItem(file.copy(workId = "second", relativePath = "second.mp3", fileName = "second.mp3"))
+            assertEquals(2, dao.countRecoverableItems())
+            dao.failFinalizingItems(task.taskKey, 2, DOWNLOAD_STATE_IMPORT_FAILED)
+            assertEquals(0, dao.getQueuedItems(10).size)
+            assertEquals(2, dao.retryAlbumImport(taskId, 3))
+            assertEquals(0, dao.retryAlbumImport(taskId, 4))
+            assertEquals(true, dao.isReadyForFinalization(taskId))
+            assertEquals(203L, dao.getItemByWorkId(file.workId)?.downloaded)
+        } finally {
+            database.close()
+        }
+    }
+
+    @Test
+    fun sourceRangeMustStartAtTheStagedOffsetAndReportTheWholeFileSize() {
+        assertEquals(100L, resumedDownloadTotal("bytes 30-49/100", 30, 20))
+        org.junit.Assert.assertThrows(java.io.IOException::class.java) { resumedDownloadTotal("bytes 0-19/100", 30, 20) }
+        org.junit.Assert.assertThrows(java.io.IOException::class.java) { resumedDownloadTotal("bytes 30-49/100", 30, 70) }
+    }
+
+    @Test
     fun pausedDownloadDeletionProtectsOnlyTheCorrespondingPendingSubtitleFile() = runBlocking {
         val context = RuntimeEnvironment.getApplication()
         val database = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()

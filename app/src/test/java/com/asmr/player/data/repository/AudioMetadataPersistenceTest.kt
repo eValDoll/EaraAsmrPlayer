@@ -7,6 +7,8 @@ import com.asmr.player.data.local.db.AppDatabaseMigrations
 import com.asmr.player.data.local.db.removeManualCoverColumnForLegacySchema
 import com.asmr.player.data.local.db.dao.AudioMetadataDao
 import com.asmr.player.data.local.db.entities.AudioMetadataEntity
+import com.asmr.player.data.local.db.entities.AlbumEntity
+import com.asmr.player.data.local.db.entities.TrackEntity
 import com.asmr.player.data.local.db.entities.PlaylistEntity
 import com.asmr.player.data.local.db.entities.PlaylistItemEntity
 import com.asmr.player.util.AudioQuality
@@ -29,6 +31,41 @@ class AudioMetadataPersistenceTest {
     private val hq = AudioTechnicalMetadata(44100, 320000, 2, 0, "audio/mpeg", 123.0)
     private val sq = AudioTechnicalMetadata(48000, 0, 2, 24, "audio/flac", 234.0)
     private val path = "https://example.com/audio?id=1"
+
+    @Test
+    fun nasDurationOnlyUpdateRetainsPreviouslySavedFormat() = runBlocking {
+        val nasPath = "content://com.asmr.player.webdav/document/file"
+        val dao = MemoryDao(AudioMetadataEntity.from(nasPath, hq))
+        val entry = AudioMetadataCache.Entry().apply { record(AudioTechnicalMetadata(durationSeconds = 45.0)) }
+        entry.persist(nasPath, dao)
+        assertEquals(hq.copy(durationSeconds = 45.0), dao.saved?.toMetadata())
+        assertEquals(dao.saved?.toMetadata(), entry.metadata.value)
+    }
+
+    @Test
+    fun nasImportRestoresStagedDurationAndBackfillPreservesKnownTracks() = runBlocking {
+        withDatabase { open ->
+            open().useDatabase { db ->
+                val albumId = db.albumDao().upsertImportedAlbum(AlbumEntity(title = "NAS", path = "nas-album"))
+                val remote = "content://com.asmr.player.webdav/document/track"
+                val trackDao = db.trackDao()
+                val staged = trackDao.insertTrack(TrackEntity(albumId = albumId, title = "A", path = remote))
+                val old = trackDao.insertTrack(TrackEntity(albumId = albumId, title = "B", path = "$remote-old"))
+                val durationOnly = AudioTechnicalMetadata(durationSeconds = 45.0)
+                AudioMetadataCache.Entry().apply { record(durationOnly) }.persist(remote, db.audioMetadataDao())
+
+                trackDao.applyCachedDurations(albumId, "content://com.asmr.player.webdav/*")
+                assertEquals(45.0, trackDao.getTrackByIdOnce(staged)!!.duration, 0.0)
+                assertEquals(0.0, trackDao.getTrackByIdOnce(old)!!.duration, 0.0)
+                assertEquals(listOf(albumId), trackDao.albumsMissingDuration("$remote-old"))
+                assertEquals(1, trackDao.fillMissingDuration(albumId, "$remote-old", 12.5))
+                assertEquals(emptyList<Long>(), trackDao.albumsMissingDuration("$remote-old"))
+                assertEquals(0, trackDao.fillMissingDuration(albumId, remote, 10.0))
+                db.albumDao().refreshTotalDuration(albumId)
+                assertEquals(57.5, db.albumDao().getAlbumById(albumId)!!.audioTotalDuration, 0.0)
+            }
+        }
+    }
 
     @Test
     fun qualitiesSurviveDatabaseReopenAndKeepDistinctUrls() = runBlocking {

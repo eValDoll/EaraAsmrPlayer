@@ -3,6 +3,7 @@ package com.asmr.player.playback
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import com.asmr.player.nas.LibraryWorkspace
 import com.asmr.player.util.isMissingLocalDocumentFailure
 import kotlinx.coroutines.CancellationException
 import java.io.File
@@ -12,6 +13,7 @@ internal fun isPersistedLocalSourceAvailable(context: Context, source: String): 
     val value = source.trim()
     if (value.isEmpty()) return false
     val uri = Uri.parse(value)
+    if (LibraryWorkspace.owns(uri)) return LibraryWorkspace.nas
     return try {
         when (uri.scheme?.lowercase()) {
             "http", "https" -> true

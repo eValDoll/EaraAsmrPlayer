@@ -2,13 +2,12 @@ package com.asmr.player
 
 import com.asmr.player.i18n.appString
 import com.asmr.player.R
-
 import androidx.compose.ui.platform.testTag
+import com.asmr.player.nas.LibraryWorkspace
 import com.asmr.player.ui.asmrone.AsmrOneAlbumSaveDialog
 import com.asmr.player.ui.library.resolveAlbumDetailRj
 import com.asmr.player.ui.common.LocalAlbumCoverShadowCache
 import com.asmr.player.ui.common.rememberAlbumCoverShadowCache
-
 import com.asmr.player.data.remote.crawler.AlbumResourceSource
 import com.asmr.player.ui.search.SEARCH_ASSIST_RESULT_COLLECTED_SOURCE_KEY
 import com.asmr.player.translation.LocalPageTranslationHeader
@@ -169,7 +168,6 @@ import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import kotlinx.coroutines.launch
 import java.net.URLEncoder
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -196,9 +194,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
-
 import com.asmr.player.ui.player.MiniPlayerDisplayMode
-
 import com.asmr.player.data.local.datastore.SettingsDataStore
 import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.PlayerBackgroundMode
@@ -222,7 +218,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-
 import androidx.compose.foundation.border
 import androidx.media3.common.MediaItem
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -1729,7 +1724,7 @@ fun MainContainer(
                                 } else ""
                                 val appName = stringResource(R.string.app_name)
                                 val titleText = when {
-                                    resolvedTitleRoute == "library" -> appString(R.string.ui_library)
+                                    resolvedTitleRoute == "library" -> appString(if (LibraryWorkspace.nas) R.string.nas_library else R.string.ui_library)
                                     resolvedTitleRoute == "library_filter" -> appString(R.string.ui_filter)
                                     resolvedTitleRoute == "search" -> appString(R.string.ui_search)
                                     resolvedTitleRoute == Routes.SearchAssist -> appString(R.string.ui_search)

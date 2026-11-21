@@ -23,6 +23,7 @@ import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import com.asmr.player.nas.LibraryWorkspace
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -36,7 +37,7 @@ object AsmrOneAccountModule {
     @Provides
     @Singleton
     fun cloudDatabase(@ApplicationContext context: Context): AsmrOneCloudDatabase =
-        Room.databaseBuilder(context, AsmrOneCloudDatabase::class.java, "asmr_one_cloud.db").build()
+        Room.databaseBuilder(context, AsmrOneCloudDatabase::class.java, LibraryWorkspace.name("asmr_one_cloud.db")).build()
 
     @Provides
     @Singleton

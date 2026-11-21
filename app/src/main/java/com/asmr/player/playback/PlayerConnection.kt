@@ -404,6 +404,11 @@ class PlayerConnection @Inject constructor(
         controller?.play()
     }
 
+    internal suspend fun pauseAndSave() {
+        pause()
+        savePlaybackState()
+    }
+
     fun pause() {
         controller?.pause()
     }

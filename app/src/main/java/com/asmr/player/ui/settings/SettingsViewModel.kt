@@ -1,8 +1,12 @@
 package com.asmr.player.ui.settings
 
+import com.asmr.player.nas.LibrarySwitchActivity
+import com.asmr.player.nas.LibraryWorkspace
+import com.asmr.player.nas.WebDavLocation
+import com.asmr.player.util.LocalFileOperation
+import com.asmr.player.util.LocalFileOperationCoordinator
 import com.asmr.player.i18n.appString
 import com.asmr.player.R
-
 import android.content.Context
 import android.os.Environment
 import android.os.SystemClock
@@ -127,6 +131,7 @@ class SettingsViewModel @Inject constructor(
     @Named(DEEPSEEK_HTTP_CLIENT) translationHttpClient: OkHttpClient,
     private val downloadDestinationStore: DownloadDestinationStore,
     private val downloadDirectoryCoordinator: DownloadDirectoryCoordinator,
+    private val playerConnection: com.asmr.player.playback.PlayerConnection,
     private val messageManager: MessageManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
@@ -149,6 +154,27 @@ class SettingsViewModel @Inject constructor(
             SharingStarted.WhileSubscribed(5_000),
             downloadDestinationStore.defaultDestination(),
         )
+
+    internal fun switchLibrary(location: WebDavLocation?, password: String) {
+        viewModelScope.launch {
+            val lease = LocalFileOperationCoordinator.shared.tryAcquire(LocalFileOperation.CHANGE_DIRECTORY)
+            if (lease == null) {
+                messageManager.showError(appString(R.string.library_busy))
+                return@launch
+            }
+            try {
+                playerConnection.pauseAndSave()
+                withContext(Dispatchers.IO) { LibraryWorkspace.select(context, location, password) }
+                LibrarySwitchActivity.launch(context)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                messageManager.showError(appString(R.string.webdav_switch_failed))
+            } finally {
+                lease.close()
+            }
+        }
+    }
 
     fun requestDownloadDirectoryChange(onAllowed: () -> Unit) {
         viewModelScope.launch {

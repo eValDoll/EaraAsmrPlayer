@@ -10,6 +10,8 @@ import java.io.File
 import java.io.InputStream
 import java.nio.charset.Charset
 import java.security.MessageDigest
+import com.asmr.player.nas.LibraryWorkspace
+import com.asmr.player.nas.setLibrarySource
 
 object EmbeddedMediaExtractor {
     fun extractArtwork(context: Context, pathOrUri: String): Bitmap? {
@@ -17,7 +19,7 @@ object EmbeddedMediaExtractor {
         return try {
             val p = pathOrUri.trim()
             if (p.startsWith("content://", true)) {
-                retriever.setDataSource(context, Uri.parse(p))
+                retriever.setLibrarySource(context, Uri.parse(p))
             } else {
                 retriever.setDataSource(p)
             }
@@ -46,7 +48,7 @@ object EmbeddedMediaExtractor {
     }
 
     fun getArtworkCacheFile(context: Context, cacheKey: String): File {
-        val dir = File(context.filesDir, "embedded_covers")
+        val dir = File(context.filesDir, LibraryWorkspace.name("embedded_covers"))
         val name = sha256Hex(cacheKey).take(32)
         return File(dir, "k_${name}.jpg")
     }
@@ -70,7 +72,7 @@ object EmbeddedMediaExtractor {
         return try {
             val p = pathOrUri.trim()
             if (p.startsWith("content://", true)) {
-                retriever.setDataSource(context, Uri.parse(p))
+                retriever.setLibrarySource(context, Uri.parse(p))
             } else {
                 retriever.setDataSource(p)
             }

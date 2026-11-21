@@ -2,6 +2,8 @@ package com.asmr.player.ui.downloads
 
 import com.asmr.player.i18n.appString
 import com.asmr.player.R
+import com.asmr.player.data.remote.download.NasUploadProgress
+import com.asmr.player.data.remote.download.NasUploadTracker
 
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
@@ -175,6 +177,7 @@ fun DownloadsScreen(
     var selectedTaskId by rememberSaveable { mutableStateOf<Long?>(null) }
     var rjQuery by rememberSaveable { mutableStateOf("") }
     var managementMode by rememberSaveable { mutableStateOf(DownloadManagementMode.Downloads) }
+    val uploads by NasUploadTracker.shared.active.collectAsStateWhileActive(isActive && managementMode == DownloadManagementMode.Downloads)
     var pendingDelete by remember { mutableStateOf<PendingDeleteAction?>(null) }
     var revealedDownloadTaskId by remember { mutableStateOf<Long?>(null) }
     var revealedTranslationRj by remember { mutableStateOf<String?>(null) }
@@ -289,6 +292,7 @@ fun DownloadsScreen(
                                 Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                                     DownloadTaskCard(
                                         task = task,
+                                        uploads = uploads,
                                         expanded = true,
                                         showHeader = false,
                                         onToggleExpanded = {},
@@ -387,6 +391,7 @@ fun DownloadsScreen(
                                 ) {
                                     DownloadTaskCard(
                                         task = task,
+                                        uploads = uploads,
                                         selected = tabletLayout.twoPane && task.taskId == selectedTask?.taskId,
                                         expanded = expanded,
                                         onToggleExpanded = {
@@ -1528,6 +1533,7 @@ private fun String.translationTaskSortPriority(): Int = when (this) {
 @Composable
 private fun DownloadTaskCard(
     task: DownloadTaskUi,
+    uploads: Map<String, NasUploadProgress>,
     expanded: Boolean,
     showHeader: Boolean = true,
     selected: Boolean = false,
@@ -1545,13 +1551,33 @@ private fun DownloadTaskCard(
         task.items.any { it.state == DownloadItemState.RUNNING && it.total <= 0 }
     }
     val colors = AsmrTheme.colorScheme
-    val taskSummary by rememberTaskSummary(
-        downloadedBytes = task.downloadedBytes,
-        totalBytes = task.totalBytes,
-        speed = task.speed,
-        hasUnknownTotalRunning = hasUnknownTotalRunningItem,
-        state = task.state
-    )
+    val taskUploads = if (uploads.isEmpty()) emptyMap() else {
+        val activeIds = remember(task.items) {
+            task.items.asSequence()
+                .filter { it.state == DownloadItemState.RUNNING || it.state == DownloadItemState.FINALIZING }
+                .map { it.workId }.toSet()
+        }
+        remember(uploads, activeIds) { uploads.filterKeys(activeIds::contains) }
+    }
+    val uploadFraction = remember(task.items, taskUploads) { albumUploadFraction(task.items, taskUploads) }
+    val finalizing = remember(task.items) {
+        task.state == DownloadItemState.RUNNING && task.items.all {
+            it.state == DownloadItemState.FINALIZING || it.state == DownloadItemState.SUCCEEDED
+        }
+    }
+    val taskSummary = if (uploadFraction != null) {
+        nasUploadStatus(uploadFraction, taskUploads.values.all { it.sent == it.total })
+    } else if (finalizing) {
+        appString(R.string.ui_finalizing_download)
+    } else {
+        rememberTaskSummary(
+            downloadedBytes = task.downloadedBytes,
+            totalBytes = task.totalBytes,
+            speed = task.speed,
+            hasUnknownTotalRunning = hasUnknownTotalRunningItem,
+            state = task.state
+        ).value
+    }
 
     Box(
         modifier = Modifier
@@ -1572,8 +1598,8 @@ private fun DownloadTaskCard(
                 summaryColor = colors.textSecondary,
                 summaryOnTitleLine = true,
                 albumCover = task.albumCover,
-                progress = task.progressFraction,
-                progressIndeterminate = task.progressFraction == null && hasUnknownTotalRunningItem,
+                progress = uploadFraction ?: task.progressFraction,
+                progressIndeterminate = uploadFraction == null && task.progressFraction == null && hasUnknownTotalRunningItem,
                 reserveProgressSpace = true,
                 onToggleExpanded = onToggleExpanded
             )
@@ -1605,6 +1631,8 @@ private fun DownloadTaskCard(
                             is DownloadTreeUiEntry.File -> {
                                 DownloadFileRow(
                                     item = entry.item,
+                                    upload = taskUploads[entry.item.workId],
+                                    waitingForAlbum = !finalizing && com.asmr.player.nas.LibraryWorkspace.nas,
                                     depth = entry.depth,
                                     onPause = { onPauseItem(entry.item.workId) },
                                     onResume = { onResumeItem(entry.item.workId) },
@@ -1740,9 +1768,15 @@ private fun DownloadFolderRow(
     }
 }
 
+private fun nasUploadStatus(fraction: Float, awaiting: Boolean): String =
+    if (awaiting) appString(R.string.ui_awaiting_nas)
+    else appString(R.string.ui_nas_upload_progress, (fraction * 100).toInt())
+
 @Composable
 private fun DownloadFileRow(
     item: DownloadItemUi,
+    upload: NasUploadProgress?,
+    waitingForAlbum: Boolean,
     depth: Int,
     onPause: () -> Unit,
     onResume: () -> Unit,
@@ -1751,6 +1785,7 @@ private fun DownloadFileRow(
 ) {
     val colors = AsmrTheme.colorScheme
     val percent: Int? = when {
+        upload != null -> upload.percent
         item.state == DownloadItemState.SUCCEEDED -> 100
         item.total > 0 -> ((item.downloaded * 100 / item.total).toInt().coerceIn(0, 100))
         else -> null
@@ -1804,7 +1839,11 @@ private fun DownloadFileRow(
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = downloadItemStateLabel(item.state),
+                            text = when {
+                                upload != null -> nasUploadStatus(upload.fraction, upload.sent == upload.total)
+                                waitingForAlbum && item.state == DownloadItemState.FINALIZING -> appString(R.string.ui_uploaded_to_nas)
+                                else -> downloadItemStateLabel(item.state)
+                            },
                             style = MaterialTheme.typography.labelSmall,
                             color = when (item.state) {
                                 DownloadItemState.SUCCEEDED -> colors.primary
@@ -1816,7 +1855,7 @@ private fun DownloadFileRow(
                         )
                     }
 
-                    if (percent != null) {
+                    if (upload == null && percent != null) {
                         Text(
                             text = "$percent%",
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
@@ -1825,7 +1864,7 @@ private fun DownloadFileRow(
                         )
                     }
 
-                    formatSpeed(item.speed).takeIf { it.isNotBlank() }?.let { speed ->
+                    formatSpeed(upload?.bytesPerSecond ?: item.speed).takeIf { it.isNotBlank() }?.let { speed ->
                         Text(
                             text = speed,
                             style = MaterialTheme.typography.labelSmall,
@@ -1836,6 +1875,13 @@ private fun DownloadFileRow(
                     }
                 }
 
+                if (upload != null) {
+                    Text(
+                        text = "${Formatting.formatFileSize(upload.sent)} / ${Formatting.formatFileSize(upload.total)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.textSecondary
+                    )
+                }
                 when {
                     percent != null && item.state != DownloadItemState.SUCCEEDED -> {
                         CompactProgressBar(
@@ -2064,7 +2110,8 @@ private fun downloadItemStateLabel(state: DownloadItemState): String {
     return when (state) {
         DownloadItemState.SUCCEEDED -> appString(R.string.ui_completed)
         DownloadItemState.FAILED -> appString(R.string.ui_fail)
-        DownloadItemState.RUNNING, DownloadItemState.FINALIZING -> appString(R.string.ui_downloading)
+        DownloadItemState.RUNNING -> appString(R.string.ui_downloading)
+        DownloadItemState.FINALIZING -> appString(R.string.ui_finalizing_download)
         DownloadItemState.PAUSED -> appString(R.string.ui_suspended)
         DownloadItemState.CANCELLED -> appString(R.string.ui_canceled)
         DownloadItemState.ENQUEUED -> appString(R.string.ui_waiting)

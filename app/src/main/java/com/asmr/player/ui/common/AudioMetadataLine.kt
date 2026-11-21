@@ -52,8 +52,12 @@ internal fun AudioMetadataLine(
     ) {
         if (source != null) {
             Icon(
-                imageVector = if (source == AudioSource.Online) Icons.Rounded.CloudQueue else Icons.Rounded.Smartphone,
-                contentDescription = if (source == AudioSource.Online) appString(R.string.ui_online) else appString(R.string.ui_local),
+                imageVector = if (source == AudioSource.Local) Icons.Rounded.Smartphone else Icons.Rounded.CloudQueue,
+                contentDescription = when (source) {
+                    AudioSource.Nas -> "NAS"
+                    AudioSource.Local -> appString(R.string.ui_local)
+                    AudioSource.Online -> appString(R.string.ui_online)
+                },
                 tint = color,
                 modifier = Modifier.size(14.dp),
             )

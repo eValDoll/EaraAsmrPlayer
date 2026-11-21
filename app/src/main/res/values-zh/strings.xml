@@ -601,6 +601,10 @@
     <string name="ui_canceled" formatted="false">"已取消"</string>
     <string name="ui_exception" formatted="false">"异常中断"</string>
     <string name="ui_processing" formatted="false">"处理中"</string>
+    <string name="ui_nas_upload_progress">上传至 NAS %1$d%%</string>
+    <string name="ui_finalizing_download">正在入库</string>
+    <string name="ui_uploaded_to_nas">已上传至 NAS</string>
+    <string name="ui_awaiting_nas">等待 NAS 确认</string>
     <string name="ui_downloading" formatted="false">"下载中"</string>
     <string name="ui_waiting" formatted="false">"等待中"</string>
     <string name="ui_local_subtitles" formatted="false">"本地字幕"</string>
@@ -1375,4 +1379,13 @@
     <string name="ui_lyrics_area_top" formatted="false">"上1/4"</string>
     <string name="ui_lyrics_area_middle" formatted="false">"中1/4"</string>
     <string name="ui_lyrics_area_bottom" formatted="false">"下1/4"</string>
+    <string name="storage_mode">存储模式</string>
+    <string name="storage_local">本地存储</string>
+    <string name="webdav_address">WebDAV 地址</string>
+    <string name="webdav_browse">浏览</string>
+    <string name="webdav_use_folder">使用此目录</string>
+    <string name="webdav_connection_failed">无法打开 WebDAV 目录</string>
+    <string name="library_busy">请在当前文件操作结束后切换</string>
+    <string name="webdav_switch_failed">存储模式切换失败</string>
+    <string name="nas_library">NAS 媒体库</string>
 </resources>

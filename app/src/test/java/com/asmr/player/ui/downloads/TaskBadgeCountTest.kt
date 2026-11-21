@@ -1,5 +1,6 @@
 package com.asmr.player.ui.downloads
 
+import com.asmr.player.data.remote.download.NasUploadProgress
 import com.asmr.player.subtitle.SubtitleItemState
 import com.asmr.player.subtitle.SubtitleTaskItemUi
 import com.asmr.player.subtitle.SubtitleTaskUi
@@ -48,6 +49,17 @@ class TaskBadgeCountTest {
         val finishedTask = subtitleTask(id = "finished", states = listOf(SubtitleItemState.SUCCEEDED))
 
         assertEquals(2, countActiveSubtitleTaskItems(listOf(activeTask, suspendedTask, finishedTask)))
+    }
+
+    @Test
+    fun albumUploadProgressKeepsPublishedFilesAndExcludesOtherFilesStagedBytes() {
+        val items = downloadTask(1, listOf(DownloadItemState.FINALIZING, DownloadItemState.RUNNING, DownloadItemState.RUNNING))
+            .items.map { it.copy(total = 20L, downloaded = 20L) }
+        val uploads = mapOf(items[1].workId to NasUploadProgress(5L, 10L, 2L))
+        assertEquals(0.5f, albumUploadFraction(items, uploads))
+        val unknown = items.toMutableList().apply { this[2] = this[2].copy(total = -1) }
+        assertEquals(0.5f, albumUploadFraction(unknown, uploads))
+        assertEquals(null, albumUploadFraction(items, emptyMap()))
     }
 
     private fun downloadTask(id: Long, states: List<DownloadItemState>): DownloadTaskUi {

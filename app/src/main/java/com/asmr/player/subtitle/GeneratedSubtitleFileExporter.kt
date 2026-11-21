@@ -80,8 +80,9 @@ internal class GeneratedSubtitleFileExporter(
             name = target.fileName,
             mimeType = LRC_MIME_TYPE
         )
-        storage.openOutput(reference).buffered().use { output ->
-            output.write(renderChineseLrc(subtitles).toByteArray(Charsets.UTF_8))
+        val bytes = renderChineseLrc(subtitles).toByteArray(Charsets.UTF_8)
+        storage.write(reference, bytes.size.toLong()) { output ->
+            output.write(bytes)
         }
         source.requireUnchanged(context, track.path)
         check(storage.exists(reference)) { appString(R.string.ui_the_subtitle_file_was_moved_or_deleted) }

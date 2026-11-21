@@ -3,7 +3,7 @@ package com.asmr.player.data.remote
 import android.content.Context
 import com.asmr.player.data.settings.AppProxyMode
 import com.asmr.player.data.settings.NetworkRouteSettings
-import com.asmr.player.data.settings.ProxyPasswordStore
+import com.asmr.player.data.settings.KeystorePasswordStore
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.data.settings.isValidManualProxy
 import com.asmr.player.data.settings.normalizeProxyHost
@@ -39,7 +39,7 @@ class NetworkRouteManager @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val settingsRef = AtomicReference(NetworkRouteSettings())
-    private val proxyPasswordStore = ProxyPasswordStore.get(context)
+    private val proxyPasswordStore = KeystorePasswordStore.forProxy(context)
     private val systemProxySelector = ProxySelector.getDefault()
     private val connectionPools = CopyOnWriteArraySet<ConnectionPool>()
     private val dnsResolvers = ConcurrentHashMap<List<String>, Dns>()

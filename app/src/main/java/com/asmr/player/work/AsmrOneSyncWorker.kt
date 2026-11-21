@@ -6,7 +6,6 @@ import androidx.work.WorkerParameters
 import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.asmr.player.data.repository.AsmrOneAccountRepository
@@ -17,6 +16,8 @@ import dagger.hilt.components.SingletonComponent
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
+import com.asmr.player.nas.LibraryWorkspace
+import com.asmr.player.nas.libraryWorkRequest
 
 interface AsmrOneSyncScheduling {
     fun enqueue(account: String)
@@ -25,14 +26,14 @@ interface AsmrOneSyncScheduling {
 
 class AsmrOneSyncScheduler @Inject constructor(@ApplicationContext private val context: Context) : AsmrOneSyncScheduling {
     override fun enqueue(account: String) {
-        val request = OneTimeWorkRequestBuilder<AsmrOneSyncWorker>()
+        val request = libraryWorkRequest<AsmrOneSyncWorker>()
             .setInputData(workDataOf(AsmrOneSyncWorker.ACCOUNT to account))
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS).build()
         WorkManager.getInstance(context).enqueueUniqueWork(workName(account), ExistingWorkPolicy.APPEND_OR_REPLACE, request)
     }
     override fun cancel(account: String) { WorkManager.getInstance(context).cancelUniqueWork(workName(account)) }
-    private fun workName(account: String) = "asmr-one-sync:$account"
+    private fun workName(account: String) = LibraryWorkspace.name("asmr-one-sync:$account")
 }
 
 @EntryPoint

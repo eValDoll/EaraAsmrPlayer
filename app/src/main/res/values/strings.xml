@@ -601,6 +601,10 @@
     <string name="ui_canceled" formatted="false">"Canceled"</string>
     <string name="ui_exception" formatted="false">"Exception"</string>
     <string name="ui_processing" formatted="false">"Processing"</string>
+    <string name="ui_nas_upload_progress">NAS upload %1$d%%</string>
+    <string name="ui_finalizing_download">Finalizing</string>
+    <string name="ui_uploaded_to_nas">Uploaded to NAS</string>
+    <string name="ui_awaiting_nas">Awaiting NAS</string>
     <string name="ui_downloading" formatted="false">"Downloading"</string>
     <string name="ui_waiting" formatted="false">"Waiting"</string>
     <string name="ui_local_subtitles" formatted="false">"local subtitles"</string>
@@ -1375,4 +1379,13 @@
     <string name="ui_lyrics_area_top" formatted="false">"Top ¼"</string>
     <string name="ui_lyrics_area_middle" formatted="false">"Mid ¼"</string>
     <string name="ui_lyrics_area_bottom" formatted="false">"Bottom ¼"</string>
+    <string name="storage_mode">Storage mode</string>
+    <string name="storage_local">Local storage</string>
+    <string name="webdav_address">WebDAV address</string>
+    <string name="webdav_browse">Browse</string>
+    <string name="webdav_use_folder">Use folder</string>
+    <string name="webdav_connection_failed">Could not open the WebDAV folder</string>
+    <string name="library_busy">Try again after the current file operation finishes</string>
+    <string name="webdav_switch_failed">Could not switch libraries</string>
+    <string name="nas_library">NAS library</string>
 </resources>

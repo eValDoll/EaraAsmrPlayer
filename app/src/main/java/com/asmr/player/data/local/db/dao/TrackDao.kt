@@ -95,6 +95,20 @@ interface TrackDao {
     @Query("UPDATE tracks SET duration = :duration WHERE id = :trackId")
     suspend fun updateTrackDuration(trackId: Long, duration: Double)
 
+    @Query("SELECT DISTINCT albumId FROM tracks WHERE path = :path AND duration <= 0")
+    suspend fun albumsMissingDuration(path: String): List<Long>
+
+    @Query("UPDATE tracks SET duration = :duration WHERE albumId = :albumId AND path = :path AND duration <= 0")
+    suspend fun fillMissingDuration(albumId: Long, path: String, duration: Double): Int
+
+    @Query("""
+        UPDATE tracks SET duration = (SELECT durationSeconds FROM audio_metadata WHERE sourcePath = tracks.path)
+        WHERE albumId = :albumId AND path GLOB :pathPattern AND EXISTS (
+            SELECT 1 FROM audio_metadata WHERE sourcePath = tracks.path AND durationSeconds > 0 AND durationSeconds != tracks.duration
+        )
+    """)
+    suspend fun applyCachedDurations(albumId: Long, pathPattern: String)
+
     @Query("UPDATE tracks SET displayTitle = :displayTitle WHERE id = :trackId")
     suspend fun updateTrackDisplayTitle(trackId: Long, displayTitle: String)
 
