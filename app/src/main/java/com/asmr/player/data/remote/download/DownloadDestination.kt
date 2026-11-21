@@ -49,6 +49,7 @@ data class DownloadStorageEntry(
     val mimeType: String,
     val sizeBytes: Long,
     val isDirectory: Boolean,
+    val modified: Long = 0,
 )
 
 @Singleton
@@ -204,6 +205,13 @@ class DownloadStorageGateway @Inject constructor(
         }.getOrDefault(false)
     }
 
+    internal fun nasFileSize(reference: String): Long? = try {
+        ActiveWebDav.client(context).stat(LibraryWorkspace.path(Uri.parse(reference))).takeUnless { it.directory }?.size
+    } catch (error: com.asmr.player.nas.WebDavHttpException) {
+        if (error.status != 404) throw error
+        null
+    }
+
     fun size(reference: String): Long {
         if (reference.isBlank()) return 0L
         if (!isDocumentReference(reference)) return File(reference).length().coerceAtLeast(0L)
@@ -230,7 +238,10 @@ class DownloadStorageGateway @Inject constructor(
         }
     }
 
-    fun write(reference: String, size: Long = -1L, writer: (OutputStream) -> Unit) {
+    internal suspend fun matchesNasDownload(reference: String, openLocal: () -> InputStream): Boolean =
+        ActiveWebDav.client(context).matchesContent(LibraryWorkspace.path(Uri.parse(reference)), openLocal)
+
+    suspend fun write(reference: String, size: Long = -1L, writer: (OutputStream) -> Unit) {
         val uri = Uri.parse(reference)
         if (LibraryWorkspace.owns(uri)) {
             ActiveWebDav.client(context).put(LibraryWorkspace.path(uri), object : okhttp3.RequestBody() {
@@ -340,6 +351,16 @@ class DownloadStorageGateway @Inject constructor(
             DocumentsContract.buildTreeDocumentUri(parentUri.authority, treeId)
         } else {
             parentUri
+        }
+        if (LibraryWorkspace.owns(parentUri)) {
+            return ActiveWebDav.client(context).list(LibraryWorkspace.path(parentId)).map { entry ->
+                val document = DocumentsContract.buildDocumentUriUsingTree(treeUri, LibraryWorkspace.documentId(entry.path))
+                DownloadStorageEntry(
+                    reference = document.toString(), relativePath = entry.name, displayName = entry.name,
+                    mimeType = if (entry.directory) DocumentsContract.Document.MIME_TYPE_DIR else downloadMimeType(entry.name),
+                    sizeBytes = entry.size, isDirectory = entry.directory, modified = entry.modified,
+                )
+            }
         }
         val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentId)
         val projection = arrayOf(

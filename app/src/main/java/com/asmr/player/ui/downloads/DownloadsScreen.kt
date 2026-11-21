@@ -1632,6 +1632,7 @@ private fun DownloadTaskCard(
                                 DownloadFileRow(
                                     item = entry.item,
                                     upload = taskUploads[entry.item.workId],
+                                    waitingForAlbum = !finalizing && com.asmr.player.nas.LibraryWorkspace.nas,
                                     depth = entry.depth,
                                     onPause = { onPauseItem(entry.item.workId) },
                                     onResume = { onResumeItem(entry.item.workId) },
@@ -1775,6 +1776,7 @@ private fun nasUploadStatus(fraction: Float, awaiting: Boolean): String =
 private fun DownloadFileRow(
     item: DownloadItemUi,
     upload: NasUploadProgress?,
+    waitingForAlbum: Boolean,
     depth: Int,
     onPause: () -> Unit,
     onResume: () -> Unit,
@@ -1837,7 +1839,11 @@ private fun DownloadFileRow(
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = upload?.let { nasUploadStatus(it.fraction, it.sent == it.total) } ?: downloadItemStateLabel(item.state),
+                            text = when {
+                                upload != null -> nasUploadStatus(upload.fraction, upload.sent == upload.total)
+                                waitingForAlbum && item.state == DownloadItemState.FINALIZING -> appString(R.string.ui_uploaded_to_nas)
+                                else -> downloadItemStateLabel(item.state)
+                            },
                             style = MaterialTheme.typography.labelSmall,
                             color = when (item.state) {
                                 DownloadItemState.SUCCEEDED -> colors.primary

@@ -23,6 +23,8 @@ import com.asmr.player.data.local.db.dao.DownloadDao
 import com.asmr.player.data.local.db.dao.TrackDao
 import com.asmr.player.data.local.library.deleteLibraryAlbum
 import com.asmr.player.data.local.library.deleteLibraryTracks
+import com.asmr.player.data.remote.download.DOWNLOAD_STATE_IMPORT_FAILED
+import com.asmr.player.data.remote.download.enqueueDownloadFinalization
 import com.asmr.player.data.remote.download.DOWNLOAD_STATE_FINALIZING
 import com.asmr.player.data.remote.download.DOWNLOAD_STATE_QUEUED
 import com.asmr.player.data.remote.download.DownloadQueueCoordinator
@@ -193,6 +195,7 @@ class DownloadsViewModel @Inject constructor(
                 val items = taskWithItems.items.map { item ->
                     val state = when (item.state) {
                         "PAUSED" -> DownloadItemState.PAUSED
+                        DOWNLOAD_STATE_IMPORT_FAILED -> DownloadItemState.FAILED
                         DOWNLOAD_STATE_FINALIZING -> DownloadItemState.FINALIZING
                         DOWNLOAD_STATE_QUEUED -> DownloadItemState.ENQUEUED
                         else -> when (runCatching { WorkInfo.State.valueOf(item.state) }.getOrDefault(WorkInfo.State.ENQUEUED)) {
@@ -449,6 +452,12 @@ class DownloadsViewModel @Inject constructor(
 
     private suspend fun resumeDownloadItem(workId: String) {
         val candidate = downloadDao.getItemByWorkId(workId) ?: return
+        if (candidate.state == DOWNLOAD_STATE_IMPORT_FAILED) {
+            if (downloadDao.retryAlbumImport(candidate.taskId, System.currentTimeMillis()) > 0) {
+                downloadDao.getTaskById(candidate.taskId)?.let { enqueueDownloadFinalization(context, it) }
+            }
+            return
+        }
         val resource = downloadStorage.stableIdentity(candidate.targetDir) + "/" + candidate.fileName
         val task = downloadDao.getTaskById(candidate.taskId) ?: return
         val fileLease = LocalFileOperationCoordinator.shared.tryAcquire(
@@ -490,7 +499,7 @@ class DownloadsViewModel @Inject constructor(
     fun retryItem(workId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             val item = downloadDao.getItemByWorkId(workId) ?: return@launch
-            if (item.state != WorkInfo.State.FAILED.name) return@launch
+            if (item.state !in setOf(WorkInfo.State.FAILED.name, DOWNLOAD_STATE_IMPORT_FAILED)) return@launch
             resumeItem(workId)
         }
     }
@@ -498,7 +507,8 @@ class DownloadsViewModel @Inject constructor(
     fun retryFailedInTask(taskId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             val items = downloadDao.getItemsForTask(taskId)
-            items.filter { it.state == WorkInfo.State.FAILED.name }.forEach { retryItem(it.workId) }
+            items.filter { it.state in setOf(WorkInfo.State.FAILED.name, DOWNLOAD_STATE_IMPORT_FAILED) }.forEach { resumeDownloadItem(it.workId) }
+            DownloadQueueCoordinator.requestSchedule(context)
         }
     }
 

@@ -48,7 +48,7 @@ class WebDavClientTest : LocalizedRobolectricTest() {
         assertThrows(IOException::class.java) { client.list("") }
     }
 
-    @Test fun rangeReadsAndUploadsWaitForTheServerResponse() {
+    @Test fun rangeReadsAndUploadsWaitForTheServerResponse() = kotlinx.coroutines.runBlocking {
         listing(entry("/music/test.wav", size = 8))
         server.enqueue(MockResponse().setResponseCode(206).setBody("efgh"))
         val data = WebDavMediaSource(client, "test.wav")
@@ -66,6 +66,6 @@ class WebDavClientTest : LocalizedRobolectricTest() {
         assertEquals("PUT", upload.method)
         assertEquals("efgh", upload.body.readUtf8())
         server.enqueue(MockResponse().setResponseCode(507))
-        assertThrows(IOException::class.java) { client.put(".eara-downloads/test.wav", out.toRequestBody()) }
+        assertTrue(runCatching { client.put(".eara-downloads/test.wav", out.toRequestBody()) }.exceptionOrNull() is IOException)
     }
 }

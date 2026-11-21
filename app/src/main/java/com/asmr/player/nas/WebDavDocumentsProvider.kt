@@ -8,7 +8,6 @@ import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract.Document
 import android.provider.DocumentsProvider
 import android.webkit.MimeTypeMap
-import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.util.concurrent.Executors
@@ -72,7 +71,7 @@ class WebDavDocumentsProvider : DocumentsProvider() {
         require(displayName.isNotEmpty() && '/' !in displayName)
         val path = listOf(LibraryWorkspace.path(parentDocumentId), displayName).filter(String::isNotEmpty).joinToString("/")
         if (mimeType == Document.MIME_TYPE_DIR) client.mkdir(path)
-        else client.put(path, ByteArray(0).toRequestBody(), newFile = true)
+        else client.createFile(path)
         return LibraryWorkspace.documentId(path)
     }
 

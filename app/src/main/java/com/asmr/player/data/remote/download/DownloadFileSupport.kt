@@ -6,6 +6,7 @@ import java.io.File
 import com.asmr.player.nas.LibraryWorkspace
 
 const val DOWNLOAD_STATE_FINALIZING = "FINALIZING"
+internal const val DOWNLOAD_STATE_IMPORT_FAILED = "IMPORT_FAILED"
 
 private const val DLSITE_PLAY_SCRAMBLED_PART_SUFFIX = ".dlsite-scrambled.part"
 
@@ -15,7 +16,20 @@ internal fun dlsitePlayImagePartFile(outputFile: File): File {
 
 internal fun downloadStagingFile(context: Context, item: DownloadItemEntity): File {
     val root = File(context.getExternalFilesDir(null), LibraryWorkspace.name("download-staging"))
-    return File(root, "${item.id}_${item.fileName}")
+    val partial = File(root, "${item.id}_${item.fileName}")
+    return if (LibraryWorkspace.nas) readyNasStagingFile(partial).takeIf { it.isFile } ?: partial else partial
+}
+
+internal fun readyNasStagingFile(file: File): File =
+    if (file.parentFile?.name == "ready") file else File(File(file.parentFile, "ready"), file.name)
+
+internal fun sealNasStagingFile(file: File): File {
+    val ready = readyNasStagingFile(file)
+    if (ready != file) {
+        ready.parentFile?.mkdirs()
+        check(file.renameTo(ready)) { "Unable to checkpoint downloaded file" }
+    }
+    return ready
 }
 
 internal fun downloadMimeType(fileName: String): String = when (fileName.substringAfterLast('.', "").lowercase()) {

@@ -8,6 +8,9 @@ import com.asmr.player.util.LocalFileOperation
 import com.asmr.player.util.LocalFileScopes
 import com.asmr.player.util.LocalFileOperationCoordinator
 import android.content.Context
+import android.net.Uri
+import androidx.room.withTransaction
+import java.io.EOFException
 import android.util.Log
 import androidx.work.*
 import com.asmr.player.data.remote.auth.DlsiteAuthStore
@@ -130,6 +133,7 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
             dlsitePlayImageWidth != null &&
             dlsitePlayImageHeight != null
 
+        val nas = LibraryWorkspace.owns(Uri.parse(targetDir))
         return try {
             val workId = id.toString()
             val appDb = AppDatabaseProvider.get(applicationContext)
@@ -153,6 +157,20 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                 downloadStagingFile(applicationContext, currentItem)
             } else {
                 File(checkNotNull(targetFolder), fileName)
+            }
+            if (nas) {
+                foregroundNasTransfer(inputData.getString("taskTitle").orEmpty().ifBlank { fileName })
+                // An existing task can already have a published file when a previous import failed.
+                if (!file.exists() && currentItem.filePath.isNotBlank() && currentItem.total > 0 &&
+                    currentItem.downloaded == currentItem.total &&
+                    !hasDlsitePlayImageTransform && !fileName.equals("dlsite_lossless_archive.zip", true) &&
+                    storage.nasFileSize(currentItem.filePath) == currentItem.total
+                ) {
+                    dao.updateRunningItemProgress(workId, DOWNLOAD_STATE_FINALIZING, currentItem.total, currentItem.total, 0, now0)
+                    dao.getTaskById(currentItem.taskId)?.let { enqueueDownloadFinalization(applicationContext, it) }
+                    DownloadQueueCoordinator.requestSchedule(applicationContext)
+                    return ListenableWorker.Result.success()
+                }
             }
             val partialFile = dlsitePlayImagePartFile(file)
             val transferFile = if (hasDlsitePlayImageTransform) partialFile else file
@@ -178,6 +196,7 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
             val chapter = if (isJapaneseAsmr) ChapterMediaReference.parse(url)?.takeIf { it.isHls } else null
             val nativeUrl = chapter?.downloadUrl?.takeIf { it.isNotBlank() } ?: url
             val requestBuilder = Request.Builder()
+                .header("Accept-Encoding", "identity")
                 .url(nativeUrl)
                 .header("User-Agent", NetworkHeaders.USER_AGENT)
             if (isJapaneseAsmr) requestBuilder
@@ -222,7 +241,7 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                 requestBuilder.addHeader("Range", "bytes=$existingBytes-")
             }
 
-            val knownTotal = dao.getItemByWorkId(workId)?.total?.takeIf { it > 0L } ?: -1L
+            val knownTotal = currentItem.total.takeIf { it > 0L } ?: -1L
             var total = knownTotal
             var downloaded = if (transformAlreadyApplied) knownTotal.coerceAtLeast(file.length()) else existingBytes
             val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(now0))
@@ -234,33 +253,9 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                 pendingTrafficBytes = 0L
             }
 
-            suspend fun failCurrentDownload(
-                downloadedBytes: Long = downloaded.coerceAtLeast(0L),
-                totalBytes: Long = -1L
-            ): ListenableWorker.Result {
-                runCatching {
-                    dao.updateRunningItemProgress(
-                        workId = workId,
-                        state = WorkInfo.State.FAILED.name,
-                        downloaded = downloadedBytes,
-                        total = totalBytes,
-                        speed = 0L,
-                        updatedAt = System.currentTimeMillis()
-                    )
-                }
-                return ListenableWorker.Result.failure(
-                    workDataOf(
-                        "fileName" to fileName,
-                        "targetDir" to targetDir,
-                        "filePath" to File(targetDir, fileName).absolutePath,
-                        "relativePath" to relativePath,
-                        "taskKey" to resolvedTaskKey
-                    )
-                )
-            }
-
             val transferAlreadyComplete = transformAlreadyApplied ||
-                (knownTotal > 0L && existingBytes == knownTotal)
+                if (nas) file == readyNasStagingFile(file) && file.isFile
+                else knownTotal > 0L && existingBytes == knownTotal
             suspend fun downloadHls() {
                 val fallback = checkNotNull(chapter)
                 check(fallback.useHlsDownload) { appString(R.string.ui_online_audio_download_has_not_been_confirmed) }
@@ -287,13 +282,16 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
             } else if (!transferAlreadyComplete) {
                 if (chapter != null && chapter.downloadUrl.isNullOrBlank()) throw IOException(appString(R.string.ui_online_audio_download_has_not_been_confirmed))
                 if (isJapaneseAsmr) requestBuilder.url(resolveJapaneseAsmrDownload(baseClient, nativeUrl, fileName))
-                client.newCall(requestBuilder.build()).execute().use { response ->
-                    if (!response.isSuccessful) {
-                        Log.w(TAG, "download failed code=${response.code} url=${response.request.url}")
-                        if (isJapaneseAsmr) throw IOException(appString(R.string.ui_audio_download_failed, response.code))
-                        return failCurrentDownload(totalBytes = existingBytes.coerceAtLeast(0L))
+                client.readStagedDownload(requestBuilder.build(), existingBytes) { response ->
+                    if (response.code == 416 && existingBytes > 0L &&
+                        response.header("Content-Range").equals("bytes */$existingBytes", ignoreCase = true)) {
+                        total = existingBytes
+                        return@readStagedDownload
                     }
-                    val body = response.body ?: return failCurrentDownload(totalBytes = existingBytes.coerceAtLeast(0L))
+                    if (!response.isSuccessful) {
+                        throw DownloadHttpException(response.code)
+                    }
+                    val body = response.body ?: throw EOFException("Empty download response")
                     if (isJapaneseAsmr) {
                         val contentType = response.header("Content-Type").orEmpty().lowercase()
                         val dispositionName = response.header("Content-Disposition").orEmpty()
@@ -308,19 +306,19 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                         }
                         if (!isJapaneseAsmrAudioHeader(fileName, header)) throw IOException(appString(R.string.ui_the_download_link_did_not_return_audio))
                     }
-                    val supportsRange = response.code == 206 && existingBytes > 0L
+                    val supportsRange = response.code == 206
                     if (!supportsRange && existingBytes > 0L) {
                         existingBytes = 0L
                         downloaded = 0L
                     }
                     val contentLen = body.contentLength().takeIf { it > 0 } ?: -1L
                     total = when {
-                        supportsRange && contentLen > 0 -> existingBytes + contentLen
+                        supportsRange -> resumedDownloadTotal(response.header("Content-Range"), existingBytes, body.contentLength())
                         contentLen > 0 -> contentLen
                         else -> -1L
                     }
                     val buffer = ByteArray(DOWNLOAD_BUFFER_SIZE)
-                    var progressBaselineBytes = 0L
+                    var progressBaselineBytes = downloaded
                     var progressBaselineTs = System.currentTimeMillis()
 
                     kotlinx.coroutines.currentCoroutineContext().ensureActive()
@@ -364,7 +362,7 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
             kotlinx.coroutines.currentCoroutineContext().ensureActive()
             if (!transformAlreadyApplied) {
                 check(transferFile.isFile && transferFile.length() == downloaded) { appString(R.string.ui_the_downloaded_file_was_changed_by_another_app) }
-                check(total < 0L || downloaded == total) { appString(R.string.ui_the_downloaded_file_is_incomplete) }
+                if (total >= 0L && downloaded != total) throw EOFException(appString(R.string.ui_the_downloaded_file_is_incomplete))
             } else {
                 check(file.isFile) { appString(R.string.ui_the_downloaded_file_was_moved_or_deleted) }
             }
@@ -384,37 +382,34 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                 }
             }
             val finalTotal = if (total > 0) total else downloaded
+            val staged = if (nas) sealNasStagingFile(file) else file
             val publishedReference = if (usesDocumentTree) {
                 if (dao.updateRunningItemProgress(
                         workId, WorkInfo.State.RUNNING.name, downloaded, finalTotal, 0L, System.currentTimeMillis()
                     ) == 0) throw kotlinx.coroutines.CancellationException(appString(R.string.ui_download_paused_or_canceled))
-                val size = file.length()
-                val destinationReference = publishDownloadFiles(targetDir, workId, { size }) { copy ->
-                    val reference = storage.ensureFile(targetDir, fileName, downloadMimeType(fileName))
+                val size = staged.length()
+                val reference = storage.ensureFile(targetDir, fileName, downloadMimeType(fileName))
+                val alreadyUploaded = nas && staged == file && storage.nasFileSize(reference) == size &&
+                    storage.matchesNasDownload(reference, staged::inputStream)
+                if (!alreadyUploaded) publishDownloadFiles(targetDir, workId, { size }) { copy ->
                     storage.write(reference, size) { output ->
-                        file.inputStream().use { input -> copy(input, output) }
+                        staged.inputStream().use { input -> copy(input, output) }
                     }
-                    reference
                 }
-                dao.updateItemDestination(
-                    workId = workId,
-                    filePath = destinationReference,
-                    targetDir = targetDir,
-                    updatedAt = System.currentTimeMillis(),
-                )
-                if (LibraryWorkspace.nas && file.extension.lowercase() in SubtitleMatchSupport.AudioExtensions) {
-                    AudioMetadataCache.recordNasDownload(applicationContext, destinationReference, file.absolutePath)
+                if (nas && staged.extension.lowercase() in SubtitleMatchSupport.AudioExtensions) {
+                    AudioMetadataCache.recordNasDownload(applicationContext, reference, staged.absolutePath)
                 }
-                if (!fileName.equals("dlsite_lossless_archive.zip", ignoreCase = true)) {
-                    file.delete()
-                }
-                destinationReference
+                reference
             } else {
                 file.absolutePath
             }
-            check(storage.exists(publishedReference)) { appString(R.string.ui_the_downloaded_file_was_moved_or_deleted) }
-            if (!hasDlsitePlayImageTransform) {
-                check(storage.size(publishedReference) == downloaded) { appString(R.string.ui_the_downloaded_file_was_changed_by_another_app) }
+            if (nas) {
+                if (storage.nasFileSize(publishedReference) != staged.length()) throw EOFException("Incomplete NAS upload")
+            } else {
+                check(storage.exists(publishedReference)) { appString(R.string.ui_the_downloaded_file_was_moved_or_deleted) }
+                if (!hasDlsitePlayImageTransform) {
+                    check(storage.size(publishedReference) == downloaded) { appString(R.string.ui_the_downloaded_file_was_changed_by_another_app) }
+                }
             }
             kotlinx.coroutines.currentCoroutineContext().ensureActive()
             val now = System.currentTimeMillis()
@@ -426,14 +421,12 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                 Log.w(TAG, "Unable to flush download traffic for work $id", failure)
             }
             withContext(NonCancellable) {
-                dao.updateRunningItemProgress(
-                    workId = workId,
-                    state = DOWNLOAD_STATE_FINALIZING,
-                    downloaded = downloaded,
-                    total = finalTotal,
-                    speed = 0L,
-                    updatedAt = now
-                )
+                val published = appDb.withTransaction {
+                    val updated = dao.updateRunningItemProgress(workId, DOWNLOAD_STATE_FINALIZING, downloaded, finalTotal, 0L, now)
+                    if (updated > 0 && usesDocumentTree) dao.updateItemDestination(workId, publishedReference, targetDir, now)
+                    updated > 0
+                }
+                if (published && usesDocumentTree && !fileName.equals("dlsite_lossless_archive.zip", true)) staged.delete()
                 dao.getTaskById(currentItem.taskId)?.let { enqueueDownloadFinalization(applicationContext, it) }
             }
             DownloadQueueCoordinator.requestSchedule(applicationContext)
@@ -449,6 +442,16 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
         } catch (cancelled: kotlinx.coroutines.CancellationException) {
             throw cancelled
         } catch (e: Exception) {
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            if (nas && runAttemptCount < 3 && e.isTransientNasTransferFailure()) {
+                val dao = AppDatabaseProvider.get(applicationContext).downloadDao()
+                val item = dao.getItemByWorkId(id.toString()) ?: return ListenableWorker.Result.success()
+                val staged = downloadStagingFile(applicationContext, item)
+                val bytes = if (item.hasDlsitePlayImageTransform()) item.downloaded else staged.length()
+                if (dao.updateRunningItemProgress(item.workId, WorkInfo.State.ENQUEUED.name, bytes, item.total, 0L,
+                        System.currentTimeMillis()) == 0) return ListenableWorker.Result.success()
+                return ListenableWorker.Result.retry()
+            }
             Log.w(TAG, "Download failed for work $id, file $fileName", e)
             val now = System.currentTimeMillis()
             runCatching {

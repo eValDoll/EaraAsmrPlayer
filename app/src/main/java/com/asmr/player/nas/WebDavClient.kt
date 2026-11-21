@@ -1,6 +1,12 @@
 package com.asmr.player.nas
 
 import android.util.Xml
+import com.asmr.player.data.remote.useDownloadResponse
+import java.io.InputStream
+import okio.HashingSink
+import okio.blackholeSink
+import okio.buffer
+import okio.source
 import okhttp3.Credentials
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -50,8 +56,8 @@ internal class WebDavClient(val location: WebDavLocation, password: String) {
         authorization?.let { header("Authorization", it) }
     }
 
-    private fun execute(request: Request, client: OkHttpClient = http): Response {
-        val response = client.newCall(request).execute()
+    private fun execute(request: Request): Response {
+        val response = http.newCall(request).execute()
         if (!response.isSuccessful) {
             response.close()
             throw WebDavHttpException(response.code)
@@ -63,10 +69,29 @@ internal class WebDavClient(val location: WebDavLocation, password: String) {
         range?.let { header("Range", it) }
     }.build())
 
-    fun put(path: String, body: RequestBody, newFile: Boolean = false) {
-        val request = request(location.url(path)).apply { if (newFile) header("If-None-Match", "*") }.put(body).build()
-        execute(request, uploadHttp).close()
+    fun createFile(path: String) {
+        val create = request(location.url(path)).header("If-None-Match", "*").put(ByteArray(0).toRequestBody())
+        execute(create.build()).close()
     }
+
+    suspend fun put(path: String, body: RequestBody) {
+        uploadHttp.newCall(request(location.url(path)).put(body).build()).useDownloadResponse { response ->
+            if (!response.isSuccessful) throw WebDavHttpException(response.code)
+        }
+    }
+
+    /** A lost PUT response leaves publication uncertain. Only reuse the remote file if its contents match. */
+    suspend fun matchesContent(path: String, openLocal: () -> InputStream): Boolean =
+        http.newCall(request(location.url(path)).build()).useDownloadResponse { response ->
+            if (!response.isSuccessful) throw WebDavHttpException(response.code)
+            fun digest(source: okio.BufferedSource): okio.ByteString {
+                val hash = HashingSink.sha256(blackholeSink())
+                source.readAll(hash)
+                return hash.hash
+            }
+            val remote = digest(checkNotNull(response.body).source())
+            openLocal().source().buffer().use { digest(it) == remote }
+        }
 
     fun mkdir(path: String) {
         execute(request(location.url(path)).method("MKCOL", null).build()).close()

@@ -125,21 +125,31 @@ internal suspend fun finalizeDlsiteLosslessArchiveInStorageIfNeeded(
     rootDir: String,
     items: List<DownloadItemEntity>,
     storage: DownloadStorageGateway,
-) {
+    nasEntries: Collection<DownloadStorageEntry>?,
+): DownloadItemEntity? {
     val archiveItem = items.firstOrNull { item ->
         item.fileName.equals("dlsite_lossless_archive.zip", ignoreCase = true)
-    } ?: return
+    } ?: return null
     val stagingArchive = downloadStagingFile(context, archiveItem)
-    if (!stagingArchive.isFile) return
+    if (!stagingArchive.isFile) return null
 
     useBestEffortZipFile(stagingArchive) { archive ->
-        fun entries() = archive.entries().asSequence().mapNotNull { entry ->
-            val segments = entry.name.replace('\\', '/').split('/').filter { it.isNotBlank() }
-            if (segments.isEmpty() || segments.any { it == "." || it == ".." }) null else entry to segments
+        val remoteFiles = nasEntries?.associateBy { it.relativePath }.orEmpty()
+        val pending = buildList {
+            for (entry in archive.entries()) {
+                val segments = entry.name.replace('\\', '/').split('/').filter { it.isNotBlank() }
+                if (segments.isEmpty() || segments.any { it == "." || it == ".." }) continue
+                val existing = remoteFiles[segments.joinToString("/")]
+                if (existing != null && (entry.isDirectory && existing.isDirectory ||
+                        !entry.isDirectory && !existing.isDirectory && existing.sizeBytes == entry.size &&
+                        storage.matchesNasDownload(existing.reference) { archive.getInputStream(entry) })) continue
+                add(entry to segments)
+            }
         }
-        publishDownloadFiles(rootDir, archiveItem.workId, { entries().filterNot { it.first.isDirectory }.sumOf { it.first.size } }) { copy ->
-            for ((entry, segments) in entries()) {
-                val parent = storage.resolveDirectory(rootDir, segments.dropLast(1).joinToString("/"))
+        publishDownloadFiles(rootDir, archiveItem.workId, { pending.sumOf { if (it.first.isDirectory) 0L else it.first.size } }) { copy ->
+            for ((entry, segments) in pending) {
+                val path = if (entry.isDirectory) segments else segments.dropLast(1)
+                val parent = storage.resolveDirectory(rootDir, path.joinToString("/"))
                 if (!entry.isDirectory) {
                     val name = segments.last()
                     val reference = storage.ensureFile(parent, name, downloadMimeType(name))
@@ -150,6 +160,10 @@ internal suspend fun finalizeDlsiteLosslessArchiveInStorageIfNeeded(
             }
         }
     }
-    storage.delete(archiveItem.filePath)
-    stagingArchive.delete()
+    if (nasEntries == null) {
+        storage.delete(archiveItem.filePath)
+        stagingArchive.delete()
+        return null
+    }
+    return archiveItem
 }

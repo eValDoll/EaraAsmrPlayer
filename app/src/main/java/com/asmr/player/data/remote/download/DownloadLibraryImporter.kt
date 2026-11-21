@@ -82,7 +82,8 @@ internal suspend fun upsertDownloadedAlbumToLibrary(
     albumCoverUrl: String = "",
     albumDescription: String = "",
     albumWorkId: String = "",
-    albumRjCode: String = ""
+    albumRjCode: String = "",
+    documentEntries: List<DownloadStorageEntry>? = null,
 ) {
     if (rootDir.startsWith("content://")) {
         upsertDownloadedDocumentAlbumToLibrary(
@@ -100,6 +101,7 @@ internal suspend fun upsertDownloadedAlbumToLibrary(
             albumDescription = albumDescription,
             albumWorkId = albumWorkId,
             albumRjCode = albumRjCode,
+            documentEntries = documentEntries,
         )
         return
     }
@@ -277,9 +279,10 @@ private suspend fun upsertDownloadedDocumentAlbumToLibrary(
     albumDescription: String,
     albumWorkId: String,
     albumRjCode: String,
+    documentEntries: List<DownloadStorageEntry>?,
 ) {
     val storage = DownloadStorageGateway(appContext)
-    val entries = storage.walk(rootDir).filter { entry ->
+    val entries = (documentEntries ?: storage.walk(rootDir)).filter { entry ->
         isScannableLocalStorageEntry(entry.relativePath, entry.isDirectory)
     }
     if (entries.isEmpty()) return
