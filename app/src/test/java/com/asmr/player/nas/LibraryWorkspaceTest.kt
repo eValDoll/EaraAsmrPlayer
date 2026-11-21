@@ -10,12 +10,51 @@ import com.asmr.player.data.local.db.entities.AlbumGroupEntity
 import com.asmr.player.data.local.db.entities.DownloadTaskEntity
 import com.asmr.player.data.local.db.entities.PlaylistItemEntity
 import com.asmr.player.data.local.db.entities.PlaylistEntity
+import com.asmr.player.data.remote.auth.AsmrOneAuthStore
+import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.data.remote.download.DownloadDestinationStore
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Test
 
 class LibraryWorkspaceTest : LocalizedRobolectricTest() {
+    @Test fun switchingLibrariesSharesSiteCredentialsAndLogout() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val workspace = context.getSharedPreferences("library_workspace", Context.MODE_PRIVATE)
+        val asmrAuth = context.getSharedPreferences("asmr_one_auth", Context.MODE_PRIVATE)
+        asmrAuth.edit().putString("name", "listener").apply()
+        DlsiteAuthStore(context).apply {
+            saveDlsiteCookie("shop=local", 1000L)
+            savePlayCookie("play=local", 2000L)
+        }
+        try {
+            workspace.edit().putBoolean("nas", true).putString("address", "https://nas.test/audio/").apply()
+            LibraryWorkspace.initialize(context)
+            DlsiteAuthStore(context).apply {
+                assertEquals("shop=local", getDlsiteCookie())
+                assertEquals("play=local", getPlayCookie())
+                assertEquals(1000L, getDlsiteCookieExpiresAtMs())
+                savePlayCookie("play=nas", 3000L)
+            }
+            AsmrOneAuthStore(context).clear()
+            assertFalse(asmrAuth.contains("name"))
+
+            LibraryWorkspace.select(context, null)
+            LibraryWorkspace.initialize(context)
+            DlsiteAuthStore(context).apply {
+                assertEquals("play=nas", getPlayCookie())
+                assertEquals(3000L, getPlayCookieExpiresAtMs())
+                clear()
+            }
+            workspace.edit().putBoolean("nas", true).apply()
+            LibraryWorkspace.initialize(context)
+            assertFalse(DlsiteAuthStore(context).isLoggedIn())
+        } finally {
+            workspace.edit().clear().apply()
+            LibraryWorkspace.initialize(context)
+        }
+    }
+
     @Test fun nasDatabaseIsSelectedBeforeApplicationOnCreate() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val prefs = context.getSharedPreferences("library_workspace", Context.MODE_PRIVATE)
