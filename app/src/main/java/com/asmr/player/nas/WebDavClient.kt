@@ -15,6 +15,7 @@ import java.io.IOException
 import java.net.Proxy
 import java.text.SimpleDateFormat
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 internal class WebDavLocation(address: String, val username: String) {
     val root: HttpUrl = address.trim().toHttpUrl().let { url ->
@@ -49,8 +50,8 @@ internal class WebDavClient(val location: WebDavLocation, password: String) {
         authorization?.let { header("Authorization", it) }
     }
 
-    private fun execute(request: Request): Response {
-        val response = http.newCall(request).execute()
+    private fun execute(request: Request, client: OkHttpClient = http): Response {
+        val response = client.newCall(request).execute()
         if (!response.isSuccessful) {
             response.close()
             throw WebDavHttpException(response.code)
@@ -63,7 +64,8 @@ internal class WebDavClient(val location: WebDavLocation, password: String) {
     }.build())
 
     fun put(path: String, body: RequestBody, newFile: Boolean = false) {
-        execute(request(location.url(path)).apply { if (newFile) header("If-None-Match", "*") }.put(body).build()).close()
+        val request = request(location.url(path)).apply { if (newFile) header("If-None-Match", "*") }.put(body).build()
+        execute(request, uploadHttp).close()
     }
 
     fun mkdir(path: String) {
@@ -182,6 +184,8 @@ internal class WebDavClient(val location: WebDavLocation, password: String) {
         private const val DAV = "DAV:"
         val http = OkHttpClient.Builder().proxy(Proxy.NO_PROXY)
             .followRedirects(false).followSslRedirects(false).build()
+        // A NAS may still be flushing the file after the request body has been sent.
+        private val uploadHttp = http.newBuilder().readTimeout(60, TimeUnit.SECONDS).build()
         private val propertyRequest = """<D:propfind xmlns:D="DAV:"><D:prop><D:resourcetype/><D:getcontentlength/><D:getlastmodified/></D:prop></D:propfind>"""
             .toRequestBody("application/xml; charset=utf-8".toMediaType())
         private fun success(status: String) = status.split(' ').getOrNull(1)?.toIntOrNull() in 200..299

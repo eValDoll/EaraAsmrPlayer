@@ -9,6 +9,7 @@ import org.junit.After
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.IOException
+import java.util.concurrent.TimeUnit
 
 class WebDavClientTest : LocalizedRobolectricTest() {
     private val server = MockWebServer()
@@ -59,7 +60,7 @@ class WebDavClientTest : LocalizedRobolectricTest() {
         server.enqueue(MockResponse().setResponseCode(201))
         client.mkdir(".eara-downloads")
         assertEquals("MKCOL", server.takeRequest().method)
-        server.enqueue(MockResponse().setResponseCode(201))
+        server.enqueue(MockResponse().setHeadersDelay(11, TimeUnit.SECONDS).setResponseCode(201))
         client.put(".eara-downloads/test.wav", out.toRequestBody())
         val upload = server.takeRequest()
         assertEquals("PUT", upload.method)
