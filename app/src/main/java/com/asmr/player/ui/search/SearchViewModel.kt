@@ -366,7 +366,7 @@ class SearchViewModel @Inject constructor(
 
     fun goToPage(page: Int): Boolean {
         val current = _uiState.value as? SearchUiState.Success ?: return false
-        if (current.isBusy || page == current.page || page !in 1..(current.lastPage ?: Int.MAX_VALUE)) return false
+        if (current.isBusy || page == current.page || page !in 1..(current.lastPage ?: current.page)) return false
         requestPage(current.keyword, page, SearchPendingRequestKind.Page)
         return true
     }
@@ -858,6 +858,7 @@ class SearchViewModel @Inject constructor(
             locale = cached.locale,
             canGoPrev = page > 1,
             canGoNext = cached.canGoNext,
+            lastPage = if (cached.canGoNext) cached.lastPage?.takeIf { it > page } else page,
             pendingRequest = null,
             visitedPages = listOf(page),
             isEnriching = false,
@@ -910,6 +911,7 @@ class SearchViewModel @Inject constructor(
                         locale = latest.locale,
                         page = latest.page,
                         canGoNext = latest.canGoNext,
+                        lastPage = latest.lastPage,
                         results = latest.results
                     )
                 )

@@ -30,6 +30,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.asmr.player.ui.common.CollapsibleHeaderState
@@ -504,15 +505,18 @@ class SearchScreenChromeTest {
                 )
             }
         }
-        val page = composeRule.onNodeWithText("第 2 页")
+        val page = composeRule.onNodeWithText("第 2 / 12 页")
         val field = composeRule.onNodeWithContentDescription("页码")
         val submit = composeRule.onNodeWithContentDescription("跳转到页码")
         page.performClick()
-        for (invalid in listOf("", "0", "2", "13", "999999999999")) {
+        for (invalid in listOf("0", "13", "999999999999", "-1", "2a")) {
             field.performTextReplacement(invalid)
+            field.assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
             submit.assertIsNotEnabled()
-            field.performImeAction()
         }
+        field.performTextReplacement("2")
+        submit.assertIsNotEnabled()
+        field.performImeAction()
         field.performTextReplacement("12")
         field.performImeAction()
         page.performClick()

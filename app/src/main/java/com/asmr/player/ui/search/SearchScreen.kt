@@ -464,6 +464,10 @@ private fun SearchScreenContent(
         isActive = isActive,
     )
     val success = uiState as? SearchUiState.Success
+    val needsPageCount = success != null && success.lastPage == null
+    LaunchedEffect(isActive, needsPageCount) {
+        if (isActive && needsPageCount) viewModel.refreshPage()
+    }
     val resultScrollKey = searchResultScrollKey(success)
     val listState = rememberSaveablePrefetchedLazyListState(stateKey = resultScrollKey)
     val gridState = rememberSaveable(resultScrollKey, saver = LazyStaggeredGridState.Saver) { LazyStaggeredGridState() }
@@ -554,7 +558,7 @@ private fun SearchScreenContent(
     val showSearchSpinner = chromeLockState.showSearchSpinner
     val highlightedPage = success?.page ?: 1
     val canGoPrev = success?.canGoPrev == true && !success.isSearching
-    val canGoNext = success?.canGoNext == true && !success.isSearching
+    val canGoNext = success?.canGoNext == true && success.lastPage != null && !success.isSearching
     val chromeReservedHeightPx = when {
         chromeState.heightPx > 0f -> chromeState.heightPx
         success != null -> with(androidx.compose.ui.platform.LocalDensity.current) { 120.dp.toPx() }
@@ -2098,7 +2102,7 @@ internal fun SearchPaginationHeader(
     val colorScheme = AsmrTheme.colorScheme
     val isDark = colorScheme.isDark
     var editing by rememberSaveable(page, controlsLocked) { mutableStateOf(false) }
-    val canJump = !controlsLocked && (canGoPrev || canGoNext)
+    val canJump = !controlsLocked && lastPage != null && lastPage > 1
     val paginationContainerColor = lerp(
         colorScheme.surface,
         colorScheme.primarySoft,
@@ -2143,7 +2147,7 @@ internal fun SearchPaginationHeader(
             )
 
             val rowModifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp)
-            if (editing && canJump) {
+            if (editing && canJump && lastPage != null) {
                 SearchPageJumpInput(
                     page = page,
                     lastPage = lastPage,
@@ -2183,10 +2187,7 @@ internal fun SearchPaginationHeader(
                     }
                 }
 
-                Box(
-                    modifier = Modifier.weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(contentAlignment = Alignment.Center) {
                     Row(
                         modifier = Modifier
                             .height(30.dp)
@@ -2201,7 +2202,8 @@ internal fun SearchPaginationHeader(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = appString(R.string.ui_page, page),
+                            text = appString(R.string.ui_page_of_total, page, lastPage ?: "…"),
+                            maxLines = 1,
                             style = MaterialTheme.typography.bodySmall,
                             color = colorScheme.textPrimary
                         )
@@ -2231,14 +2233,14 @@ internal fun SearchPaginationHeader(
 @Composable
 private fun SearchPageJumpInput(
     page: Int,
-    lastPage: Int?,
+    lastPage: Int,
     onDismiss: () -> Unit,
     onGoToPage: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val colors = AsmrTheme.colorScheme
     var input by rememberSaveable { mutableStateOf("") }
-    val target = input.toIntOrNull()?.takeIf { it != page && it in 1..(lastPage ?: Int.MAX_VALUE) }
+    val target = input.toIntOrNull()?.takeIf { it != page && it in 1..lastPage }
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val label = appString(R.string.ui_page_number)
@@ -2265,7 +2267,11 @@ private fun SearchPageJumpInput(
         )
         BasicTextField(
             value = input,
-            onValueChange = { if (it.all { char -> char in '0'..'9' }) input = it },
+            onValueChange = { value ->
+                if (value.isEmpty() || (value.all { it in '0'..'9' } && (value.toIntOrNull() ?: 0) in 1..lastPage)) {
+                    input = value
+                }
+            },
             modifier = Modifier.weight(1f).focusRequester(focusRequester).semantics { contentDescription = label },
             singleLine = true,
             textStyle = textStyle,
@@ -2275,12 +2281,13 @@ private fun SearchPageJumpInput(
             decorationBox = { field ->
                 Box(modifier = Modifier.fillMaxWidth().height(30.dp), contentAlignment = Alignment.Center) {
                     if (input.isEmpty()) {
-                        Text(lastPage?.let { "$label (1–$it)" } ?: label, style = textStyle, color = colors.textTertiary)
+                        Text(label, style = textStyle, color = colors.textTertiary)
                     }
                     field()
                 }
             }
         )
+        Text("/ $lastPage", style = textStyle, color = colors.textSecondary)
         SearchPaginationIconButton(
             onClick = ::submit,
             enabled = target != null,

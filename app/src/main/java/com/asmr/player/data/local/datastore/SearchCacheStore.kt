@@ -43,7 +43,8 @@ data class LastSearchState(
     val locale: String?,
     val page: Int,
     val canGoNext: Boolean,
-    val results: List<Album>
+    val results: List<Album>,
+    val lastPage: Int? = null
 )
 
 internal fun LastSearchState.restoreCollectedSource(): LastSearchState {

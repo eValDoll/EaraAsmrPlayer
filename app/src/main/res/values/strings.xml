@@ -1086,7 +1086,7 @@
     <string name="ui_page_number">Page number</string>
     <string name="ui_search_page_unavailable">This page is unavailable</string>
     <string name="ui_page_out_of_range">Page out of range</string>
-    <string name="ui_page">"Page %1$s"</string>
+    <string name="ui_page_of_total">"Page %1$d / %2$s"</string>
     <string name="ui_next_page" formatted="false">"Next page"</string>
     <string name="ui_popularity_order" formatted="false">"Popularity order"</string>
     <string name="ui_latest_sale" formatted="false">"latest sale"</string>

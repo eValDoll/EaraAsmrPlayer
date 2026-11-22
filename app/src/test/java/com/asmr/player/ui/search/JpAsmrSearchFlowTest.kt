@@ -153,6 +153,7 @@ class JpAsmrSearchFlowTest {
             assertRequest(server, "/api/asmr-one/search", "0")
             await { (vm.uiState.value as? SearchUiState.Success)?.results?.singleOrNull()?.rjCode == "RJ01700001" }
 
+            assertEquals(501, (vm.uiState.value as SearchUiState.Success).lastPage)
             assertFalse(vm.goToPage(0))
             assertFalse(vm.goToPage(1))
             assertFalse(vm.goToPage(502))
@@ -197,6 +198,7 @@ class JpAsmrSearchFlowTest {
             await { restored.uiState.value is SearchUiState.Success }
             val state = restored.uiState.value as SearchUiState.Success
             assertEquals(501, state.page)
+            assertEquals(501, state.lastPage)
             assertEquals("JapaneseAsmr", state.collectedSourceName)
             assertEquals("JapaneseAsmr", state.results.single().collectedSourceName)
             assertEquals("UND353674", state.results.single().rjCode)

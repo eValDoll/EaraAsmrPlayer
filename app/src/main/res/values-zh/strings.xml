@@ -1086,7 +1086,7 @@
     <string name="ui_page_number">页码</string>
     <string name="ui_search_page_unavailable">此页暂不可用</string>
     <string name="ui_page_out_of_range">页码超出范围</string>
-    <string name="ui_page">"第 %1$s 页"</string>
+    <string name="ui_page_of_total">"第 %1$d / %2$s 页"</string>
     <string name="ui_next_page" formatted="false">"下一页"</string>
     <string name="ui_popularity_order" formatted="false">"人气顺序"</string>
     <string name="ui_latest_sale" formatted="false">"最新发售"</string>
