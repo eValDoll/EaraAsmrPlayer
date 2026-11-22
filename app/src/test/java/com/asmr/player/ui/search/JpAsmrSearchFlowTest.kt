@@ -153,10 +153,21 @@ class JpAsmrSearchFlowTest {
             assertRequest(server, "/api/asmr-one/search", "0")
             await { (vm.uiState.value as? SearchUiState.Success)?.results?.singleOrNull()?.rjCode == "RJ01700001" }
 
-            server.enqueue(result(30, "RJ01700002"))
-            vm.nextPage()
-            assertRequest(server, "/api/asmr-one/search", "30")
-            await { (vm.uiState.value as? SearchUiState.Success)?.page == 2 }
+            assertFalse(vm.goToPage(0))
+            assertFalse(vm.goToPage(1))
+            assertFalse(vm.goToPage(502))
+            server.enqueue(result(15000, "RJ01700002"))
+            assertTrue(vm.goToPage(501))
+            assertRequest(server, "/api/asmr-one/search", "15000")
+            await { (vm.uiState.value as? SearchUiState.Success)?.page == 501 }
+
+            server.enqueue(result(10000, "RJ01999999"))
+            assertTrue(vm.goToPage(500))
+            assertRequest(server, "/api/asmr-one/search", "14970")
+            await { (vm.uiState.value as? SearchUiState.Success)?.isBusy == false }
+            val previousPage = vm.uiState.value as SearchUiState.Success
+            assertEquals(501, previousPage.page)
+            assertEquals("RJ01700002", previousPage.results.single().rjCode)
 
             server.enqueue(result(0, "RJ01700003"))
             assertTrue(vm.updateSearchOptions(collectedSourceName = "JapaneseAsmr"))
@@ -164,33 +175,33 @@ class JpAsmrSearchFlowTest {
             await { (vm.uiState.value as? SearchUiState.Success)?.collectedSourceName == "JapaneseAsmr" }
             assertEquals(1, (vm.uiState.value as SearchUiState.Success).page)
 
-            server.enqueue(result(30, "UN124393"))
-            vm.nextPage()
-            assertRequest(server, "/api/jp-asmr/search", "30")
-            await { (vm.uiState.value as? SearchUiState.Success)?.page == 2 }
+            server.enqueue(result(15000, "UN124393"))
+            assertTrue(vm.goToPage(501))
+            assertRequest(server, "/api/jp-asmr/search", "15000")
+            await { (vm.uiState.value as? SearchUiState.Success)?.page == 501 }
 
             server.enqueue(MockResponse().setResponseCode(503))
             vm.refreshPage()
-            assertRequest(server, "/api/jp-asmr/search", "30")
+            assertRequest(server, "/api/jp-asmr/search", "15000")
             await { (vm.uiState.value as? SearchUiState.Success)?.isBusy == false }
             assertEquals("JapaneseAsmr", (vm.uiState.value as SearchUiState.Success).collectedSourceName)
             assertEquals(MessageType.Error, runBlocking { messages.messages.first() }.type)
 
-            server.enqueue(result(30, "UND353674"))
+            server.enqueue(result(15000, "UND353674"))
             vm.retry()
-            assertRequest(server, "/api/jp-asmr/search", "30")
+            assertRequest(server, "/api/jp-asmr/search", "15000")
             await { (vm.uiState.value as? SearchUiState.Success)?.results?.singleOrNull()?.rjCode == "UND353674" }
-            await { runBlocking { cache.readLast() }?.let { it.page == 2 && it.collectedSourceName == "JapaneseAsmr" } == true }
+            await { runBlocking { cache.readLast() }?.let { it.page == 501 && it.collectedSourceName == "JapaneseAsmr" } == true }
             val restored = newViewModel("restored")
             restored.bootstrap("", false, "ja_JP")
             await { restored.uiState.value is SearchUiState.Success }
             val state = restored.uiState.value as SearchUiState.Success
-            assertEquals(2, state.page)
+            assertEquals(501, state.page)
             assertEquals("JapaneseAsmr", state.collectedSourceName)
             assertEquals("JapaneseAsmr", state.results.single().collectedSourceName)
             assertEquals("UND353674", state.results.single().rjCode)
             assertEquals("UND353674", state.results.single().workId)
-            assertEquals(6, server.requestCount)
+            assertEquals(7, server.requestCount)
 
             server.enqueue(MockResponse().setBody("""{"items":[],"total":0,"offset":0,"sort":"release"}"""))
             assertTrue(vm.search("RJ01700000"))
@@ -206,7 +217,7 @@ class JpAsmrSearchFlowTest {
 
     private fun result(offset: Int, rj: String) = MockResponse().setBody("""{
         "items":[{"workId":150867,"rj":"$rj","title":"测试","pageUrl":"https://japaneseasmr.com/150867/"}],
-        "total":90,"offset":$offset,"sort":"release"
+        "total":15001,"offset":$offset,"sort":"release"
     }""")
 
     private fun assertRequest(server: MockWebServer, path: String, offset: String) {

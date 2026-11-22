@@ -1082,6 +1082,10 @@
     <string name="ui_unfiltered" formatted="false">"Unfiltered"</string>
     <string name="ui_return_to_first_page" formatted="false">"Return to first page"</string>
     <string name="ui_previous_page" formatted="false">"Previous page"</string>
+    <string name="ui_go_to_page">Go to page</string>
+    <string name="ui_page_number">Page number</string>
+    <string name="ui_search_page_unavailable">This page is unavailable</string>
+    <string name="ui_page_out_of_range">Page out of range</string>
     <string name="ui_page">"Page %1$s"</string>
     <string name="ui_next_page" formatted="false">"Next page"</string>
     <string name="ui_popularity_order" formatted="false">"Popularity order"</string>

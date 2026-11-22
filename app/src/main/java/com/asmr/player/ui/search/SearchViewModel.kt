@@ -364,22 +364,11 @@ class SearchViewModel @Inject constructor(
         )
     }
 
-    fun nextPage() {
-        val current = _uiState.value as? SearchUiState.Success ?: return
-        if (!current.canGoNext || current.isBusy) return
-        requestPage(current.keyword, current.page + 1, SearchPendingRequestKind.Page)
-    }
-
-    fun prevPage() {
-        val current = _uiState.value as? SearchUiState.Success ?: return
-        if (!current.canGoPrev || current.isBusy) return
-        requestPage(current.keyword, current.page - 1, SearchPendingRequestKind.Page)
-    }
-
-    fun firstPage() {
-        val current = _uiState.value as? SearchUiState.Success ?: return
-        if (!current.canGoPrev || current.isBusy) return
-        requestPage(current.keyword, 1, SearchPendingRequestKind.Page)
+    fun goToPage(page: Int): Boolean {
+        val current = _uiState.value as? SearchUiState.Success ?: return false
+        if (current.isBusy || page == current.page || page !in 1..(current.lastPage ?: Int.MAX_VALUE)) return false
+        requestPage(current.keyword, page, SearchPendingRequestKind.Page)
+        return true
     }
 
     fun refreshPage() {
@@ -429,6 +418,7 @@ class SearchViewModel @Inject constructor(
                     allAges = allAges
                 )
                 if (generation != requestGeneration) return@launch
+                check(page <= pageResult.lastPage) { appString(R.string.ui_page_out_of_range) }
                 val resultRevision = ++searchResultRevision
                 _uiState.value = SearchUiState.Success(
                     results = pageResult.items.map { it.copy(metadataLocale = currentLocale?.takeIf(String::isNotBlank)) },
@@ -445,7 +435,8 @@ class SearchViewModel @Inject constructor(
                     allAges = allAges,
                     locale = currentLocale,
                     canGoPrev = page > 1,
-                    canGoNext = pageResult.canGoNext,
+                    canGoNext = page < pageResult.lastPage,
+                    lastPage = pageResult.lastPage,
                     pendingRequest = null,
                     visitedPages = buildVisitedPages(previousSuccess, requestKind, page),
                     isEnriching = false,
@@ -553,6 +544,8 @@ class SearchViewModel @Inject constructor(
         collectedWorkNoJob?.cancel()
     }
 
+    private fun pageCount(total: Int): Int = (total.coerceAtLeast(1) - 1) / pageSize + 1
+
     private suspend fun fetchPage(
         keyword: String,
         page: Int,
@@ -577,14 +570,15 @@ class SearchViewModel @Inject constructor(
         val appliedAllAges = allAges && selectedFilter.supportsWorkFilters
         if (purchasedOnly) {
             val resp = dlsitePlayLibraryClient.searchPurchased(keyword, page, pageSize)
-            return SearchPageResult(items = resp.items, canGoNext = resp.canGoNext)
+            return SearchPageResult(items = resp.items, lastPage = pageCount(resp.totalCount))
         }
         val keywordWithBlockedTerms = appendBlockedKeywordsForOnlineSearch(
             keyword = keyword,
             blockedKeywords = settingsRepository.searchBlockedKeywords.first()
         )
         if (collectedOnly) {
-            val offset = (page.coerceAtLeast(1) - 1) * pageSize
+            check(page <= pageCount(Int.MAX_VALUE)) { appString(R.string.ui_page_out_of_range) }
+            val offset = (page - 1) * pageSize
             val resp = asmrOneAvailabilityApi.search(
                 keyword = keywordWithBlockedTerms,
                 limit = pageSize,
@@ -594,6 +588,7 @@ class SearchViewModel @Inject constructor(
                 allAges = appliedAllAges,
                 source = CollectedSearchSource.fromName(collectedSourceName)
             )
+            check(resp.offset == offset) { appString(R.string.ui_search_page_unavailable) }
             val collectedItems = resp.items.orEmpty()
             val mappedItems = withContext(Dispatchers.Default) {
                 collectedItems.map { it.toCollectedAlbum(source = CollectedSearchSource.fromName(collectedSourceName)) }
@@ -613,11 +608,9 @@ class SearchViewModel @Inject constructor(
                     )
                 }.orEmpty()
             }
-            val total = resp.total.coerceAtLeast(0)
-            val responseOffset = resp.offset.coerceAtLeast(offset)
             return SearchPageResult(
                 items = items,
-                canGoNext = responseOffset + items.size < total,
+                lastPage = pageCount(resp.total),
                 resolvedDetailRjCodes = items
                     .mapNotNull { it.rjCode.ifBlank { it.workId }.trim().uppercase().takeIf(String::isNotBlank) }
                     .toSet()
@@ -645,7 +638,7 @@ class SearchViewModel @Inject constructor(
             if (album != null) {
                 return SearchPageResult(
                     items = listOf(album),
-                    canGoNext = false,
+                    lastPage = 1,
                     resolvedDetailRjCodes = setOf(normalizedWorkNo)
                 )
             }
@@ -660,7 +653,7 @@ class SearchViewModel @Inject constructor(
             hasSubtitle = appliedHasSubtitle,
             allAges = appliedAllAges
         )
-        return SearchPageResult(items = result.items, canGoNext = result.canGoNext)
+        return SearchPageResult(items = result.items, lastPage = result.lastPage)
     }
 
     private fun startEnrichDlsiteDetails(
@@ -1371,7 +1364,7 @@ private data class SearchFilterFlags(
 
 private data class SearchPageResult(
     val items: List<Album>,
-    val canGoNext: Boolean,
+    val lastPage: Int,
     val resolvedDetailRjCodes: Set<String> = emptySet()
 )
 
@@ -1475,6 +1468,7 @@ sealed class SearchUiState {
         val locale: String?,
         val canGoPrev: Boolean,
         val canGoNext: Boolean,
+        val lastPage: Int? = if (canGoNext) null else page,
         val pendingRequest: SearchPendingRequest? = null,
         val visitedPages: List<Int> = listOf(page),
         val isEnriching: Boolean = false,
