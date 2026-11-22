@@ -180,7 +180,7 @@ private fun UiDevice.recordOnlineFixture(route: String) {
 }
 
 private fun UiDevice.ensureFirstSearchPage() {
-    val firstPage = By.text("第 1 页")
+    val firstPage = By.text(Pattern.compile("""第 1 / [0-9]+ 页"""))
     if (!hasObject(firstPage)) {
         val reset = wait(Until.findObject(By.desc("回到第一页").enabled(true)), OnlineContentTimeoutMs)
             ?: error("Cannot reset the saved search page for a comparable measurement")

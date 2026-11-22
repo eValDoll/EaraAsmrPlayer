@@ -27,12 +27,12 @@ class DlsiteMetadataParserTest {
             <tr data-list_item_product_id="RJ789012"><td>
                 <div class="work_name"><a href="/maniax/announce/=/product_id/RJ789012.html">预告</a></div>
                 <div class="sales_date">预告开始日期: 2026年11月17日</div>
-            </td></tr></table></div><div class="page_no"><a data-value="2">下一页</a></div>
+            </td></tr></table></div><div class="page_no"><strong>1</strong><a data-value="2">下一页</a><a data-value="89">最后一页</a></div>
             </html>
         """.trimIndent())
 
         val result = parseDlsiteSearchPage(doc, "zh_CN", 1)
-        assertTrue(result.canGoNext)
+        assertEquals(89, result.lastPage)
         assertEquals(listOf("RJ123456", "RJ789012"), result.items.map { it.rjCode })
         val (album, announce) = result.items
         assertEquals("作品", album.title)
@@ -50,7 +50,8 @@ class DlsiteMetadataParserTest {
         assertNull(album.ratingValue)
         assertEquals("", announce.releaseDate)
         assertEquals(0, announce.priceJpy)
-        assertFalse(parseDlsiteSearchPage(doc, "zh_CN", 2).canGoNext)
+        doc.selectFirst(".page_no")!!.html("""<a data-value="88">上一页</a><strong>89</strong>""")
+        assertEquals(89, parseDlsiteSearchPage(doc, "zh_CN", 89).lastPage)
     }
 
     private fun workPage() = Jsoup.parse("""

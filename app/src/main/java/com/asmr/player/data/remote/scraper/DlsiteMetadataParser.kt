@@ -55,8 +55,11 @@ internal fun parseDlsiteSearchPage(doc: Document, locale: String?, page: Int): D
             ratingCount = row.selectFirst(".work_rating .star_rating")?.text().orEmpty().firstInteger()
         )
     }
-    val canGoNext = doc.select(".page_no a[data-value]").any { (it.attr("data-value").toIntOrNull() ?: 0) > page }
-    return DlsiteSearchResult(items, canGoNext)
+    val pagination = doc.selectFirst(".page_no")
+    val currentPage = pagination?.selectFirst("strong")?.text()?.toIntOrNull()
+        ?: if (items.isEmpty()) 1 else page
+    val lastLink = pagination?.select("a[data-value]")?.maxOfOrNull { it.attr("data-value").toIntOrNull() ?: 0 }
+    return DlsiteSearchResult(items, maxOf(currentPage, lastLink ?: 0))
 }
 
 private fun Document.outlineValue(predicate: (String) -> Boolean): Element? =

@@ -41,18 +41,9 @@ class DlsitePlayLibraryClient @Inject constructor(
         return withContext(Dispatchers.IO) {
             val all = ensureLibraryCached()
             val filtered = filterByKeyword(all, keyword)
-            val safePage = page.coerceAtLeast(1)
-            val start = (safePage - 1) * pageSize
-            val end = (start + pageSize).coerceAtMost(filtered.size)
-            val items = if (start in 0..filtered.size && start < end) filtered.subList(start, end) else emptyList()
-            val canGoNext = end < filtered.size
-            PurchasedSearchPage(
-                items = items,
-                page = safePage,
-                pageSize = pageSize,
-                totalCount = filtered.size,
-                canGoNext = canGoNext
-            )
+            val start = ((page.coerceAtLeast(1) - 1L) * pageSize).coerceAtMost(filtered.size.toLong()).toInt()
+            val end = start + minOf(pageSize, filtered.size - start)
+            PurchasedSearchPage(items = filtered.subList(start, end), totalCount = filtered.size)
         }
     }
 
@@ -341,8 +332,5 @@ class DlsitePlayLibraryClient @Inject constructor(
 
 data class PurchasedSearchPage(
     val items: List<Album>,
-    val page: Int,
-    val pageSize: Int,
-    val totalCount: Int,
-    val canGoNext: Boolean
+    val totalCount: Int
 )

@@ -14,6 +14,7 @@ import com.asmr.player.ui.common.progressiveHeaderContent
 
 import com.asmr.player.translation.PageTranslationHost
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
@@ -54,10 +55,15 @@ import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.FamilyRestroom
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
@@ -100,8 +106,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.lerp
@@ -115,6 +123,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.semantics
@@ -124,6 +134,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.domain.model.Album
@@ -452,6 +464,10 @@ private fun SearchScreenContent(
         isActive = isActive,
     )
     val success = uiState as? SearchUiState.Success
+    val needsPageCount = success != null && success.lastPage == null
+    LaunchedEffect(isActive, needsPageCount) {
+        if (isActive && needsPageCount) viewModel.refreshPage()
+    }
     val resultScrollKey = searchResultScrollKey(success)
     val listState = rememberSaveablePrefetchedLazyListState(stateKey = resultScrollKey)
     val gridState = rememberSaveable(resultScrollKey, saver = LazyStaggeredGridState.Saver) { LazyStaggeredGridState() }
@@ -542,7 +558,7 @@ private fun SearchScreenContent(
     val showSearchSpinner = chromeLockState.showSearchSpinner
     val highlightedPage = success?.page ?: 1
     val canGoPrev = success?.canGoPrev == true && !success.isSearching
-    val canGoNext = success?.canGoNext == true && !success.isSearching
+    val canGoNext = success?.canGoNext == true && success.lastPage != null && !success.isSearching
     val chromeReservedHeightPx = when {
         chromeState.heightPx > 0f -> chromeState.heightPx
         success != null -> with(androidx.compose.ui.platform.LocalDensity.current) { 120.dp.toPx() }
@@ -557,9 +573,8 @@ private fun SearchScreenContent(
         gridState.requestScrollToItem(0)
     }
 
-    fun requestNextPage() {
-        scrollResultsToTop()
-        viewModel.nextPage()
+    fun goToPage(page: Int) {
+        if (viewModel.goToPage(page)) scrollResultsToTop()
     }
 
     fun submitSearch() {
@@ -712,7 +727,7 @@ private fun SearchScreenContent(
     )
     val latestPullNextPageTriggerDistancePx = rememberUpdatedState(pullNextPageTriggerDistancePx)
     val latestPullNextPageMaxDistancePx = rememberUpdatedState(pullNextPageMaxDistancePx)
-    val latestRequestNextPage = rememberUpdatedState { requestNextPage() }
+    val latestRequestNextPage = rememberUpdatedState { goToPage(highlightedPage + 1) }
     val pullNextPageVisualTargetPx = remember(
         pullNextPageDragPx,
         pullNextPageTriggerDistancePx,
@@ -1403,9 +1418,10 @@ private fun SearchScreenContent(
                     showSearchSpinner = showSearchSpinner,
                     showPagination = success != null,
                     page = highlightedPage,
+                    lastPage = success?.lastPage,
                     canGoPrev = canGoPrev,
                     canGoNext = canGoNext,
-                    controlsLocked = interactionLocked,
+                    controlsLocked = interactionLocked || !isActive,
                     chromeState = chromeState,
                     onMeasured = { size: IntSize -> chromeState.updateHeight(size.height.toFloat()) },
                     onSearchSubmit = { submitSearch() },
@@ -1447,17 +1463,7 @@ private fun SearchScreenContent(
                             }
                         }
                     },
-                    onFirstPage = {
-                        scrollResultsToTop()
-                        viewModel.firstPage()
-                    },
-                    onPrev = {
-                        scrollResultsToTop()
-                        viewModel.prevPage()
-                    },
-                    onNext = {
-                        requestNextPage()
-                    }
+                    onGoToPage = ::goToPage
                 )
             }
         }
@@ -1588,6 +1594,7 @@ internal fun SearchChrome(
     showSearchSpinner: Boolean,
     showPagination: Boolean,
     page: Int,
+    lastPage: Int?,
     canGoPrev: Boolean,
     canGoNext: Boolean,
     controlsLocked: Boolean,
@@ -1601,9 +1608,7 @@ internal fun SearchChrome(
     onSearchSubmit: () -> Unit,
     onClearKeyword: (() -> Unit)? = null,
     onOptionsChanged: (SearchToolbarOptions) -> Unit,
-    onFirstPage: () -> Unit,
-    onPrev: () -> Unit,
-    onNext: () -> Unit
+    onGoToPage: (Int) -> Unit
 ) {
     val fadeOnCollapse = LocalMainHeaderPadding.current > 0.dp
     val collapseStateDescription by remember(chromeState) {
@@ -1645,12 +1650,11 @@ internal fun SearchChrome(
         if (showPagination) {
             SearchPaginationHeader(
                 page = page,
+                lastPage = lastPage,
                 canGoPrev = canGoPrev,
                 canGoNext = canGoNext,
                 controlsLocked = controlsLocked,
-                onFirstPage = onFirstPage,
-                onPrev = onPrev,
-                onNext = onNext
+                onGoToPage = onGoToPage
             )
         }
     }
@@ -2089,16 +2093,16 @@ private fun SearchCheckableMenuItem(
 @Composable
 internal fun SearchPaginationHeader(
     page: Int,
+    lastPage: Int?,
     canGoPrev: Boolean,
     canGoNext: Boolean,
     controlsLocked: Boolean,
-    onFirstPage: () -> Unit,
-    onPrev: () -> Unit,
-    onNext: () -> Unit
+    onGoToPage: (Int) -> Unit
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val isDark = colorScheme.isDark
-    val canGoFirst = canGoPrev
+    var editing by rememberSaveable(page, controlsLocked) { mutableStateOf(false) }
+    val canJump = !controlsLocked && lastPage != null && lastPage > 1
     val paginationContainerColor = lerp(
         colorScheme.surface,
         colorScheme.primarySoft,
@@ -2142,10 +2146,20 @@ internal fun SearchPaginationHeader(
                     .consumeTapThrough()
             )
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 6.dp, vertical = 4.dp),
+            val rowModifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp)
+            if (editing && canJump && lastPage != null) {
+                SearchPageJumpInput(
+                    page = page,
+                    lastPage = lastPage,
+                    onDismiss = { editing = false },
+                    onGoToPage = {
+                        editing = false
+                        onGoToPage(it)
+                    },
+                    modifier = rowModifier
+                )
+            } else Row(
+                modifier = rowModifier,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
@@ -2157,14 +2171,14 @@ internal fun SearchPaginationHeader(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         SearchPaginationIconButton(
-                            onClick = onFirstPage,
-                            enabled = canGoFirst && !controlsLocked,
+                            onClick = { onGoToPage(1) },
+                            enabled = canGoPrev && !controlsLocked,
                             imageVector = Icons.Rounded.SkipPrevious,
                             contentDescription = appString(R.string.ui_return_to_first_page),
                             modifier = Modifier.testTag(SEARCH_FIRST_PAGE_BUTTON_TAG)
                         )
                         SearchPaginationIconButton(
-                            onClick = onPrev,
+                            onClick = { onGoToPage(page - 1) },
                             enabled = canGoPrev && !controlsLocked,
                             imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                             contentDescription = appString(R.string.ui_previous_page),
@@ -2173,15 +2187,30 @@ internal fun SearchPaginationHeader(
                     }
                 }
 
-                Box(
-                    modifier = Modifier.weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = appString(R.string.ui_page, page.coerceAtLeast(1)),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (isDark) colorScheme.textPrimary else Color.Black
-                    )
+                Box(contentAlignment = Alignment.Center) {
+                    Row(
+                        modifier = Modifier
+                            .height(30.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable(
+                                enabled = canJump,
+                                role = Role.Button,
+                                onClickLabel = appString(R.string.ui_go_to_page)
+                            ) { editing = true }
+                            .padding(horizontal = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = appString(R.string.ui_page_of_total, page, lastPage ?: "…"),
+                            maxLines = 1,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colorScheme.textPrimary
+                        )
+                        if (canJump) {
+                            Icon(Icons.Rounded.Edit, contentDescription = null, tint = colorScheme.primary, modifier = Modifier.size(13.dp))
+                        }
+                    }
                 }
 
                 Box(
@@ -2189,7 +2218,7 @@ internal fun SearchPaginationHeader(
                     contentAlignment = Alignment.CenterEnd
                 ) {
                     SearchPaginationIconButton(
-                        onClick = onNext,
+                        onClick = { onGoToPage(page + 1) },
                         enabled = canGoNext && !controlsLocked,
                         imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
                         contentDescription = appString(R.string.ui_next_page),
@@ -2198,6 +2227,77 @@ internal fun SearchPaginationHeader(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SearchPageJumpInput(
+    page: Int,
+    lastPage: Int,
+    onDismiss: () -> Unit,
+    onGoToPage: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = AsmrTheme.colorScheme
+    var input by rememberSaveable { mutableStateOf("") }
+    val target = input.toIntOrNull()?.takeIf { it != page && it in 1..lastPage }
+    val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val label = appString(R.string.ui_page_number)
+    val textStyle = MaterialTheme.typography.bodySmall.copy(color = colors.textPrimary, textAlign = TextAlign.Center)
+    fun submit() {
+        if (target != null) {
+            keyboard?.hide()
+            onGoToPage(target)
+        }
+    }
+
+    fun cancel() {
+        keyboard?.hide()
+        onDismiss()
+    }
+
+    BackHandler(onBack = ::cancel)
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        SearchPaginationIconButton(
+            onClick = ::cancel,
+            enabled = true,
+            imageVector = Icons.Rounded.Close,
+            contentDescription = appString(R.string.ui_cancel)
+        )
+        BasicTextField(
+            value = input,
+            onValueChange = { value ->
+                if (value.isEmpty() || (value.all { it in '0'..'9' } && (value.toIntOrNull() ?: 0) in 1..lastPage)) {
+                    input = value
+                }
+            },
+            modifier = Modifier.weight(1f).focusRequester(focusRequester).semantics { contentDescription = label },
+            singleLine = true,
+            textStyle = textStyle,
+            cursorBrush = SolidColor(colors.primary),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Go),
+            keyboardActions = KeyboardActions(onGo = { submit() }),
+            decorationBox = { field ->
+                Box(modifier = Modifier.fillMaxWidth().height(30.dp), contentAlignment = Alignment.Center) {
+                    if (input.isEmpty()) {
+                        Text(label, style = textStyle, color = colors.textTertiary)
+                    }
+                    field()
+                }
+            }
+        )
+        Text("/ $lastPage", style = textStyle, color = colors.textSecondary)
+        SearchPaginationIconButton(
+            onClick = ::submit,
+            enabled = target != null,
+            imageVector = Icons.Rounded.Check,
+            contentDescription = appString(R.string.ui_go_to_page)
+        )
+    }
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+        keyboard?.show()
     }
 }
 

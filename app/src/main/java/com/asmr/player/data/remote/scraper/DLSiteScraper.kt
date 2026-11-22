@@ -247,7 +247,7 @@ data class DlsiteRecommendations(
 
 data class DlsiteSearchResult(
     val items: List<Album>,
-    val canGoNext: Boolean
+    val lastPage: Int
 )
 
 @Singleton
@@ -414,7 +414,7 @@ class DLSiteScraper @Inject constructor(
             hasSubtitle = hasSubtitle,
             allAges = allAges
         )
-        var lastEmpty = DlsiteSearchResult(items = emptyList(), canGoNext = false)
+        var lastEmpty = DlsiteSearchResult(items = emptyList(), lastPage = 1)
         for (u in urls) {
             Log.d("DLSiteScraper", "Searching URL: $u")
             val doc = runInterruptible { connect(u, locale = locale).get() }

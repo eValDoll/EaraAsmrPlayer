@@ -22,12 +22,15 @@ import androidx.compose.ui.test.assertCountEquals
 import com.asmr.player.ui.createEaraComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.asmr.player.ui.common.CollapsibleHeaderState
@@ -149,12 +152,11 @@ class SearchScreenChromeTest {
                     )
                     SearchPaginationHeader(
                         page = 1,
+                        lastPage = 12,
                         canGoPrev = false,
                         canGoNext = false,
                         controlsLocked = true,
-                        onFirstPage = {},
-                        onPrev = {},
-                        onNext = {}
+                        onGoToPage = {}
                     )
                 }
             }
@@ -417,12 +419,11 @@ class SearchScreenChromeTest {
                     )
                     SearchPaginationHeader(
                         page = 2,
+                        lastPage = 12,
                         canGoPrev = true,
                         canGoNext = true,
                         controlsLocked = true,
-                        onFirstPage = {},
-                        onPrev = {},
-                        onNext = {}
+                        onGoToPage = {}
                     )
                 }
             }
@@ -449,12 +450,11 @@ class SearchScreenChromeTest {
                     )
                     SearchPaginationHeader(
                         page = 2,
+                        lastPage = 12,
                         canGoPrev = true,
                         canGoNext = true,
                         controlsLocked = false,
-                        onFirstPage = {},
-                        onPrev = {},
-                        onNext = {}
+                        onGoToPage = {}
                     )
                 }
             }
@@ -473,19 +473,17 @@ class SearchScreenChromeTest {
 
     @Test
     fun paginationButtons_remainClickable() {
-        var prevCount = 0
-        var nextCount = 0
+        val requested = mutableListOf<Int>()
 
         composeRule.setContent {
             AsmrPlayerTheme {
                 SearchPaginationHeader(
                     page = 2,
+                    lastPage = 12,
                     canGoPrev = true,
                     canGoNext = true,
                     controlsLocked = false,
-                    onFirstPage = {},
-                    onPrev = { prevCount += 1 },
-                    onNext = { nextCount += 1 }
+                    onGoToPage = { requested.add(it) }
                 )
             }
         }
@@ -493,10 +491,41 @@ class SearchScreenChromeTest {
         composeRule.onNodeWithTag(SEARCH_PREV_BUTTON_TAG).performClick()
         composeRule.onNodeWithTag(SEARCH_NEXT_BUTTON_TAG).performClick()
 
-        composeRule.runOnIdle {
-            assertEquals(1, prevCount)
-            assertEquals(1, nextCount)
+        composeRule.runOnIdle { assertEquals(listOf(1, 3), requested) }
+    }
+
+    @Test
+    fun pageJumpValidatesInputAndSubmitsThroughKeyboardOrButton() {
+        val requested = mutableListOf<Int>()
+        composeRule.setContent {
+            AsmrPlayerTheme {
+                SearchPaginationHeader(
+                    page = 2, lastPage = 12, canGoPrev = true, canGoNext = true,
+                    controlsLocked = false, onGoToPage = { requested.add(it) }
+                )
+            }
         }
+        val page = composeRule.onNodeWithText("第 2 / 12 页")
+        val field = composeRule.onNodeWithContentDescription("页码")
+        val submit = composeRule.onNodeWithContentDescription("跳转到页码")
+        page.performClick()
+        for (invalid in listOf("0", "13", "999999999999", "-1", "2a")) {
+            field.performTextReplacement(invalid)
+            field.assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
+            submit.assertIsNotEnabled()
+        }
+        field.performTextReplacement("2")
+        submit.assertIsNotEnabled()
+        field.performImeAction()
+        field.performTextReplacement("12")
+        field.performImeAction()
+        page.performClick()
+        field.performTextInput("1")
+        submit.performClick()
+        page.performClick()
+        field.performTextInput("5")
+        composeRule.onNodeWithContentDescription("取消").performClick()
+        composeRule.runOnIdle { assertEquals(listOf(12, 1), requested) }
     }
 
     @Test
@@ -591,6 +620,7 @@ class SearchScreenChromeTest {
                     showSearchSpinner = false,
                     showPagination = true,
                     page = 2,
+                    lastPage = 12,
                     canGoPrev = true,
                     canGoNext = true,
                     controlsLocked = false,
@@ -598,9 +628,7 @@ class SearchScreenChromeTest {
                     onMeasured = { chromeState.updateHeight(it.height.toFloat()) },
                     onSearchSubmit = {},
                     onOptionsChanged = {},
-                    onFirstPage = {},
-                    onPrev = {},
-                    onNext = {}
+                    onGoToPage = {}
                 )
             }
         }
@@ -664,6 +692,7 @@ class SearchScreenChromeTest {
                         showSearchSpinner = false,
                         showPagination = true,
                         page = 2,
+                        lastPage = 12,
                         canGoPrev = true,
                         canGoNext = true,
                         controlsLocked = false,
@@ -671,9 +700,7 @@ class SearchScreenChromeTest {
                         onMeasured = { chromeState.updateHeight(it.height.toFloat()) },
                         onSearchSubmit = {},
                         onOptionsChanged = {},
-                        onFirstPage = {},
-                        onPrev = {},
-                        onNext = {}
+                        onGoToPage = {}
                     )
                 }
             }

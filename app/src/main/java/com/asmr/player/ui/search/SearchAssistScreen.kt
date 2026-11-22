@@ -483,6 +483,7 @@ internal fun SearchAssistContent(
             showSearchSpinner = false,
             showPagination = false,
             page = 1,
+            lastPage = null,
             canGoPrev = false,
             canGoNext = false,
             controlsLocked = false,
@@ -528,9 +529,7 @@ internal fun SearchAssistContent(
                     )
                 }
             },
-            onFirstPage = {},
-            onPrev = {},
-            onNext = {}
+            onGoToPage = {}
         )
 
         if (showClearHistoryDialog) {

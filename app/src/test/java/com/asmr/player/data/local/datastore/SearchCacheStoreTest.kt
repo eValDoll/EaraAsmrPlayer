@@ -37,12 +37,13 @@ class SearchCacheStoreTest {
         assertEquals("雨音", state.keyword)
         assertEquals(2, state.page)
         assertEquals(true, state.canGoNext)
+        assertNull(state.lastPage)
     }
 
     @Test
     fun explicitNullCacheFieldsUseDefaultsAndKeepRemoteCover() = runBlocking {
         val state = requireNotNull(storeWithCache("""{
-            "keyword":null,"collectedSortName":null,"results":[{
+            "keyword":null,"collectedSortName":null,"lastPage":null,"results":[{
                 "title":"作品","path":"","manualCoverPath":null,
                 "coverThumbPath":null,"coverPath":null,"rjCode":null,"tags":null,
                 "tracks":null,"tagDetails":null,"coverUrl":"https://example.com/null-cover.jpg"
@@ -51,6 +52,7 @@ class SearchCacheStoreTest {
 
         assertEquals("https://example.com/null-cover.jpg", albumCoverImageModel(state.results.single()))
         assertEquals("", state.keyword)
+        assertNull(state.lastPage)
         assertEquals(emptyList<String>(), state.results.single().tags)
         assertNull(state.results.single().tagDetails)
         assertNotNull(albumStableKey(state.results.single()))
@@ -81,7 +83,7 @@ class SearchCacheStoreTest {
         val manual = "/albums/manual.jpg"
         val state = LastSearchState(
             savedAtMs = 123L, keyword = "検索", orderName = "Trend", purchasedOnly = true,
-            locale = "ja", page = 3, canGoNext = true, hasSubtitle = true, allAges = true,
+            locale = "ja", page = 3, lastPage = 18, canGoNext = true, hasSubtitle = true, allAges = true,
             collectedSortName = "ReleaseNew",
             results = listOf(Album(
                 title = "作品", path = "", displayTitle = "翻译作品", manualCoverPath = manual,
