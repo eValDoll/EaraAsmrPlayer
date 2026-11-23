@@ -17,9 +17,9 @@ internal interface ProxyPasswordStorage {
     fun isConfigured(): Boolean = read().isNotEmpty()
 }
 
-internal class ProxyPasswordStore private constructor(context: Context) : ProxyPasswordStorage {
+internal class KeystorePasswordStore private constructor(context: Context, preferencesName: String, private val keyAlias: String) : ProxyPasswordStorage {
     private val preferences = context.applicationContext.getSharedPreferences(
-        PREFERENCES_NAME,
+        preferencesName,
         Context.MODE_PRIVATE
     )
     private val lock = Any()
@@ -49,10 +49,10 @@ internal class ProxyPasswordStore private constructor(context: Context) : ProxyP
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateSecretKey())
         val encrypted = cipher.doFinal(password.toByteArray(Charsets.UTF_8))
-        preferences.edit()
+        check(preferences.edit()
             .putString(KEY_ENCRYPTED_VALUE, Base64.encodeToString(encrypted, Base64.NO_WRAP))
             .putString(KEY_INITIALIZATION_VECTOR, Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
-            .apply()
+            .commit())
     }
 
     override fun clear() = synchronized(lock) {
@@ -61,11 +61,11 @@ internal class ProxyPasswordStore private constructor(context: Context) : ProxyP
 
     private fun getOrCreateSecretKey(): SecretKey {
         val keyStore = KeyStore.getInstance(KEYSTORE_PROVIDER).apply { load(null) }
-        (keyStore.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }
+        (keyStore.getKey(keyAlias, null) as? SecretKey)?.let { return it }
         return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEYSTORE_PROVIDER).run {
             init(
                 KeyGenParameterSpec.Builder(
-                    KEY_ALIAS,
+                    keyAlias,
                     KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
                 )
                     .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
@@ -78,10 +78,10 @@ internal class ProxyPasswordStore private constructor(context: Context) : ProxyP
     }
 
     private fun clearStoredValue() {
-        preferences.edit()
+        check(preferences.edit()
             .remove(KEY_ENCRYPTED_VALUE)
             .remove(KEY_INITIALIZATION_VECTOR)
-            .apply()
+            .commit())
     }
 
     companion object {
@@ -94,11 +94,14 @@ internal class ProxyPasswordStore private constructor(context: Context) : ProxyP
         private const val GCM_TAG_LENGTH_BITS = 128
 
         @Volatile
-        private var instance: ProxyPasswordStore? = null
+        private var instance: KeystorePasswordStore? = null
 
-        fun get(context: Context): ProxyPasswordStore {
+        internal fun forWebDav(context: Context, profile: String) =
+            KeystorePasswordStore(context, "webdav_password_$profile", "eara_webdav_password")
+
+        fun forProxy(context: Context): KeystorePasswordStore {
             return instance ?: synchronized(this) {
-                instance ?: ProxyPasswordStore(context).also { instance = it }
+                instance ?: KeystorePasswordStore(context, PREFERENCES_NAME, KEY_ALIAS).also { instance = it }
             }
         }
     }

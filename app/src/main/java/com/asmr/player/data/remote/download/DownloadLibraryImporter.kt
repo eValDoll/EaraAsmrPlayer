@@ -1,7 +1,10 @@
 package com.asmr.player.data.remote.download
 
+import com.asmr.player.nas.LibraryWorkspace
+import com.asmr.player.nas.WebDavFile
+import com.asmr.player.nas.libraryWorkRequest
+import com.asmr.player.nas.storeWebDavFiles
 import com.asmr.player.util.isJapaneseAsmrResource
-
 import android.content.Context
 import androidx.room.withTransaction
 import androidx.work.*
@@ -79,7 +82,8 @@ internal suspend fun upsertDownloadedAlbumToLibrary(
     albumCoverUrl: String = "",
     albumDescription: String = "",
     albumWorkId: String = "",
-    albumRjCode: String = ""
+    albumRjCode: String = "",
+    documentEntries: List<DownloadStorageEntry>? = null,
 ) {
     if (rootDir.startsWith("content://")) {
         upsertDownloadedDocumentAlbumToLibrary(
@@ -97,6 +101,7 @@ internal suspend fun upsertDownloadedAlbumToLibrary(
             albumDescription = albumDescription,
             albumWorkId = albumWorkId,
             albumRjCode = albumRjCode,
+            documentEntries = documentEntries,
         )
         return
     }
@@ -181,12 +186,12 @@ internal suspend fun upsertDownloadedAlbumToLibrary(
         firstAudioPath = audioFiles.firstOrNull()?.absolutePath,
         directoryCoverPath = cover?.absolutePath.orEmpty(),
     )
-    val coverThumbWork = OneTimeWorkRequestBuilder<AlbumCoverThumbWorker>()
+    val coverThumbWork = libraryWorkRequest<AlbumCoverThumbWorker>()
         .setInputData(workDataOf(AlbumCoverThumbWorker.KEY_ALBUM_ID to albumId))
         .addTag("album_cover_thumb")
         .build()
     WorkManager.getInstance(appContext)
-        .enqueueUniqueWork("album_cover_thumb_$albumId", ExistingWorkPolicy.REPLACE, coverThumbWork)
+        .enqueueUniqueWork(LibraryWorkspace.name("album_cover_thumb_$albumId"), ExistingWorkPolicy.REPLACE, coverThumbWork)
 
     val subtitleCandidates = dir.walkTopDown()
         .onEnter { directory -> directory == dir || isScannableLocalDirectoryName(directory.name) }
@@ -274,9 +279,10 @@ private suspend fun upsertDownloadedDocumentAlbumToLibrary(
     albumDescription: String,
     albumWorkId: String,
     albumRjCode: String,
+    documentEntries: List<DownloadStorageEntry>?,
 ) {
     val storage = DownloadStorageGateway(appContext)
-    val entries = storage.walk(rootDir).filter { entry ->
+    val entries = (documentEntries ?: storage.walk(rootDir)).filter { entry ->
         isScannableLocalStorageEntry(entry.relativePath, entry.isDirectory)
     }
     if (entries.isEmpty()) return
@@ -400,12 +406,20 @@ private suspend fun upsertDownloadedDocumentAlbumToLibrary(
             )
         )
     )
-    db.localTreeCacheDao().deleteByAlbum(albumId)
+    if (LibraryWorkspace.owns(android.net.Uri.parse(rootDir))) {
+        trackDao.applyCachedDurations(albumId, "content://${LibraryWorkspace.authority}/*")
+        albumDao.refreshTotalDuration(albumId)
+        db.localTreeCacheDao().storeWebDavFiles(albumId, rootDir, entries.filterNot { it.isDirectory }.map {
+            WebDavFile(it.relativePath, it.reference, it.sizeBytes)
+        })
+    } else {
+        db.localTreeCacheDao().deleteByAlbum(albumId)
+    }
     WorkManager.getInstance(appContext)
         .enqueueUniqueWork(
-            "album_cover_thumb_$albumId",
+            LibraryWorkspace.name("album_cover_thumb_$albumId"),
             ExistingWorkPolicy.REPLACE,
-            OneTimeWorkRequestBuilder<AlbumCoverThumbWorker>()
+            libraryWorkRequest<AlbumCoverThumbWorker>()
                 .setInputData(workDataOf(AlbumCoverThumbWorker.KEY_ALBUM_ID to albumId))
                 .addTag("album_cover_thumb")
                 .build(),

@@ -16,6 +16,8 @@ import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.util.UUID
 import kotlin.math.max
+import com.asmr.player.nas.LibraryWorkspace
+import com.asmr.player.nas.libraryWorkRequest
 
 /** Process-wide scheduler; WorkManager owns transfer execution and persisted tasks survive process death. */
 object DownloadQueueCoordinator {
@@ -34,7 +36,7 @@ object DownloadQueueCoordinator {
     @Volatile
     private var scheduleLoopRunning = false
     @Volatile
-    private var memoryRetryScheduled = false
+    private var retryScheduled = false
     @Volatile
     private var memoryPauseUntilMs = 0L
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -76,10 +78,14 @@ object DownloadQueueCoordinator {
         val appContext = context.applicationContext
         val dao = AppDatabaseProvider.get(appContext).downloadDao()
         dao.getPendingFinalizationTasks().forEach { enqueueDownloadFinalization(appContext, it) }
+        if (LibraryWorkspace.nas) {
+            schedulePendingDownloads(appContext)
+            return
+        }
         val recoverableItems = dao.getAllActiveOrPausedItems()
         if (recoverableItems.isEmpty()) return
         val wm = WorkManager.getInstance(appContext)
-        runCatching { wm.cancelAllWorkByTag("download") }
+        runCatching { wm.cancelAllWorkByTag(LibraryWorkspace.name("download")) }
         val now = System.currentTimeMillis()
         recoverableItems.forEach { item ->
             dao.stopInterruptibleItem(item.workId, "PAUSED", now)
@@ -95,7 +101,7 @@ object DownloadQueueCoordinator {
         }
         if (backoffMs > 0L) {
             memoryPauseUntilMs = max(memoryPauseUntilMs, now + backoffMs)
-            scheduleMemoryRetry(context, backoffMs)
+            requestScheduleAfter(context, backoffMs)
         }
     }
 
@@ -116,7 +122,7 @@ object DownloadQueueCoordinator {
             val memoryPaused = now < memoryPauseUntilMs
             val memoryConstrained = DownloadRuntimeConfig.isMemoryConstrained(appContext)
             if (memoryPaused || memoryConstrained) {
-                scheduleMemoryRetry(appContext, MEMORY_RETRY_DELAY_MS)
+                requestScheduleAfter(appContext, MEMORY_RETRY_DELAY_MS)
                 return
             }
 
@@ -125,7 +131,7 @@ object DownloadQueueCoordinator {
                     dao.updateItemState(item.workId, WorkInfo.State.FAILED.name, System.currentTimeMillis())
                     return@forEach
                 }
-                val request = OneTimeWorkRequestBuilder<DownloadWorker>()
+                val request = libraryWorkRequest<DownloadWorker>()
                     .setInputData(
                         workDataOf(
                             "url" to item.url,
@@ -150,8 +156,8 @@ object DownloadQueueCoordinator {
                             "dlsitePlayImageHeight" to (item.dlsitePlayImageHeight ?: -1)
                         )
                     )
-                    .addTag("download")
-                    .addTag(task.taskKey)
+                    .addTag(LibraryWorkspace.name("download"))
+                    .addTag(LibraryWorkspace.name(task.taskKey))
                     .setConstraints(
                         Constraints.Builder()
                             .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -170,7 +176,7 @@ object DownloadQueueCoordinator {
                     downloaded = existingBytes,
                     updatedAt = System.currentTimeMillis()
                 )
-                if (scheduled > 0) wm.enqueue(request)
+                if (scheduled > 0) wm.enqueue(request).await()
             }
         }
     }
@@ -195,7 +201,9 @@ object DownloadQueueCoordinator {
             when (info?.state) {
                 null -> {
                     val recentlyScheduled = now - item.updatedAt <= ACTIVE_WORK_RECONCILE_GRACE_MS
-                    if (!recentlyScheduled) {
+                    if (recentlyScheduled && LibraryWorkspace.nas) {
+                        requestScheduleAfter(context, ACTIVE_WORK_RECONCILE_GRACE_MS - (now - item.updatedAt) + 1)
+                    } else if (!recentlyScheduled) {
                         dao.updateRunningItemProgress(
                             workId = item.workId,
                             state = DOWNLOAD_STATE_QUEUED,
@@ -225,16 +233,16 @@ object DownloadQueueCoordinator {
         }
     }
 
-    private fun scheduleMemoryRetry(context: Context, delayMs: Long) {
+    private fun requestScheduleAfter(context: Context, delayMs: Long) {
         val appContext = context.applicationContext
         synchronized(requestMutex) {
-            if (memoryRetryScheduled) return
-            memoryRetryScheduled = true
+            if (retryScheduled) return
+            retryScheduled = true
         }
         scope.launch {
             delay(delayMs.coerceAtLeast(1_000L))
             synchronized(requestMutex) {
-                memoryRetryScheduled = false
+                retryScheduled = false
             }
             requestSchedule(appContext)
         }

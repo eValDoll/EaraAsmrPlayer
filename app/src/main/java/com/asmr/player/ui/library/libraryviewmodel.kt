@@ -2,19 +2,20 @@ package com.asmr.player.ui.library
 
 import com.asmr.player.i18n.appString
 import com.asmr.player.R
-
 import com.asmr.player.data.repository.AlbumTagRepository
+import com.asmr.player.nas.ActiveWebDav
+import com.asmr.player.nas.LibraryWorkspace
+import com.asmr.player.nas.WebDavFile
+import com.asmr.player.nas.libraryWorkRequest
+import com.asmr.player.nas.storeWebDavFiles
 import com.asmr.player.util.isLikelyPlaceholderCover
-
 import com.asmr.player.data.repository.parseAlbumTags
-
 import com.asmr.player.util.LocalFileScopes
 import com.asmr.player.data.remote.download.DownloadStorageGateway
 import com.asmr.player.util.LocalFileOperation
 import com.asmr.player.util.tryBeginFileMutation
 import com.asmr.player.util.LocalFileSnapshot
 import com.asmr.player.util.LocalFileOperationCoordinator
-
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -33,7 +34,6 @@ import androidx.paging.cachedIn
 import androidx.paging.map
 import androidx.room.withTransaction
 import androidx.work.ExistingWorkPolicy
-import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.asmr.player.data.local.db.AppDatabase
@@ -365,10 +365,11 @@ class LibraryViewModel @Inject constructor(
 
     private suspend fun computeAlbumAudioAggregate(
         trackSpecs: List<TrackEntity>,
+        knownSizes: Map<String, Long> = emptyMap(),
     ): AlbumAudioAggregate {
         val totalSizeBytes = withContext(Dispatchers.IO) {
             trackSpecs.sumOf { track ->
-                queryTrackFileSize(context, track.path) ?: 0L
+                knownSizes[track.path] ?: queryTrackFileSize(context, track.path) ?: 0L
             }
         }
         return AlbumAudioAggregate(
@@ -378,10 +379,10 @@ class LibraryViewModel @Inject constructor(
         )
     }
 
-    private suspend fun refreshAlbumAudioAggregate(albumId: Long) {
+    private suspend fun refreshAlbumAudioAggregate(albumId: Long, knownSizes: Map<String, Long> = emptyMap()) {
         if (albumId <= 0L) return
         val tracks = trackDao.getTracksForAlbumOnce(albumId)
-        val aggregate = computeAlbumAudioAggregate(tracks)
+        val aggregate = computeAlbumAudioAggregate(tracks, knownSizes)
         albumDao.updateAlbumAudioAggregate(
             albumId = albumId,
             trackCount = aggregate.trackCount,
@@ -773,22 +774,12 @@ class LibraryViewModel @Inject constructor(
         return best
     }
 
-    private fun pickCoverNode(nodes: List<DocNode>, treeUri: Uri, albumDocumentId: String): String {
-        val named = nodes.firstOrNull { it.mimeType != DocumentsContract.Document.MIME_TYPE_DIR && it.displayName.startsWith("cover.", ignoreCase = true) && isImageName(it.displayName) }
-        if (named != null) {
-            return DocumentsContract.buildDocumentUriUsingTree(treeUri, named.documentId).toString()
-        }
-
+    private fun pickCoverNode(nodes: List<DocNode>, treeUri: Uri): String {
         val images = nodes.filter { it.mimeType != DocumentsContract.Document.MIME_TYPE_DIR && isImageName(it.displayName) }
-        val largest = images.maxByOrNull { it.sizeBytes }
-        if (largest != null) {
-            return DocumentsContract.buildDocumentUriUsingTree(treeUri, largest.documentId).toString()
-        }
-
-        val deep = walkTree(treeUri, albumDocumentId)
-            .filter { it.mimeType != DocumentsContract.Document.MIME_TYPE_DIR && isImageName(it.displayName) }
-            .maxByOrNull { it.sizeBytes }
-        return deep?.let { DocumentsContract.buildDocumentUriUsingTree(treeUri, it.documentId).toString() }.orEmpty()
+        val top = images.filter { '/' !in it.relativePath }
+        val cover = top.firstOrNull { it.displayName.startsWith("cover.", ignoreCase = true) }
+            ?: top.maxByOrNull { it.sizeBytes } ?: images.maxByOrNull { it.sizeBytes }
+        return cover?.let { DocumentsContract.buildDocumentUriUsingTree(treeUri, it.documentId).toString() }.orEmpty()
     }
 
     private enum class CacheTreeFileType {
@@ -1030,8 +1021,12 @@ class LibraryViewModel @Inject constructor(
                     bulkJob = currentCoroutineContext()[Job]
                     try {
                         withContext(Dispatchers.IO) {
-                            scanMutex.withLock {
+                            scanMutex.withLock scan@{
                                 currentCoroutineContext().ensureActive()
+                                if (LibraryWorkspace.nas) {
+                                    scanWebDavLibrary(userInitiated)
+                                    return@scan
+                                }
                                 val roots = scanRootsStore.getRoots().toList()
                                 val downloadedAlbumCount = runCatching {
                                     when (val destination = downloadDestinationStore.current()) {
@@ -1099,6 +1094,19 @@ class LibraryViewModel @Inject constructor(
                 syncCoordinator.end(token)
             }
         }
+    }
+
+    private suspend fun scanWebDavLibrary(restoreDeleted: Boolean) {
+        val client = ActiveWebDav.client(context)
+        val rootEntries = client.list("")
+        val albums = rootEntries.count { it.directory && isScannableLocalDirectoryName(it.name) }
+        val hasDownloads = rootEntries.any { it.directory && it.path == LibraryWorkspace.DOWNLOADS }
+        val total = albums + if (hasDownloads) client.list(LibraryWorkspace.DOWNLOADS).count { it.directory } else 0
+        startBulkProgress(BulkPhase.ScanningLocal, total)
+        var current = 0
+        val onAlbum: (String) -> Unit = { title -> updateBulkAlbumProgress(++current, title) }
+        scanFromDocumentTree(LibraryWorkspace.tree("").toString(), restoreDeleted, onAlbumScanned = onAlbum)
+        if (hasDownloads) scanFromDownloadedDir(restoreDeletedSubtitles = restoreDeleted, onAlbumScanned = onAlbum)
     }
 
     fun scanCurrentDownloadDestinationAsImport() {
@@ -1527,8 +1535,8 @@ class LibraryViewModel @Inject constructor(
         if (!canUseNetwork) return fail("no_network_cover")
 
         val sourceHash = url.hashCode().toString()
-        val coverDir = File(context.filesDir, "album_covers").apply { if (!exists()) mkdirs() }
-        val thumbDir = File(context.filesDir, "album_thumbs").apply { if (!exists()) mkdirs() }
+        val coverDir = File(context.filesDir, LibraryWorkspace.name("album_covers")).apply { if (!exists()) mkdirs() }
+        val thumbDir = File(context.filesDir, LibraryWorkspace.name("album_thumbs")).apply { if (!exists()) mkdirs() }
         val coverFile = File(coverDir, "a_${albumId}_$sourceHash.jpg")
         val thumbFile = File(thumbDir, "a_${albumId}_${sourceHash}_v2.jpg")
 
@@ -1648,7 +1656,7 @@ class LibraryViewModel @Inject constructor(
                 var removed = false
                 withContext(Dispatchers.IO) {
                     currentCoroutineContext().ensureActive()
-                    runCatching { database.localTreeCacheDao().deleteByAlbum(album.id) }
+                    if (!LibraryWorkspace.nas) database.localTreeCacheDao().deleteByAlbum(album.id)
 
                     var scannedAny = false
                     localPaths.forEach { path ->
@@ -1770,7 +1778,7 @@ class LibraryViewModel @Inject constructor(
                         val downloadDao = database.downloadDao()
                         val task = runCatching { downloadDao.getTaskByRootDir(downloadRoot) }.getOrNull()
                         if (task != null) {
-                            runCatching { WorkManager.getInstance(context).cancelAllWorkByTag(task.taskKey) }
+                            runCatching { WorkManager.getInstance(context).cancelAllWorkByTag(LibraryWorkspace.name(task.taskKey)) }
                             runCatching { downloadDao.deleteItemsForTask(task.id) }
                             runCatching { downloadDao.deleteTaskById(task.id) }
                         }
@@ -2083,7 +2091,7 @@ class LibraryViewModel @Inject constructor(
     }
 
     internal fun legacyOnlineSavedAlbumDir(entity: AlbumEntity): File {
-        val baseDir = File(context.getExternalFilesDir(null), "albums")
+        val baseDir = File(context.getExternalFilesDir(null), LibraryWorkspace.name("albums"))
         val folderName = legacyOnlineSavedAlbumFolderName(entity)
         return File(baseDir, folderName)
     }
@@ -2236,22 +2244,22 @@ class LibraryViewModel @Inject constructor(
 
     private fun enqueueTrackDurationWork(albumId: Long) {
         if (albumId <= 0L) return
-        val request = OneTimeWorkRequestBuilder<TrackDurationWorker>()
+        val request = libraryWorkRequest<TrackDurationWorker>()
             .setInputData(workDataOf(TrackDurationWorker.KEY_ALBUM_ID to albumId))
             .addTag("track_duration")
             .build()
         WorkManager.getInstance(context)
-            .enqueueUniqueWork("track_duration_album_$albumId", ExistingWorkPolicy.REPLACE, request)
+            .enqueueUniqueWork(LibraryWorkspace.name("track_duration_album_$albumId"), ExistingWorkPolicy.REPLACE, request)
     }
 
     private fun enqueueAlbumCoverThumbWork(albumId: Long) {
         if (albumId <= 0L) return
-        val request = OneTimeWorkRequestBuilder<AlbumCoverThumbWorker>()
+        val request = libraryWorkRequest<AlbumCoverThumbWorker>()
             .setInputData(workDataOf(AlbumCoverThumbWorker.KEY_ALBUM_ID to albumId))
             .addTag("album_cover_thumb")
             .build()
         WorkManager.getInstance(context)
-            .enqueueUniqueWork("album_cover_thumb_$albumId", ExistingWorkPolicy.REPLACE, request)
+            .enqueueUniqueWork(LibraryWorkspace.name("album_cover_thumb_$albumId"), ExistingWorkPolicy.REPLACE, request)
     }
 
     private suspend fun scanTracksAndSubtitlesFromFileAlbum(
@@ -2447,8 +2455,6 @@ class LibraryViewModel @Inject constructor(
             foundAlbumPaths.add(albumPath)
             val title = albumDir.displayName.ifBlank { "album" }
             val rj = extractWorkNo(title)
-            val albumChildren = queryChildren(uri, albumDir.documentId)
-            val coverPath = pickCoverNode(albumChildren, uri, albumDir.documentId)
 
             onAlbumScanned?.invoke(title)
             val existing = resolveAndMergeAlbumForRj(
@@ -2460,6 +2466,7 @@ class LibraryViewModel @Inject constructor(
             )
 
             val all = walkTree(uri, albumDir.documentId).filter { it.mimeType != DocumentsContract.Document.MIME_TYPE_DIR }
+            val coverPath = pickCoverNode(all, uri)
             val audioFiles = all.filter { audioExtensions.contains(it.displayName.substringAfterLast('.', "").lowercase()) }
             val subtitleNodes = all.filter { subtitleExtensions.contains(it.displayName.substringAfterLast('.', "").lowercase()) }
             val subtitleCandidates = subtitleNodes.mapNotNull { node ->
@@ -2631,6 +2638,13 @@ class LibraryViewModel @Inject constructor(
                     }
                 }
 
+                if (LibraryWorkspace.owns(uri)) {
+                    val files = all.map { node -> WebDavFile(node.relativePath,
+                        DocumentsContract.buildDocumentUriUsingTree(uri, node.documentId).toString(), node.sizeBytes) }
+                    refreshAlbumAudioAggregate(insertedAlbumId, files.associate { it.uri to it.size })
+                    database.localTreeCacheDao().storeWebDavFiles(insertedAlbumId, albumPath, files)
+                    return@withTransaction
+                }
                 refreshAlbumAudioAggregate(insertedAlbumId)
 
                 val leaves = all.asSequence()
@@ -2888,10 +2902,9 @@ class LibraryViewModel @Inject constructor(
         val audioExtensions = setOf("mp3", "flac", "wav", "m4a", "ogg", "aac", "opus")
         val subtitleExtensions = setOf("lrc", "srt", "vtt")
 
-        val albumChildren = queryChildren(treeUri, albumDocId)
-        val coverPath = pickCoverNode(albumChildren, treeUri, albumDocId)
 
         val all = walkTree(treeUri, albumDocId).filter { it.mimeType != DocumentsContract.Document.MIME_TYPE_DIR }
+        val coverPath = pickCoverNode(all, treeUri)
         val audioFiles = all.filter { audioExtensions.contains(it.displayName.substringAfterLast('.', "").lowercase()) }.sortedBy { it.documentId }
         val subtitleNodes = all.filter { subtitleExtensions.contains(it.displayName.substringAfterLast('.', "").lowercase()) }
         val subtitleCandidates = subtitleNodes.mapNotNull { node ->
@@ -2995,7 +3008,11 @@ class LibraryViewModel @Inject constructor(
             playerConnection.requestLyricsReload()
         }
         refreshAlbumAudioAggregate(albumId)
-        if (persistedPaths.isNotEmpty() && cacheLeaves.isNotEmpty()) {
+        if (LibraryWorkspace.owns(treeUri)) {
+            val files = all.map { node -> WebDavFile(node.relativePath,
+                DocumentsContract.buildDocumentUriUsingTree(treeUri, node.documentId).toString(), node.sizeBytes) }
+            database.localTreeCacheDao().storeWebDavFiles(albumId, albumUriString, files)
+        } else if (persistedPaths.isNotEmpty() && cacheLeaves.isNotEmpty()) {
             upsertLocalTreeCache(
                 albumId = albumId,
                 albumPaths = persistedPaths,
@@ -3052,7 +3069,7 @@ class LibraryViewModel @Inject constructor(
         )
         val result = mutableListOf<DocNode>()
         val resolver = context.contentResolver
-        check(documentExists(treeUri, parentDocumentId)) { appString(R.string.ui_the_scan_folder_was_moved_deleted_or_is) }
+        if (!LibraryWorkspace.owns(treeUri)) check(documentExists(treeUri, parentDocumentId)) { appString(R.string.ui_the_scan_folder_was_moved_deleted_or_is) }
         val cursor = resolver.query(childrenUri, projection, null, null, null)
             ?: error(appString(R.string.ui_unable_to_read_scan_folder))
         cursor.use {
@@ -3079,7 +3096,7 @@ class LibraryViewModel @Inject constructor(
         val docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, documentId)
         val projection = arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
         val treeId = DocumentsContract.getTreeDocumentId(treeUri)
-        check(resolver.persistedUriPermissions.any { permission ->
+        check(LibraryWorkspace.owns(treeUri) || resolver.persistedUriPermissions.any { permission ->
             permission.isReadPermission && permission.uri.authority == treeUri.authority &&
                 runCatching { DocumentsContract.getTreeDocumentId(permission.uri) }.getOrNull() == treeId
         }) { appString(R.string.ui_scan_folder_permission_expired) }

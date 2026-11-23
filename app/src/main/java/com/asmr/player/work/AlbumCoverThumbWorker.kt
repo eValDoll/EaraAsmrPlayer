@@ -12,6 +12,7 @@ import androidx.work.WorkerParameters
 import com.asmr.player.cache.CacheImageModel
 import com.asmr.player.cache.ImageCacheEntryPoint
 import com.asmr.player.data.local.db.AppDatabaseProvider
+import com.asmr.player.nas.LibraryWorkspace
 import com.asmr.player.util.DlsiteAntiHotlink
 import dagger.hilt.android.EntryPointAccessors
 import java.io.File
@@ -36,7 +37,7 @@ class AlbumCoverThumbWorker(
         if (source.isBlank()) return Result.success()
 
         val sourceHash = source.trim().hashCode().toString()
-        val dir = File(applicationContext.filesDir, "album_thumbs")
+        val dir = File(applicationContext.filesDir, LibraryWorkspace.name("album_thumbs"))
         if (!dir.exists()) dir.mkdirs()
         val target = File(dir, "a_${albumId}_${sourceHash}_v$THUMB_VERSION.jpg")
 

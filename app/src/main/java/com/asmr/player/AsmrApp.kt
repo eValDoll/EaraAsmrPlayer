@@ -1,8 +1,8 @@
 package com.asmr.player
 
+import android.content.Context
 import com.asmr.player.i18n.appString
 import com.asmr.player.R
-
 import android.app.Application
 import androidx.work.Configuration
 import coil.ImageLoader
@@ -14,6 +14,7 @@ import com.asmr.player.cache.ImageCacheManager
 import com.asmr.player.data.remote.download.DownloadQueueCoordinator
 import com.asmr.player.data.remote.download.DownloadRuntimeConfig
 import com.asmr.player.data.settings.SettingsRepository
+import com.asmr.player.nas.LibraryWorkspace
 import com.asmr.player.subtitle.GeneratedSubtitleFileBackfill
 import com.asmr.player.subtitle.SubtitleTaskRepository
 import com.asmr.player.util.MessageManager
@@ -44,8 +45,24 @@ class AsmrApp : Application(), ImageLoaderFactory, Configuration.Provider {
     @Inject
     lateinit var messageManager: MessageManager
 
+    override fun attachBaseContext(base: Context) {
+        // Providers and instrumentation can request a DAO before Application.onCreate.
+        LibraryWorkspace.initialize(base)
+        super.attachBaseContext(base)
+    }
+
     override fun onCreate() {
         com.asmr.player.i18n.AppLanguage.initialize(this)
+        val switchProcess = if (android.os.Build.VERSION.SDK_INT >= 28) {
+            getProcessName().endsWith(":library_switch")
+        } else {
+            getSystemService(android.app.ActivityManager::class.java).runningAppProcesses
+                ?.any { it.pid == android.os.Process.myPid() && it.processName.endsWith(":library_switch") } == true
+        }
+        if (switchProcess) {
+            super.onCreate()
+            return
+        }
         super.onCreate()
         appCacheManager.start()
         runCatching { PDFBoxResourceLoader.init(applicationContext) }
@@ -101,6 +118,7 @@ class AsmrApp : Application(), ImageLoaderFactory, Configuration.Provider {
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
+            .setWorkerFactory(com.asmr.player.nas.LibraryWorkerFactory())
             .setExecutor(DownloadRuntimeConfig.createWorkManagerExecutor(this))
             .setTaskExecutor(DownloadRuntimeConfig.createWorkManagerTaskExecutor())
             .build()

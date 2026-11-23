@@ -1,5 +1,7 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.ui.common.audioSource
+
 import com.asmr.player.i18n.appString
 import com.asmr.player.R
 
@@ -862,7 +864,7 @@ internal fun DirectoryFileRow(
                         trailingText = remember(file.durationSeconds, audioMetadata?.durationSeconds) {
                             Formatting.formatTrackSeconds(file.durationSeconds?.takeIf { it > 0 } ?: audioMetadata?.durationSeconds)
                         },
-                        source = if (file.isOnline) AudioSource.Online else AudioSource.Local,
+                        source = if (file.isOnline) AudioSource.Online else audioSource(file.absolutePath),
                         quality = audioMetadata?.quality,
                         color = colorScheme.textSecondary,
                         style = MaterialTheme.typography.bodySmall,

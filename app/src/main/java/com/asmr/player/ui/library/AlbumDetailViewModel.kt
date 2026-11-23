@@ -2,21 +2,17 @@ package com.asmr.player.ui.library
 
 import com.asmr.player.i18n.appString
 import com.asmr.player.R
-
 import com.asmr.player.data.repository.AlbumTagRepository
+import com.asmr.player.nas.LibraryWorkspace
+import com.asmr.player.nas.libraryWorkRequest
 import com.asmr.player.util.isLikelyPlaceholderCover
-
 import com.asmr.player.util.sanitizeFolderName
-
 import com.asmr.player.util.ChapterMediaReference
 import com.asmr.player.data.remote.crawler.JapaneseAsmrClient
 import com.asmr.player.data.remote.crawler.AlbumResourceSource
-
 import com.asmr.player.util.LocalFileScopes
 import com.asmr.player.util.tryBeginFileMutation
-
 import com.asmr.player.util.isMissingLocalDocumentFailure
-
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -29,7 +25,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.room.withTransaction
 import androidx.work.ExistingWorkPolicy
-import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.asmr.player.BuildConfig
@@ -262,7 +257,7 @@ class AlbumDetailViewModel @Inject constructor(
     private val listenTogetherRjSummaryInFlight = AtomicBoolean(false)
     private val listenTogetherRjSummaryPollingEnabled = MutableStateFlow(false)
     private val preferredTreePathPrefs by lazy {
-        context.getSharedPreferences("album_detail_tree_prefs", Context.MODE_PRIVATE)
+        context.getSharedPreferences(LibraryWorkspace.name("album_detail_tree_prefs"), Context.MODE_PRIVATE)
     }
 
     init {
@@ -1101,12 +1096,12 @@ class AlbumDetailViewModel @Inject constructor(
 
     private fun enqueueAlbumCoverThumbWork(albumId: Long) {
         if (albumId <= 0L) return
-        val request = OneTimeWorkRequestBuilder<AlbumCoverThumbWorker>()
+        val request = libraryWorkRequest<AlbumCoverThumbWorker>()
             .setInputData(workDataOf(AlbumCoverThumbWorker.KEY_ALBUM_ID to albumId))
             .addTag("album_cover_thumb")
             .build()
         WorkManager.getInstance(context)
-            .enqueueUniqueWork("album_cover_thumb_$albumId", ExistingWorkPolicy.REPLACE, request)
+            .enqueueUniqueWork(LibraryWorkspace.name("album_cover_thumb_$albumId"), ExistingWorkPolicy.REPLACE, request)
     }
 
 
@@ -2106,6 +2101,7 @@ class AlbumDetailViewModel @Inject constructor(
         }
 
         val uri = runCatching { Uri.parse(source) }.getOrNull() ?: return LocalSourceAvailability.Unknown
+        if (LibraryWorkspace.owns(uri)) return LocalSourceAvailability.Unknown
         val documentUri = runCatching {
             val documentId = runCatching { DocumentsContract.getDocumentId(uri) }.getOrNull()
                 ?: DocumentsContract.getTreeDocumentId(uri)
@@ -2553,8 +2549,8 @@ class AlbumDetailViewModel @Inject constructor(
         val sourceKey = (if (canUseNetwork) url else localCandidate).orEmpty()
         if (sourceKey.isBlank()) return fail("empty_source")
         val sourceHash = sourceKey.hashCode().toString()
-        val coverDir = File(context.filesDir, "album_covers").apply { if (!exists()) mkdirs() }
-        val thumbDir = File(context.filesDir, "album_thumbs").apply { if (!exists()) mkdirs() }
+        val coverDir = File(context.filesDir, LibraryWorkspace.name("album_covers")).apply { if (!exists()) mkdirs() }
+        val thumbDir = File(context.filesDir, LibraryWorkspace.name("album_thumbs")).apply { if (!exists()) mkdirs() }
         val coverFile = File(coverDir, "a_${albumId}_$sourceHash.jpg")
         val thumbFile = File(thumbDir, "a_${albumId}_${sourceHash}_v2.jpg")
 
@@ -2822,7 +2818,7 @@ class AlbumDetailViewModel @Inject constructor(
     }
 
     private fun onlineSaveAlbumDir(album: Album, workKey: String): File {
-        val baseDir = File(context.getExternalFilesDir(null), "albums")
+        val baseDir = File(context.getExternalFilesDir(null), LibraryWorkspace.name("albums"))
         val folderName = safeFolderName(
             album.rjCode.ifBlank { album.workId }.ifBlank { workKey }.ifBlank { album.title }
         )
@@ -2832,7 +2828,7 @@ class AlbumDetailViewModel @Inject constructor(
     private fun ensureNoMediaMarkers(dir: File) {
         runCatching {
             if (!dir.exists()) dir.mkdirs()
-            val albumsRoot = File(context.getExternalFilesDir(null), "albums")
+            val albumsRoot = File(context.getExternalFilesDir(null), LibraryWorkspace.name("albums"))
             if (!albumsRoot.exists()) albumsRoot.mkdirs()
             val rootMarker = File(albumsRoot, ".nomedia")
             if (!rootMarker.exists()) rootMarker.createNewFile()

@@ -2,7 +2,6 @@ package com.asmr.player.subtitle
 
 import com.asmr.player.i18n.appString
 import com.asmr.player.R
-
 import android.content.Context
 import android.media.AudioFormat
 import android.media.MediaCodec
@@ -15,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
+import com.asmr.player.nas.setLibrarySource
 
 internal data class DecodedAudioChunk(
     val channelSamples: List<FloatArray>,
@@ -196,7 +196,7 @@ internal class LocalAudioDecoder(
     private fun setDataSource(extractor: MediaExtractor, path: String) {
         val uri = Uri.parse(path)
         when (uri.scheme?.lowercase()) {
-            "content", "file" -> extractor.setDataSource(context, uri, null)
+            "content", "file" -> extractor.setLibrarySource(context, uri)
             else -> extractor.setDataSource(path)
         }
     }

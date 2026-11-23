@@ -47,6 +47,24 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <provider
+            android:name=".nas.WebDavDocumentsProvider"
+            android:authorities="${applicationId}.webdav"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:permission="android.permission.MANAGE_DOCUMENTS">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
+
+        <activity
+            android:name=".nas.LibrarySwitchActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:process=":library_switch"
+            android:taskAffinity="${applicationId}.library_switch" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -11,8 +11,9 @@ import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.util.UUID
+import com.asmr.player.nas.LibraryWorkspace
 
-internal val Context.libraryDataStore by preferencesDataStore(name = "library")
+internal val Context.libraryDataStore by preferencesDataStore(name = LibraryWorkspace.name("library"))
 
 data class LibraryFilterPreset(
     val id: String,

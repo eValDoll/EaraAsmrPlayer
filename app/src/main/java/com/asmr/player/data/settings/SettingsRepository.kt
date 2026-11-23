@@ -58,7 +58,7 @@ class SettingsRepository private constructor(
     constructor(@ApplicationContext context: Context) : this(
         SettingsStoreOwner(
             settingsDataStore = context.settingsDataStore,
-            proxyPasswordStorage = ProxyPasswordStore.get(context)
+            proxyPasswordStorage = KeystorePasswordStore.forProxy(context)
         )
     )
 

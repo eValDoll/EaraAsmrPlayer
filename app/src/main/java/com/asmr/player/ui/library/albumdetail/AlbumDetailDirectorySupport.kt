@@ -2,15 +2,12 @@ package com.asmr.player.ui.library
 
 import com.asmr.player.i18n.appString
 import com.asmr.player.R
-
+import com.asmr.player.nas.LibraryWorkspace
+import com.asmr.player.nas.WebDavFile
+import com.asmr.player.nas.webDavFiles
 import com.asmr.player.util.sanitizeFolderName
-
 import com.asmr.player.util.isJapaneseAsmrResource
-
 import com.asmr.player.util.ChapterMediaReference
-
-
-
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
@@ -39,7 +36,6 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import androidx.compose.material.icons.automirrored.rounded.InsertDriveFile
 import java.io.File
-
 import com.asmr.player.ui.common.ImagePreviewItem
 import com.asmr.player.ui.common.ImagePreviewRequest
 import com.asmr.player.ui.theme.AsmrColorScheme
@@ -1156,7 +1152,6 @@ internal suspend fun loadOrBuildLocalTreeIndex(
         .map { "${it.kind.name}:${it.path.trim()}" }
         .sorted()
         .joinToString("|")
-    val stamp = computeLocalTreeCacheStamp(context, albumPaths, tracks)
     val dao = AppDatabaseProvider.get(context).localTreeCacheDao()
     val onlineTracks = tracks.filter { it.path.trim().startsWith("http", ignoreCase = true) }
     val onlineUrlSet = onlineTracks.map { it.path.trim() }.filter { it.isNotBlank() }.toSet()
@@ -1240,6 +1235,33 @@ internal suspend fun loadOrBuildLocalTreeIndex(
     val onlineLeaves = buildOnlineLeaves()
     val savedResourceLeaves = buildSavedResourceLeaves()
 
+    if (normalizedSources.any { LibraryWorkspace.owns(Uri.parse(it.path)) }) {
+        val separate = normalizedSources.map { it.kind }.distinct().size > 1
+        val indexed = normalizedSources.flatMap { source ->
+            val uri = Uri.parse(source.path)
+            val leaves = if (LibraryWorkspace.owns(uri)) {
+                val root = LibraryWorkspace.path(uri).trimEnd('/') + "/"
+                val files = dao.webDavFiles(albumId, source.path) ?: tracks.mapNotNull { track ->
+                    val trackUri = Uri.parse(track.path)
+                    if (!LibraryWorkspace.owns(trackUri)) return@mapNotNull null
+                    val path = LibraryWorkspace.path(trackUri)
+                    if (!path.startsWith(root)) return@mapNotNull null
+                    WebDavFile(path.removePrefix(root), track.path, 0)
+                }
+                files.mapNotNull { file ->
+                    val type = treeFileTypeForName(file.relativePath)
+                    if (type == TreeFileType.Other || type == TreeFileType.Subtitle) null
+                    else LocalTreeLeafCacheEntry(file.relativePath, file.uri, type, file.size)
+                }
+            } else buildLocalTreeIndexByScanning(context, listOf(source.path), tracks).leaves
+            if (!separate) leaves else {
+                val prefix = appString(if (source.kind == LocalTreeSourceKind.Imported) R.string.ui_import_content else R.string.ui_download_content)
+                leaves.map { it.copy(relativePath = "$prefix/${it.relativePath}") }
+            }
+        }
+        return buildLocalTreeIndexFromLeaves(mergeLeaves(indexed, onlineLeaves, savedResourceLeaves), tracks)
+    }
+    val stamp = computeLocalTreeCacheStamp(context, albumPaths, tracks)
     val cached = dao.getByAlbumAndKey(albumId = albumId, cacheKey = cacheKey)
     if (cached != null && cached.stamp == stamp && cached.payloadJson.isNotBlank()) {
         val type = object : TypeToken<List<LocalTreeLeafCacheEntry>>() {}.type

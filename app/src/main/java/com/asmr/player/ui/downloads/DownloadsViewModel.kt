@@ -2,19 +2,19 @@ package com.asmr.player.ui.downloads
 
 import com.asmr.player.i18n.appString
 import com.asmr.player.R
-
+import com.asmr.player.data.remote.download.NasUploadProgress
+import com.asmr.player.nas.LibraryWorkspace
+import com.asmr.player.nas.libraryWorkRequest
 import com.asmr.player.util.LocalFileScopes
 import com.asmr.player.util.LocalFileOperation
 import com.asmr.player.util.tryBeginFileMutation
 import com.asmr.player.util.withDownloadDeletion
 import com.asmr.player.util.LocalFileOperationCoordinator
-
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.room.withTransaction
 import androidx.work.WorkInfo
-import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.ExistingWorkPolicy
 import androidx.work.WorkManager
 import com.asmr.player.data.local.db.AppDatabaseProvider
@@ -23,6 +23,8 @@ import com.asmr.player.data.local.db.dao.DownloadDao
 import com.asmr.player.data.local.db.dao.TrackDao
 import com.asmr.player.data.local.library.deleteLibraryAlbum
 import com.asmr.player.data.local.library.deleteLibraryTracks
+import com.asmr.player.data.remote.download.DOWNLOAD_STATE_IMPORT_FAILED
+import com.asmr.player.data.remote.download.enqueueDownloadFinalization
 import com.asmr.player.data.remote.download.DOWNLOAD_STATE_FINALIZING
 import com.asmr.player.data.remote.download.DOWNLOAD_STATE_QUEUED
 import com.asmr.player.data.remote.download.DownloadQueueCoordinator
@@ -97,6 +99,31 @@ data class DownloadTaskUi(
     val items: List<DownloadItemUi>
 )
 
+internal fun albumUploadFraction(items: List<DownloadItemUi>, uploads: Map<String, NasUploadProgress>): Float? {
+    if (uploads.isEmpty()) return null
+    var totalBytes = 0L
+    var sentBytes = 0L
+    var fileFractions = 0.0
+    var allSizesKnown = true
+    for (item in items) {
+        val upload = uploads[item.workId]
+        val published = item.state == DownloadItemState.FINALIZING || item.state == DownloadItemState.SUCCEEDED
+        val size = upload?.total ?: item.total
+        val sent = upload?.sent ?: if (published) size else 0L
+        if (size > 0) {
+            totalBytes += size
+            sentBytes += sent
+            fileFractions += sent.toDouble() / size
+        } else if (published) {
+            fileFractions += 1.0
+        } else {
+            allSizesKnown = false
+        }
+    }
+    return if (allSizesKnown && totalBytes > 0) (sentBytes.toDouble() / totalBytes).toFloat()
+    else (fileFractions / items.size).toFloat()
+}
+
 internal fun resolveDownloadTaskState(items: List<DownloadItemUi>): DownloadItemState = when {
     items.any { it.state == DownloadItemState.RUNNING || it.state == DownloadItemState.ENQUEUED } -> DownloadItemState.RUNNING
     items.any { it.state == DownloadItemState.FAILED } -> DownloadItemState.FAILED
@@ -168,6 +195,7 @@ class DownloadsViewModel @Inject constructor(
                 val items = taskWithItems.items.map { item ->
                     val state = when (item.state) {
                         "PAUSED" -> DownloadItemState.PAUSED
+                        DOWNLOAD_STATE_IMPORT_FAILED -> DownloadItemState.FAILED
                         DOWNLOAD_STATE_FINALIZING -> DownloadItemState.FINALIZING
                         DOWNLOAD_STATE_QUEUED -> DownloadItemState.ENQUEUED
                         else -> when (runCatching { WorkInfo.State.valueOf(item.state) }.getOrDefault(WorkInfo.State.ENQUEUED)) {
@@ -424,6 +452,12 @@ class DownloadsViewModel @Inject constructor(
 
     private suspend fun resumeDownloadItem(workId: String) {
         val candidate = downloadDao.getItemByWorkId(workId) ?: return
+        if (candidate.state == DOWNLOAD_STATE_IMPORT_FAILED) {
+            if (downloadDao.retryAlbumImport(candidate.taskId, System.currentTimeMillis()) > 0) {
+                downloadDao.getTaskById(candidate.taskId)?.let { enqueueDownloadFinalization(context, it) }
+            }
+            return
+        }
         val resource = downloadStorage.stableIdentity(candidate.targetDir) + "/" + candidate.fileName
         val task = downloadDao.getTaskById(candidate.taskId) ?: return
         val fileLease = LocalFileOperationCoordinator.shared.tryAcquire(
@@ -465,7 +499,7 @@ class DownloadsViewModel @Inject constructor(
     fun retryItem(workId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             val item = downloadDao.getItemByWorkId(workId) ?: return@launch
-            if (item.state != WorkInfo.State.FAILED.name) return@launch
+            if (item.state !in setOf(WorkInfo.State.FAILED.name, DOWNLOAD_STATE_IMPORT_FAILED)) return@launch
             resumeItem(workId)
         }
     }
@@ -473,7 +507,8 @@ class DownloadsViewModel @Inject constructor(
     fun retryFailedInTask(taskId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             val items = downloadDao.getItemsForTask(taskId)
-            items.filter { it.state == WorkInfo.State.FAILED.name }.forEach { retryItem(it.workId) }
+            items.filter { it.state in setOf(WorkInfo.State.FAILED.name, DOWNLOAD_STATE_IMPORT_FAILED) }.forEach { resumeDownloadItem(it.workId) }
+            DownloadQueueCoordinator.requestSchedule(context)
         }
     }
 
@@ -556,7 +591,7 @@ class DownloadsViewModel @Inject constructor(
                 workIds.forEach { workId ->
                     runCatching { UUID.fromString(workId) }.getOrNull()?.let { workManager.cancelWorkById(it).result.get() }
                 }
-                workManager.cancelAllWorkByTag(candidate.taskKey).result.get()
+                workManager.cancelAllWorkByTag(LibraryWorkspace.name(candidate.taskKey)).result.get()
             }) {
                 val task = downloadDao.getTaskById(taskId) ?: return@withDownloadDeletion
                 val items = downloadDao.getItemsForTask(taskId)
@@ -626,13 +661,13 @@ class DownloadsViewModel @Inject constructor(
                             "taskRootDir" to task.rootDir,
                             "albumRootDir" to task.albumRootDir,
                         )
-                        val request = OneTimeWorkRequestBuilder<FinalizeDownloadTaskWorker>()
+                        val request = libraryWorkRequest<FinalizeDownloadTaskWorker>()
                             .setInputData(finalizeInput)
                             .addTag("download_finalize")
-                            .addTag(task.taskKey)
+                            .addTag(LibraryWorkspace.name(task.taskKey))
                             .build()
                         workManager.enqueueUniqueWork(
-                            "download_finalize_${task.taskKey.hashCode()}",
+                            LibraryWorkspace.name("download_finalize_${task.taskKey.hashCode()}"),
                             ExistingWorkPolicy.REPLACE,
                             request
                         )

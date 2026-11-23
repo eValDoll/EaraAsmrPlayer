@@ -16,8 +16,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.asmr.player.nas.LibraryWorkspace
 
-private val Context.playbackStateDataStore by preferencesDataStore(name = "playback_state")
+private val Context.playbackStateDataStore by preferencesDataStore(name = LibraryWorkspace.name("playback_state"))
 
 private data class LegacyMediaIdPlaybackState(
     val queueMediaIds: List<String>,

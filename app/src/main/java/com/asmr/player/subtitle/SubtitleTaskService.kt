@@ -1,11 +1,10 @@
 package com.asmr.player.subtitle
 
 import com.asmr.player.i18n.appString
-
+import com.asmr.player.nas.LibraryWorkspace
 import com.asmr.player.util.LocalFileScopes
 import com.asmr.player.util.LocalFileOperation
 import com.asmr.player.util.withSubtitleFileAccess
-
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -156,6 +155,10 @@ internal class SubtitleTaskService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val owner = intent?.getStringExtra(EXTRA_WORKSPACE)
+        if (owner != null && owner != LibraryWorkspace.workerTag || owner == null && LibraryWorkspace.nas) {
+            return START_NOT_STICKY
+        }
         when (intent?.action) {
             ACTION_PAUSE_ALL -> serviceScope.launch { pauseAll() }
             ACTION_CANCEL_ALL -> serviceScope.launch { cancelAll() }
@@ -1296,7 +1299,7 @@ internal class SubtitleTaskService : Service() {
     private fun servicePendingIntent(action: String, requestCode: Int): PendingIntent = PendingIntent.getService(
         this,
         requestCode,
-        Intent(this, SubtitleTaskService::class.java).setAction(action),
+        Intent(this, SubtitleTaskService::class.java).setAction(action).putExtra(EXTRA_WORKSPACE, LibraryWorkspace.workerTag),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
@@ -1395,11 +1398,13 @@ internal class SubtitleTaskService : Service() {
         private const val RETRY_JITTER_MS = 250L
         private const val SCHEDULER_TICK_MS = 500L
         private const val TAG = "SubtitleTaskService"
+        private const val EXTRA_WORKSPACE = "library_workspace"
 
         fun wake(context: Context) {
             ContextCompat.startForegroundService(
                 context.applicationContext,
                 Intent(context.applicationContext, SubtitleTaskService::class.java).setAction(ACTION_WAKE)
+                    .putExtra(EXTRA_WORKSPACE, LibraryWorkspace.workerTag)
             )
         }
 
@@ -1408,6 +1413,7 @@ internal class SubtitleTaskService : Service() {
                 context.applicationContext,
                 Intent(context.applicationContext, SubtitleTaskService::class.java)
                     .setAction(ACTION_POLISH_ALBUM)
+                    .putExtra(EXTRA_WORKSPACE, LibraryWorkspace.workerTag)
                     .putExtra(EXTRA_ALBUM_ID, albumId)
             )
         }

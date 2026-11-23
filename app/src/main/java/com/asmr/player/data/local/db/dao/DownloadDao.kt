@@ -199,7 +199,7 @@ interface DownloadDao {
     @Query("SELECT * FROM download_items WHERE state = 'PAUSED' OR state IN ('RUNNING', 'ENQUEUED', 'BLOCKED', 'QUEUED')")
     suspend fun getAllActiveOrPausedItems(): List<DownloadItemEntity>
 
-    @Query("SELECT COUNT(*) FROM download_items WHERE state = 'PAUSED' OR state IN ('RUNNING', 'ENQUEUED', 'BLOCKED', 'QUEUED')")
+    @Query("SELECT COUNT(*) FROM download_items WHERE state IN ('PAUSED', 'RUNNING', 'ENQUEUED', 'BLOCKED', 'QUEUED', 'FINALIZING')")
     suspend fun countRecoverableItems(): Int
 
     @Query("SELECT COUNT(*) FROM download_items WHERE state IN ('RUNNING', 'ENQUEUED', 'BLOCKED')")
@@ -228,9 +228,12 @@ interface DownloadDao {
     @Query("UPDATE download_items SET state = 'SUCCEEDED', updatedAt = :now WHERE taskId = :taskId AND state = 'FINALIZING'")
     suspend fun finishFinalizingItems(taskId: Long, now: Long)
 
-    @Query("UPDATE download_items SET state = 'FAILED', updatedAt = :now WHERE taskId IN " +
+    @Query("UPDATE download_items SET state = 'FINALIZING', updatedAt = :now WHERE taskId = :taskId AND state = 'IMPORT_FAILED'")
+    suspend fun retryAlbumImport(taskId: Long, now: Long): Int
+
+    @Query("UPDATE download_items SET state = :state, updatedAt = :now WHERE taskId IN " +
         "(SELECT id FROM download_tasks WHERE taskKey = :taskKey) AND state = 'FINALIZING'")
-    suspend fun failFinalizingItems(taskKey: String, now: Long)
+    suspend fun failFinalizingItems(taskKey: String, now: Long, state: String)
 }
 
 data class DownloadTaskAlbumCoverRow(
